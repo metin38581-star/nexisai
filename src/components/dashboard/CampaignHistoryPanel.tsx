@@ -392,7 +392,7 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
       {expanded && (
         <div className="border-t border-violet-500/10 bg-zinc-950/50 px-5 py-4">
           <p className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-cyan-400">
-            Beeceptor&apos;a Fırlatılan Gizli GEO Makaleleri
+            Make.com Webhook&apos;una Dağıtılan Makaleler
           </p>
           <div className="space-y-3">
             {campaign.baits.map((bait, index) => (
@@ -408,6 +408,13 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
                   {bait.baslik}
                   <span className="ml-2 text-[10px] font-normal text-zinc-500">
                     ({bait.platform})
+                    {bait.yayinlandi || bait.status === "SUCCESS" ? (
+                      <span className="ml-1 text-emerald-400">• Yayınlandı</span>
+                    ) : bait.status === "FAILED" ? (
+                      <span className="ml-1 text-rose-400">• Başarısız</span>
+                    ) : (
+                      <span className="ml-1 text-amber-400">• Bekliyor</span>
+                    )}
                   </span>
                 </summary>
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">

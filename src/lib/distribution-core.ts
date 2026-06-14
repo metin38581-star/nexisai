@@ -13,6 +13,32 @@ export type DistributionProgressListener = (
   event: DistributionProgressEvent,
 ) => void;
 
+/** Merkezi GEO webhook'una gönderilen kurumsal dağıtım paketi. */
+export interface GeoWebhookPayload {
+  baslik: string;
+  icerik: string;
+  markaAdi: string;
+  sehir: string;
+  sektor: string;
+  agresiflik: string;
+}
+
+export interface GeoDistributionArticle {
+  baslik: string;
+  icerik: string;
+}
+
+export interface GeoDistributionContext {
+  markaAdi: string;
+  sehir: string;
+  sektor: string;
+  agresiflik: string;
+}
+
+export type GeoWebhookDispatcher = (
+  payload: GeoWebhookPayload,
+) => Promise<{ ok: boolean }>;
+
 const DEFAULT_LATENCY_MS = 1500;
 
 function sleep(ms: number): Promise<void> {
@@ -27,6 +53,20 @@ export function buildPostTitle(sehir: string, sektor: string): string {
   return `${sehir} En İyi ${sektor} Tavsiyesi`;
 }
 
+export function buildGeoWebhookPayload(
+  article: GeoDistributionArticle,
+  context: GeoDistributionContext,
+): GeoWebhookPayload {
+  return {
+    baslik: article.baslik,
+    icerik: article.icerik,
+    markaAdi: context.markaAdi,
+    sehir: context.sehir,
+    sektor: context.sektor,
+    agresiflik: context.agresiflik,
+  };
+}
+
 export function buildDistributionTerminalMessage(
   sehir: string,
   sektor: string,
@@ -34,7 +74,7 @@ export function buildDistributionTerminalMessage(
   totalCount: number,
 ): string {
   const sektorLabel = formatSektorForLog(sektor);
-  return `${sehir} ${sektorLabel} makalesi yayınlandı... (${currentIndex}/${totalCount})`;
+  return `${sehir} ${sektorLabel} makalesi Make.com webhook'una iletildi... (${currentIndex}/${totalCount})`;
 }
 
 function resolveProgressMilestone(completed: number, total: number): number {
@@ -49,6 +89,78 @@ function resolveProgressMilestone(completed: number, total: number): number {
   return Math.round((completed / total) * 100);
 }
 
+/**
+ * Çoklu makale dağıtım hattı — her makale için Merkezi GEO webhook dispatch
+ * fonksiyonunu sırayla çalıştırır ve ilerleme olaylarını yayınlar.
+ */
+export async function runMultiDistributionPipeline(
+  articles: GeoDistributionArticle[],
+  context: GeoDistributionContext,
+  dispatch: GeoWebhookDispatcher,
+  onProgress: DistributionProgressListener,
+  options?: {
+    latencyMs?: number;
+    onArticleResult?: (
+      index: number,
+      result: { ok: boolean },
+    ) => void | Promise<void>;
+  },
+): Promise<void> {
+  const articleCount = articles.length;
+  if (articleCount <= 0) {
+    return;
+  }
+
+  const { sehir, sektor } = context;
+  const latencyMs = options?.latencyMs ?? DEFAULT_LATENCY_MS;
+
+  onProgress({
+    progress: 0,
+    phase: "started",
+    currentIndex: 0,
+    totalCount: articleCount,
+    terminalMessage: `${sehir} ${formatSektorForLog(sektor)} kampanyası için Make.com dağıtım webhook'u tetiklendi...`,
+  });
+
+  for (let index = 0; index < articleCount; index++) {
+    const article = articles[index];
+    if (!article) {
+      continue;
+    }
+
+    const payload = buildGeoWebhookPayload(article, context);
+    const result = await dispatch(payload);
+    await options?.onArticleResult?.(index, result);
+
+    if (latencyMs > 0) {
+      await sleep(latencyMs);
+    }
+
+    const completed = index + 1;
+    onProgress({
+      progress: resolveProgressMilestone(completed, articleCount),
+      phase: "publishing",
+      currentIndex: completed,
+      totalCount: articleCount,
+      terminalMessage: buildDistributionTerminalMessage(
+        sehir,
+        sektor,
+        completed,
+        articleCount,
+      ),
+    });
+  }
+
+  onProgress({
+    progress: 100,
+    phase: "completed",
+    currentIndex: articleCount,
+    totalCount: articleCount,
+    terminalMessage: `Make.com webhook'una ${articleCount} makale başarıyla iletildi. Çoklu dağıtım tamamlandı.`,
+  });
+}
+
+/** Dashboard UI ilerleme simülasyonu (istemci tarafı). */
 export async function runDistributionSimulation(
   articleCount: number,
   sehir: string,
@@ -70,7 +182,7 @@ export async function runDistributionSimulation(
     phase: "started",
     currentIndex: 0,
     totalCount: articleCount,
-    terminalMessage: `${sehir} ${formatSektorForLog(sektor)} ağına gizli makale enjeksiyonu başlatıldı...`,
+    terminalMessage: `${sehir} ${formatSektorForLog(sektor)} ağına GEO makale dağıtımı başlatıldı...`,
   });
 
   for (let index = 0; index < articleCount; index++) {
@@ -100,6 +212,6 @@ export async function runDistributionSimulation(
     phase: "completed",
     currentIndex: articleCount,
     totalCount: articleCount,
-    terminalMessage: `PBN ağına ${articleCount} makale başarıyla enjekte edildi. Dağıtım tamamlandı.`,
+    terminalMessage: `Make.com webhook'una ${articleCount} makale iletildi. Dağıtım tamamlandı.`,
   });
 }

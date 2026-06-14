@@ -1,65 +1,96 @@
 import "server-only";
 
-import {
-  runDistributionSimulation,
-  type DistributionProgressListener,
-} from "@/lib/distribution-core";
+/**
+ * Sunucu tarafı çoklu makale dağıtım motoru.
+ * Her bait için buildGeoWebhookPayload() ile kurumsal JSON paketi oluşturulur
+ * ve geo-distribution-client üzerinden NEXT_PUBLIC_GEO_API_URL'e POST edilir.
+ */
 
-const LIVE_MONITOR_URL = "https://nexisai-test.free.beeceptor.com";
+import {  runMultiDistributionPipeline,
+  type DistributionProgressListener,
+  type GeoDistributionContext,
+} from "@/lib/distribution-core";
+import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
+import { prisma } from "@/lib/db";
+
+export interface DistributionBait {
+  id: string;
+  baslik: string;
+  icerik: string;
+}
+
+async function markBaitPublished(baitId: string): Promise<void> {
+  await prisma.bait.update({
+    where: { id: baitId },
+    data: {
+      yayinlandi: true,
+      status: "SUCCESS",
+    },
+  });
+}
+
+async function markBaitFailed(baitId: string): Promise<void> {
+  await prisma.bait.update({
+    where: { id: baitId },
+    data: {
+      status: "FAILED",
+    },
+  });
+}
 
 export async function distributeBaitsToNetwork(
-  makaleler: string[],
-  sehir: string,
-  sektor: string,
-  markaAdi: string,
+  baits: DistributionBait[],
+  context: GeoDistributionContext,
   onProgress?: DistributionProgressListener,
 ): Promise<void> {
-  if (!makaleler || makaleler.length === 0) {
+  if (baits.length === 0) {
     return;
   }
 
-  await runDistributionSimulation(
-    makaleler.length,
-    sehir,
-    sektor,
+  const articles = baits.map(({ baslik, icerik }) => ({ baslik, icerik }));
+
+  await runMultiDistributionPipeline(
+    articles,
+    context,
+    async (payload) => {
+      const result = await dispatchToCentralWebhook(payload);
+      return { ok: result.ok };
+    },
     (event) => {
       onProgress?.(event);
     },
     {
       latencyMs: 0,
-      onEachArticle: async (index) => {
-        const makale = makaleler[index];
-        if (!makale) {
+      onArticleResult: async (index, result) => {
+        const bait = baits[index];
+        if (!bait) {
+          return;
+        }
+
+        if (result.ok) {
+          try {
+            await markBaitPublished(bait.id);
+            console.log(
+              `[GEO DAĞITIM]: "${bait.baslik}" — ${context.markaAdi} (${context.agresiflik}) webhook'a iletildi, Bait ${bait.id} SUCCESS.`,
+            );
+          } catch (dbError) {
+            console.error(
+              `[GEO DAĞITIM] Webhook başarılı ancak Bait güncellenemedi (${bait.id}):`,
+              dbError,
+            );
+          }
           return;
         }
 
         try {
-          const response = await fetch(LIVE_MONITOR_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-NexisAI-Status": "GEO_LIVE_INJECTION",
-            },
-            body: JSON.stringify({
-              Yayinlanan_Baslik: `${sehir} En İyi ${sektor} Tavsiyesi`,
-              Sentezlenen_GEO_Makalesi: makale,
-              Hedef_Marka: markaAdi,
-              Yayin_Zamani: new Date().toLocaleTimeString("tr-TR"),
-            }),
-          });
-
-          if (response.ok) {
-            console.log(
-              "[DAĞITIM AĞI BAŞARILI]: Makale internet üzerindeki canlı izleme paneline fırlatıldı!",
-            );
-          } else {
-            console.error(
-              `[DAĞITIM AĞI HATASI]: Sunucu yanıt vermedi: ${response.status}`,
-            );
-          }
-        } catch (error) {
-          console.error("[DAĞITIM AĞI] İnternet bağlantı hatası:", error);
+          await markBaitFailed(bait.id);
+        } catch (dbError) {
+          console.error(
+            `[GEO DAĞITIM] Bait FAILED durumu yazılamadı (${bait.id}):`,
+            dbError,
+          );
         }
+        console.error(`[GEO DAĞITIM HATASI]: "${bait.baslik}" — webhook reddetti.`);
       },
     },
   );
@@ -69,4 +100,6 @@ export type {
   DistributionPhase,
   DistributionProgressEvent,
   DistributionProgressListener,
+  GeoDistributionContext,
+  GeoWebhookPayload,
 } from "@/lib/distribution-core";

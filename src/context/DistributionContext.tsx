@@ -48,7 +48,7 @@ function resolveStatusLabel(
   }
 
   if (progress === 0) {
-    return "PBN ağına bağlanılıyor...";
+    return "Make.com webhook'una bağlanılıyor...";
   }
 
   if (progress === 100) {

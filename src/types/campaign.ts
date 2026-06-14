@@ -79,6 +79,8 @@ export interface StoredBait {
   baslik: string;
   icerik: string;
   platform: string;
+  yayinlandi: boolean;
+  status: string;
   createdAt: string;
 }
 

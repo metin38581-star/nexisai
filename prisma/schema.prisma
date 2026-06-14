@@ -41,6 +41,8 @@ model Bait {
   baslik     String
   icerik     String
   platform   String   @default("PBN")
+  yayinlandi Boolean  @default(false)
+  status     String   @default("PENDING")
   createdAt  DateTime @default(now())
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }

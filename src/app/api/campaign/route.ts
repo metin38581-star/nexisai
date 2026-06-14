@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
+import { buildPostTitle } from "@/lib/distribution-core";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { prisma } from "@/lib/db";
 import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
@@ -134,6 +135,9 @@ export async function POST(request: Request) {
         ? gizliMakaleler.slice(0, makaleSayisi)
         : buildFallbackMakaleler(makaleSayisi);
 
+    let persistedBaits: Array<{ id: string; baslik: string; icerik: string }> =
+      [];
+
     try {
       const targetCity = body?.sehir || "Kayseri";
       const targetNiche = body?.sektor || "Diş Kliniği & Sağlık";
@@ -167,13 +171,20 @@ export async function POST(request: Request) {
           radarSikligiDakika,
           baits: {
             create: kaydedilecekMakaleler.map((makale) => ({
-              baslik: `${targetCity} En İyi ${targetNiche} Tavsiyesi`,
+              baslik: buildPostTitle(targetCity, targetNiche),
               icerik: makale,
-              platform: "NexisAI PBN Network",
+              platform: "NexisAI GEO Network",
             })),
           },
         },
+        include: { baits: true },
       });
+
+      persistedBaits = yeniKampanya.baits.map((bait) => ({
+        id: bait.id,
+        baslik: bait.baslik,
+        icerik: bait.icerik,
+      }));
 
       console.log(
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, radar=${radarSikligiDakika}dk`,
@@ -194,12 +205,14 @@ export async function POST(request: Request) {
       );
     }
 
-    void distributeBaitsToNetwork(
-      gizliMakaleler.length > 0 ? gizliMakaleler : kaydedilecekMakaleler,
-      trimmedSehir,
-      trimmedSektor,
-      trimmedMarka,
-    );
+    if (persistedBaits.length > 0) {
+      void distributeBaitsToNetwork(persistedBaits, {
+        markaAdi: trimmedMarka,
+        sehir: trimmedSehir,
+        sektor: trimmedSektor,
+        agresiflik: agresiflikSeviyesi,
+      });
+    }
 
     const terminalLogs = buildDynamicTerminalLogs(
       { ...body, gunlukButce, gunSayisi },
