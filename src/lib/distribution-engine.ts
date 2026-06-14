@@ -1,30 +1,45 @@
 import "server-only";
 
 /**
- * Sunucu tarafı çoklu makale dağıtım motoru.
- * Her bait için buildGeoWebhookPayload() ile kurumsal JSON paketi oluşturulur
- * ve geo-distribution-client üzerinden NEXT_PUBLIC_GEO_API_URL'e POST edilir.
+ * NexisAI Hub — hibrid dağıtım motoru.
+ * İç yayın: /p/{slug} | Dış yayın: Make.com → external_live_url
  */
 
-import {  runMultiDistributionPipeline,
+import {
+  runMultiDistributionPipeline,
   type DistributionProgressListener,
   type GeoDistributionContext,
 } from "@/lib/distribution-core";
 import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
 import { prisma } from "@/lib/db";
+import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
 export interface DistributionBait {
   id: string;
   baslik: string;
   icerik: string;
+  slug: string;
 }
 
-async function markBaitPublished(baitId: string): Promise<void> {
+export interface DistributionResult {
+  baitId: string;
+  slug: string;
+  ok: boolean;
+  externalLiveUrl?: string;
+}
+
+async function markBaitPublished(
+  baitId: string,
+  externalLiveUrl?: string,
+): Promise<void> {
   await prisma.bait.update({
     where: { id: baitId },
     data: {
       yayinlandi: true,
       status: "SUCCESS",
+      ...(externalLiveUrl
+        ? { externalLiveUrl, liveUrl: externalLiveUrl }
+        : {}),
     },
   });
 }
@@ -38,23 +53,44 @@ async function markBaitFailed(baitId: string): Promise<void> {
   });
 }
 
+async function saveCampaignExternalUrl(
+  campaignId: string,
+  externalLiveUrl: string,
+): Promise<void> {
+  await updateCampaignExternalLiveUrl(campaignId, externalLiveUrl);
+
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: {
+      externalLiveUrl,
+      liveUrl: externalLiveUrl,
+    },
+  });
+}
+
 export async function distributeBaitsToNetwork(
   baits: DistributionBait[],
   context: GeoDistributionContext,
   onProgress?: DistributionProgressListener,
-): Promise<void> {
+): Promise<DistributionResult[]> {
   if (baits.length === 0) {
-    return;
+    return [];
   }
 
-  const articles = baits.map(({ baslik, icerik }) => ({ baslik, icerik }));
+  const results: DistributionResult[] = [];
+  const articles = baits.map(({ baslik, icerik, slug }) => ({
+    baslik,
+    icerik,
+    slug,
+  }));
+  let campaignExternalUrlSaved = false;
 
   await runMultiDistributionPipeline(
     articles,
     context,
     async (payload) => {
       const result = await dispatchToCentralWebhook(payload);
-      return { ok: result.ok };
+      return { ok: result.ok, externalLiveUrl: result.externalLiveUrl };
     },
     (event) => {
       onProgress?.(event);
@@ -69,15 +105,36 @@ export async function distributeBaitsToNetwork(
 
         if (result.ok) {
           try {
-            await markBaitPublished(bait.id);
+            await markBaitPublished(bait.id, result.externalLiveUrl);
+
+            if (result.externalLiveUrl && !campaignExternalUrlSaved) {
+              await saveCampaignExternalUrl(
+                context.campaignId,
+                result.externalLiveUrl,
+              );
+              campaignExternalUrlSaved = true;
+            }
+
             console.log(
-              `[GEO DAĞITIM]: "${bait.baslik}" — ${context.markaAdi} (${context.agresiflik}) webhook'a iletildi, Bait ${bait.id} SUCCESS.`,
+              `[NEXISAI HUB]: /p/${bait.slug} — Bait ${bait.id} SUCCESS${result.externalLiveUrl ? ` → ${result.externalLiveUrl}` : ""}.`,
             );
+            results.push({
+              baitId: bait.id,
+              slug: bait.slug,
+              ok: true,
+              externalLiveUrl: result.externalLiveUrl,
+            });
           } catch (dbError) {
             console.error(
-              `[GEO DAĞITIM] Webhook başarılı ancak Bait güncellenemedi (${bait.id}):`,
+              `[NEXISAI HUB] Webhook başarılı ancak kayıt güncellenemedi (${bait.id}):`,
               dbError,
             );
+            results.push({
+              baitId: bait.id,
+              slug: bait.slug,
+              ok: true,
+              externalLiveUrl: result.externalLiveUrl,
+            });
           }
           return;
         }
@@ -86,14 +143,19 @@ export async function distributeBaitsToNetwork(
           await markBaitFailed(bait.id);
         } catch (dbError) {
           console.error(
-            `[GEO DAĞITIM] Bait FAILED durumu yazılamadı (${bait.id}):`,
+            `[NEXISAI HUB] Bait FAILED durumu yazılamadı (${bait.id}):`,
             dbError,
           );
         }
-        console.error(`[GEO DAĞITIM HATASI]: "${bait.baslik}" — webhook reddetti.`);
+        console.error(
+          `[NEXISAI HUB HATASI]: /p/${bait.slug} — Make.com webhook reddetti.`,
+        );
+        results.push({ baitId: bait.id, slug: bait.slug, ok: false });
       },
     },
   );
+
+  return results;
 }
 
 export type {

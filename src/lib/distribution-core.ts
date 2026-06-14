@@ -17,6 +17,7 @@ export type DistributionProgressListener = (
 export interface GeoWebhookPayload {
   baslik: string;
   icerik: string;
+  slug: string;
   markaAdi: string;
   sehir: string;
   sektor: string;
@@ -26,18 +27,25 @@ export interface GeoWebhookPayload {
 export interface GeoDistributionArticle {
   baslik: string;
   icerik: string;
+  slug: string;
 }
 
 export interface GeoDistributionContext {
+  campaignId: string;
   markaAdi: string;
   sehir: string;
   sektor: string;
   agresiflik: string;
 }
 
+export type GeoWebhookDispatchResult = {
+  ok: boolean;
+  externalLiveUrl?: string;
+};
+
 export type GeoWebhookDispatcher = (
   payload: GeoWebhookPayload,
-) => Promise<{ ok: boolean }>;
+) => Promise<GeoWebhookDispatchResult>;
 
 const DEFAULT_LATENCY_MS = 1500;
 
@@ -60,6 +68,7 @@ export function buildGeoWebhookPayload(
   return {
     baslik: article.baslik,
     icerik: article.icerik,
+    slug: article.slug,
     markaAdi: context.markaAdi,
     sehir: context.sehir,
     sektor: context.sektor,
@@ -102,7 +111,7 @@ export async function runMultiDistributionPipeline(
     latencyMs?: number;
     onArticleResult?: (
       index: number,
-      result: { ok: boolean },
+      result: GeoWebhookDispatchResult,
     ) => void | Promise<void>;
   },
 ): Promise<void> {

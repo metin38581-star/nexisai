@@ -31,18 +31,23 @@ model Campaign {
   isOptimized        Boolean   @default(false)
   lastCheckedAt DateTime?
   llmFeedback   String?   @default("Yapay zeka taraması bekleniyor...")
+  liveUrl           String?   @map("live_url")
+  externalLiveUrl   String?   @map("external_live_url")
   createdAt     DateTime  @default(now())
   baits         Bait[]
 }
 
 model Bait {
-  id         String   @id @default(uuid())
-  campaignId String
-  baslik     String
-  icerik     String
-  platform   String   @default("PBN")
-  yayinlandi Boolean  @default(false)
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  id               String   @id @default(uuid())
+  campaignId       String
+  baslik           String
+  icerik           String
+  slug             String   @unique
+  platform         String   @default("PBN")
+  yayinlandi       Boolean  @default(false)
+  status           String   @default("PENDING")
+  liveUrl          String?  @map("live_url")
+  externalLiveUrl  String?  @map("external_live_url")
+  createdAt        DateTime @default(now())
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }

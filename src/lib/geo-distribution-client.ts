@@ -8,18 +8,45 @@ import "server-only";
  * - GEO_API_TOKEN           → Authorization: Bearer {token}
  *
  * Request body (GeoWebhookPayload):
- * { baslik, icerik, markaAdi, sehir, sektor, agresiflik }
+ * { baslik, icerik, slug, markaAdi, sehir, sektor, agresiflik }
  */
 
 import type { GeoWebhookPayload } from "@/lib/distribution-core";
+
+const makeWebhookUrl = 'https://hook.eu1.make.com/srdywqh12ku4jf6yhyaf0m7u1dv9i0g4';
+export interface MakeWebhookResponse {
+  live_url?: string;
+}
+
 export interface GeoDistributionResult {
   ok: boolean;
   status: number;
+  externalLiveUrl?: string;
   error?: string;
 }
 
+export function parseMakeWebhookResponse(body: unknown): {
+  externalLiveUrl?: string;
+} {
+  if (!body || typeof body !== "object") {
+    return {};
+  }
+
+  const record = body as MakeWebhookResponse & {
+    external_live_url?: string;
+  };
+
+  const externalLiveUrl = record.external_live_url ?? record.live_url;
+
+  if (typeof externalLiveUrl === "string" && externalLiveUrl.trim()) {
+    return { externalLiveUrl: externalLiveUrl.trim() };
+  }
+
+  return {};
+}
+
 function resolveGeoApiUrl(): string | undefined {
-  return process.env.NEXT_PUBLIC_GEO_API_URL?.trim();
+  return makeWebhookUrl;
 }
 
 function resolveGeoApiToken(): string | undefined {
@@ -59,10 +86,13 @@ export async function dispatchToCentralWebhook(
     });
 
     if (response.ok) {
+      const responseBody: unknown = await response.json().catch(() => null);
+      const { externalLiveUrl } = parseMakeWebhookResponse(responseBody);
+
       console.log(
-        `[GEO_API] "${payload.baslik}" → ${payload.markaAdi} (${payload.agresiflik}) iletildi.`,
+        `[GEO_API] "${payload.baslik}" [${payload.slug}] → ${payload.markaAdi} iletildi.${externalLiveUrl ? ` external: ${externalLiveUrl}` : ""}`,
       );
-      return { ok: true, status: response.status };
+      return { ok: true, status: response.status, externalLiveUrl };
     }
 
     const errorBody = await response.text().catch(() => "");

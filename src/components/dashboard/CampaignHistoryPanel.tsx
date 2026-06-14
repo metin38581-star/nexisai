@@ -3,10 +3,68 @@
 import { useEffect, useState } from "react";
 import type { StoredCampaign } from "@/types/campaign";
 import { getCampaignMetaFromDb } from "@/lib/agresiflik";
+import { buildHubArticleUrl } from "@/lib/hub-url";
 
 interface CampaignHistoryPanelProps {
   campaigns: StoredCampaign[];
   isLoading: boolean;
+}
+
+function hasLiveUrl(url: string | null | undefined): url is string {
+  return typeof url === "string" && url.trim().length > 0;
+}
+
+function CampaignPublishLinks({
+  slug,
+  externalLiveUrl,
+}: {
+  slug?: string | null;
+  externalLiveUrl?: string | null;
+}) {
+  const hasSlug = hasLiveUrl(slug);
+  const hasExternal = hasLiveUrl(externalLiveUrl);
+
+  if (!hasSlug && !hasExternal) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-3">
+      {hasSlug ? (
+        <a
+          href={buildHubArticleUrl(slug)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+        >
+          🌐 NexisAI Sayfasını Gör
+        </a>
+      ) : null}
+      {hasExternal ? (
+        <a
+          href={externalLiveUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+        >
+          🚀 WordPress / Dış Yayını Gör
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function resolveExternalUrl(
+  externalLiveUrl: string | null | undefined,
+  liveUrl: string | null | undefined,
+): string | undefined {
+  if (hasLiveUrl(externalLiveUrl)) {
+    return externalLiveUrl;
+  }
+  if (hasLiveUrl(liveUrl)) {
+    return liveUrl;
+  }
+  return undefined;
 }
 
 function resolveScoreStyle(skor: number): {
@@ -313,6 +371,12 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
   const toplamButce = campaign.gunlukButce * campaign.gunSayisi;
   const meta = getCampaignMetaFromDb(campaign);
   const badgeClass = `inline-flex rounded-full border bg-zinc-950/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${meta.renk}`;
+  const primaryBait = campaign.baits[0];
+  const hubSlug = primaryBait?.slug;
+  const externalUrl = resolveExternalUrl(
+    campaign.externalLiveUrl ?? primaryBait?.externalLiveUrl,
+    primaryBait?.liveUrl ?? campaign.liveUrl,
+  );
 
   return (
     <article className="glass-card overflow-hidden border border-violet-500/15 transition-colors hover:border-violet-500/30">
@@ -359,6 +423,7 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
                 ${campaign.gunlukButce}/gün · {campaign.gunSayisi} gün
               </span>
             </div>
+            <CampaignPublishLinks slug={hubSlug} externalLiveUrl={externalUrl} />
           </div>
         </div>
 
@@ -392,7 +457,7 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
       {expanded && (
         <div className="border-t border-violet-500/10 bg-zinc-950/50 px-5 py-4">
           <p className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-cyan-400">
-            Make.com Webhook&apos;una Dağıtılan Makaleler
+            NexisAI Hub · Hibrid Dağıtım Makaleleri
           </p>
           <div className="space-y-3">
             {campaign.baits.map((bait, index) => (
@@ -420,6 +485,13 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
                   {bait.icerik}
                 </p>
+                <CampaignPublishLinks
+                  slug={bait.slug}
+                  externalLiveUrl={resolveExternalUrl(
+                    bait.externalLiveUrl,
+                    bait.liveUrl,
+                  )}
+                />
               </details>
             ))}
           </div>

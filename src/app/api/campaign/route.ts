@@ -4,9 +4,11 @@ import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
 import { buildPostTitle } from "@/lib/distribution-core";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
+import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
 import { prisma } from "@/lib/db";
 import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
 import { generateInvisibleBaits } from "@/lib/geo-engine";
+import { buildUniqueArticleSlug } from "@/lib/slugify";
 import { queryLlmInquiry } from "@/lib/llm-simulator";
 import { buildDynamicTerminalLogs } from "@/lib/terminal-logs";
 import { calculateDynamicMetrics } from "@/lib/mock-metrics";
@@ -135,8 +137,21 @@ export async function POST(request: Request) {
         ? gizliMakaleler.slice(0, makaleSayisi)
         : buildFallbackMakaleler(makaleSayisi);
 
-    let persistedBaits: Array<{ id: string; baslik: string; icerik: string }> =
-      [];
+    let persistedBaits: Array<{
+      id: string;
+      baslik: string;
+      icerik: string;
+      slug: string;
+    }> = [];
+
+    let persistedCampaignId: string | null = null;
+
+    let distributionResults: Array<{
+      baitId: string;
+      slug: string;
+      ok: boolean;
+      externalLiveUrl?: string;
+    }> = [];
 
     try {
       const targetCity = body?.sehir || "Kayseri";
@@ -157,6 +172,8 @@ export async function POST(request: Request) {
         radarSikligiDakika,
       });
 
+      const usedSlugs = new Set<string>();
+
       const yeniKampanya = await prisma.campaign.create({
         data: {
           sehir: targetCity,
@@ -170,11 +187,17 @@ export async function POST(request: Request) {
           radarSikligi,
           radarSikligiDakika,
           baits: {
-            create: kaydedilecekMakaleler.map((makale) => ({
-              baslik: buildPostTitle(targetCity, targetNiche),
-              icerik: makale,
-              platform: "NexisAI GEO Network",
-            })),
+            create: kaydedilecekMakaleler.map((makale, index) => {
+              const baslik = buildPostTitle(targetCity, targetNiche);
+              const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
+
+              return {
+                baslik,
+                icerik: makale,
+                slug,
+                platform: "NexisAI Hub",
+              };
+            }),
           },
         },
         include: { baits: true },
@@ -184,7 +207,9 @@ export async function POST(request: Request) {
         id: bait.id,
         baslik: bait.baslik,
         icerik: bait.icerik,
+        slug: bait.slug,
       }));
+      persistedCampaignId = yeniKampanya.id;
 
       console.log(
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, radar=${radarSikligiDakika}dk`,
@@ -205,14 +230,25 @@ export async function POST(request: Request) {
       );
     }
 
-    if (persistedBaits.length > 0) {
-      void distributeBaitsToNetwork(persistedBaits, {
+    if (persistedBaits.length > 0 && persistedCampaignId) {
+      distributionResults = await distributeBaitsToNetwork(persistedBaits, {
+        campaignId: persistedCampaignId,
         markaAdi: trimmedMarka,
         sehir: trimmedSehir,
         sektor: trimmedSektor,
         agresiflik: agresiflikSeviyesi,
       });
     }
+
+    const campaignExternalUrl = distributionResults.find(
+      (result) => result.ok && result.externalLiveUrl,
+    )?.externalLiveUrl;
+
+    const primarySlug = persistedBaits[0]?.slug;
+    const hubArticles = persistedBaits.map((bait) => ({
+      slug: bait.slug,
+      hubPath: buildHubArticlePath(bait.slug),
+    }));
 
     const terminalLogs = buildDynamicTerminalLogs(
       { ...body, gunlukButce, gunSayisi },
@@ -230,6 +266,12 @@ export async function POST(request: Request) {
       terminalLogs,
       llmResult,
       baitsGenerated: kaydedilecekMakaleler.length,
+      message: "İçerikler başarıyla yayınlandı!",
+      liveUrl: campaignExternalUrl,
+      externalUrl: campaignExternalUrl ?? null,
+      nexisUrl: primarySlug ? buildHubArticleUrl(primarySlug) : undefined,
+      hubArticles,
+      distributionResults,
     };
 
     return NextResponse.json(response);

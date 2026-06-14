@@ -57,6 +57,20 @@ export interface CampaignResponse {
   llmResult?: LlmInquiryResult;
   /** Arka planda üretilen gizli GEO yem sayısı; makale içerikleri istemciye gönderilmez. */
   baitsGenerated?: number;
+  message?: string;
+  /** Make.com webhook'undan dönen dış platform URL'si (kampanya düzeyi). */
+  liveUrl?: string;
+  externalUrl?: string | null;
+  nexisUrl?: string;
+  /** NexisAI Hub iç yayın yolları. */
+  hubArticles?: Array<{ slug: string; hubPath: string }>;
+  /** Make.com dağıtım sonuçları. */
+  distributionResults?: Array<{
+    baitId: string;
+    slug: string;
+    ok: boolean;
+    externalLiveUrl?: string;
+  }>;
   error?: string;
 }
 
@@ -78,9 +92,12 @@ export interface StoredBait {
   campaignId: string;
   baslik: string;
   icerik: string;
+  slug: string;
   platform: string;
   yayinlandi: boolean;
   status: string;
+  liveUrl: string | null;
+  externalLiveUrl: string | null;
   createdAt: string;
 }
 
@@ -99,6 +116,8 @@ export interface StoredCampaign {
   isOptimized: boolean;
   lastCheckedAt: string | null;
   llmFeedback: string | null;
+  liveUrl: string | null;
+  externalLiveUrl: string | null;
   createdAt: string;
   baits: StoredBait[];
 }
