@@ -21,7 +21,7 @@ import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
 import CyberTerminal from "@/components/terminal/CyberTerminal";
 import CyberWalletBar from "@/components/wallet/CyberWalletBar";
 import { useAuth } from "@/context/AuthContext";
-import { buildAuthHeaders } from "@/lib/auth-headers";
+import { buildAuthFetchInit } from "@/lib/auth-headers";
 
 function formatLogTimestamp(): string {
   return new Date().toLocaleTimeString("tr-TR", {
@@ -60,7 +60,7 @@ function AnalysisDashboardContent({
     resetDistribution,
     status: distributionStatus,
   } = useDistribution();
-  const { accessToken } = useAuth();
+  const { accessToken, isAuthReady } = useAuth();
 
   const [session, setSession] = useState<CampaignSessionPayload | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -84,9 +84,10 @@ function AnalysisDashboardContent({
       setCampaignsLoading(true);
     }
     try {
-      const response = await fetch("/api/campaigns", {
-        headers: buildAuthHeaders(accessToken),
-      });
+      const response = await fetch(
+        "/api/campaigns",
+        buildAuthFetchInit(accessToken),
+      );
       if (!response.ok) {
         return;
       }
@@ -131,6 +132,10 @@ function AnalysisDashboardContent({
   }, [fetchCampaigns]);
 
   useEffect(() => {
+    if (!isAuthReady) {
+      return;
+    }
+
     void fetchCampaigns();
 
     void runRadarScan();
@@ -142,7 +147,7 @@ function AnalysisDashboardContent({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [fetchCampaigns, runRadarScan]);
+  }, [fetchCampaigns, isAuthReady, runRadarScan]);
 
   const appendDistributionLog = useCallback((message: string, id: string) => {
     setTerminalLogs((prev) => [
@@ -202,17 +207,19 @@ function AnalysisDashboardContent({
       setIsActive(true);
 
       try {
-        const response = await fetch("/api/campaign", {
-          method: "POST",
-          headers: buildAuthHeaders(accessToken),
-          body: JSON.stringify({
-            markaAdi: payload.markaAdi,
-            sektor: payload.sektor,
-            sehir: payload.sehir,
-            gunlukButce: payload.gunlukButce,
-            gunSayisi: payload.gunSayisi,
+        const response = await fetch(
+          "/api/campaign",
+          buildAuthFetchInit(accessToken, {
+            method: "POST",
+            body: JSON.stringify({
+              markaAdi: payload.markaAdi,
+              sektor: payload.sektor,
+              sehir: payload.sehir,
+              gunlukButce: payload.gunlukButce,
+              gunSayisi: payload.gunSayisi,
+            }),
           }),
-        });
+        );
 
         const result = await response.json();
 

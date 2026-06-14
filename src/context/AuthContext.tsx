@@ -30,6 +30,7 @@ const defaultSession: UserSession = {
   userId: null,
   accessToken: null,
   activePlan: null,
+  isAuthReady: false,
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,12 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let unsubscribe: (() => void) | undefined;
 
     try {
       const supabase = getSupabaseBrowser();
 
-      supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
-        if (!isMounted || !activeSession?.user) {
+      void supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
+        if (!isMounted) {
+          return;
+        }
+
+        if (!activeSession?.user) {
+          setSession((prev) => ({ ...prev, isAuthReady: true }));
           return;
         }
 
@@ -75,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             activeSession.user.user_metadata,
             activeSession.user.email,
           ),
+          isAuthReady: true,
         }));
       });
 
@@ -86,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!activeSession?.user) {
-          setSession(defaultSession);
+          setSession({ ...defaultSession, isAuthReady: true });
           return;
         }
 
@@ -101,18 +109,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ),
           hasActiveSubscription: prev.hasActiveSubscription,
           activePlan: prev.activePlan,
+          isAuthReady: true,
         }));
       });
 
-      return () => {
-        isMounted = false;
-        subscription.unsubscribe();
-      };
+      unsubscribe = () => subscription.unsubscribe();
     } catch {
-      return () => {
-        isMounted = false;
-      };
+      if (isMounted) {
+        setSession((prev) => ({ ...prev, isAuthReady: true }));
+      }
     }
+
+    return () => {
+      isMounted = false;
+      unsubscribe?.();
+    };
   }, []);
 
   const login = useCallback((payload: AuthLoginPayload) => {
@@ -122,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: payload.userName,
       userId: payload.userId,
       accessToken: payload.accessToken,
+      isAuthReady: true,
     }));
   }, []);
 

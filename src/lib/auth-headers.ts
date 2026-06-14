@@ -11,3 +11,17 @@ export function buildAuthHeaders(
 
   return headers;
 }
+
+export function buildAuthFetchInit(
+  accessToken: string | null | undefined,
+  init: RequestInit = {},
+): RequestInit {
+  return {
+    ...init,
+    credentials: "include",
+    headers: {
+      ...buildAuthHeaders(accessToken),
+      ...(init.headers ?? {}),
+    },
+  };
+}

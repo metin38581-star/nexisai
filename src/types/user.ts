@@ -16,4 +16,5 @@ export interface UserSession {
   userId: string | null;
   accessToken: string | null;
   activePlan: SubscriptionPlanId | null;
+  isAuthReady: boolean;
 }
