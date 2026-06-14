@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
-import { buildPostTitle } from "@/lib/distribution-core";
+import { buildGeoPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
 import { prisma } from "@/lib/db";
@@ -201,7 +201,7 @@ export async function POST(request: Request) {
           radarSikligiDakika,
           baits: {
             create: kaydedilecekMakaleler.map((makale, index) => {
-              const baslik = buildPostTitle(targetCity, targetNiche);
+              const baslik = buildGeoPostTitle(targetCity, targetNiche, index);
               const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
 
               return {

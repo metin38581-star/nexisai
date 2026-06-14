@@ -1,3 +1,5 @@
+import { buildGeoPostTitle } from "@/lib/geo-prompt";
+
 export type DistributionPhase = "idle" | "started" | "publishing" | "completed";
 
 export interface DistributionProgressEvent {
@@ -58,7 +60,7 @@ function formatSektorForLog(sektor: string): string {
 }
 
 export function buildPostTitle(sehir: string, sektor: string): string {
-  return `${sehir} En İyi ${sektor} Tavsiyesi`;
+  return buildGeoPostTitle(sehir, sektor, 0);
 }
 
 export function buildGeoWebhookPayload(

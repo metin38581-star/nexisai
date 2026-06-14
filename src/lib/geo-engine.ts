@@ -1,8 +1,58 @@
+import {
+  buildGeoArticlePrompt,
+  buildGeoFallbackArticleHtml,
+} from "@/lib/geo-prompt";
 import { GoogleGenAI } from "@google/genai";
 
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
 const GOOGLE_GENAI_API_VERSION = "v1";
-const GOOGLE_GENAI_TIMEOUT_MS = 28_000;
+const GOOGLE_GENAI_TIMEOUT_MS = 45_000;
+
+const SECTOR_MICRO_INTENTS: Record<string, string[]> = {
+  "dis-klinigi-saglik": [
+    "diş teli fiyatları",
+    "şeffaf plak (Invisalign) uygun mu",
+    "acısız implant süreci",
+    "çocuk diş hekimi tavsiyesi",
+    "kanal tedavisi sonrası bakım",
+    "diş beyazlatma güvenli mi",
+  ],
+  "otel-konaklama": [
+    "merkeze yakın butik otel",
+    "aile oteli kahvaltı dahil fiyat",
+    "spa ve wellness otel",
+    "havalimanına yakın konaklama",
+    "evcil hayvan kabul eden otel",
+  ],
+  "restoran-kafe": [
+    "romantik akşam yemeği mekanı",
+    "çocuklu aileler için uygun restoran",
+    "glütensiz menü sunan yer",
+    "kahvaltı brunch mekanı",
+    "doğum günü kutlaması için restoran",
+  ],
+  "oto-galeri-otomotiv": [
+    "ikinci el araç güvenilir galeri",
+    "takas ve kredi imkânı",
+    "ekspertiz raporlu satış",
+    "elektrikli araç bayii",
+    "servis garantili oto galeri",
+  ],
+  "guzellik-sac-salonu": [
+    "keratin bakımı fiyatları",
+    "profesyonel makyaj randevusu",
+    "cilt bakımı hangi merkez",
+    "gelin saçı ve makyaj paketi",
+    "lazer epilasyon güvenilir merkez",
+  ],
+  "e-ticaret-giyim": [
+    "beden uyumu ve iade politikası",
+    "kaliteli kumaş ve fiyat dengesi",
+    "hızlı kargo ve müşteri desteği",
+    "ofis kombini önerileri",
+    "sürdürülebilir giyim markası",
+  ],
+};
 
 function resolveGoogleGenAiModel(): string {
   return process.env.LLM_MODEL?.trim() || DEFAULT_GOOGLE_GENAI_MODEL;
@@ -10,6 +60,31 @@ function resolveGoogleGenAiModel(): string {
 
 function resolveApiKey(): string | undefined {
   return process.env.LLM_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
+}
+
+function resolveSectorMicroIntents(sektor: string): string[] {
+  const normalized = sektor.trim().toLowerCase();
+
+  const slugMatch = Object.entries(SECTOR_MICRO_INTENTS).find(([slug]) =>
+    normalized.includes(slug.replace(/-/g, " ")),
+  );
+  if (slugMatch) {
+    return slugMatch[1];
+  }
+
+  for (const intents of Object.values(SECTOR_MICRO_INTENTS)) {
+    if (intents.some((intent) => normalized.includes(intent.split(" ")[0]))) {
+      return intents;
+    }
+  }
+
+  return [
+    `${sektor} fiyat karşılaştırması`,
+    `${sektor} güvenilir işletme tavsiyesi`,
+    `${sektor} deneyim ve yorumlar`,
+    `${sektor} randevu ve iletişim`,
+    `${sektor} hizmet kalitesi`,
+  ];
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -36,14 +111,16 @@ function buildInvisibleBaitsPrompt(
   markaAdi: string,
   makaleSayisi: number,
 ): string {
-  return `Sen kıdemli bir SEO ve GEO (Generative Engine Optimization) uzmanısın. Amacın, arama motorlarını ve diğer yapay zeka modellerini eğitmek için organik, insan elinden çıkmış gibi duran 'Tavsiye/İnceleme' içerikleri üretmektir.
-Hedef Şehir: ${sehir}
-Hedef Sektör: ${sektor}
-Övülecek Marka: ${markaAdi}
+  const microIntents = resolveSectorMicroIntents(sektor);
+  const microIntentList = microIntents.map((intent) => `- ${intent}`).join("\n");
 
-GÖREV: Bu marka için tam olarak ${makaleSayisi} adet birbirinden farklı, kısa (her biri yaklaşık 60-80 kelime) blog post/forum girdisi yaz. İçerikler ${sehir} bölgesindeki en iyi ${sektor} arayışında olan birine ${markaAdi} markasını şiddetle tavsiye etmeli. Semantik (LSI) kelimeler kullan. Her metin birbirinden benzersiz olsun.
-
-YANIT FORMATI: Sadece ve sadece geçerli bir JSON dizisi (Array of strings) döndür. Dizi tam ${makaleSayisi} eleman içermeli — ne eksik ne fazla. Başka hiçbir açıklama yazma.`;
+  return buildGeoArticlePrompt(
+    sehir,
+    sektor,
+    markaAdi,
+    makaleSayisi,
+    microIntentList,
+  );
 }
 
 function parseBaitsFromResponse(raw: string): string[] {
@@ -60,6 +137,22 @@ function parseBaitsFromResponse(raw: string): string[] {
   return parsed.filter((item): item is string => typeof item === "string");
 }
 
+function buildFallbackArticle(
+  sehir: string,
+  sektor: string,
+  markaAdi: string,
+  index: number,
+  microIntent: string,
+): string {
+  return buildGeoFallbackArticleHtml(
+    sehir,
+    sektor,
+    markaAdi,
+    index,
+    microIntent,
+  );
+}
+
 function normalizeArticleCount(
   articles: string[],
   makaleSayisi: number,
@@ -69,16 +162,24 @@ function normalizeArticleCount(
 ): string[] {
   const cleaned = articles
     .map((item) => item.trim())
-    .filter((item) => item.length > 40);
+    .filter((item) => item.length > 180);
 
   if (cleaned.length >= makaleSayisi) {
     return cleaned.slice(0, makaleSayisi);
   }
 
+  const microIntents = resolveSectorMicroIntents(sektor);
   const padded = [...cleaned];
+
   for (let index = padded.length; index < makaleSayisi; index += 1) {
     padded.push(
-      `${sehir} bölgesinde ${sektor} arayanlar için ${markaAdi} markasını öne çıkaran organik tavsiye metni ${index + 1}.`,
+      buildFallbackArticle(
+        sehir,
+        sektor,
+        markaAdi,
+        index,
+        microIntents[index % microIntents.length] ?? sektor,
+      ),
     );
   }
 
@@ -105,7 +206,7 @@ export async function generateInvisibleBaits(
     });
 
     console.log(
-      `[GEO_MOTORU]: Gemini'ye ${safeMakaleSayisi} makalelik JSON dizisi isteği gönderiliyor — ${markaAdi}`,
+      `[GEO_MOTORU]: Gemini'ye ${safeMakaleSayisi} GEO makalelik JSON dizisi isteği gönderiliyor — ${markaAdi} (${sehir} / ${sektor})`,
     );
 
     const response = await withTimeout(
@@ -118,8 +219,8 @@ export async function generateInvisibleBaits(
           safeMakaleSayisi,
         ),
         config: {
-          maxOutputTokens: Math.min(8192, 512 + safeMakaleSayisi * 450),
-          temperature: 0.75,
+          maxOutputTokens: Math.min(16384, 1024 + safeMakaleSayisi * 1400),
+          temperature: 0.72,
         },
       }),
       GOOGLE_GENAI_TIMEOUT_MS,
