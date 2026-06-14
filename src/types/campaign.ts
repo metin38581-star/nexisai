@@ -103,6 +103,7 @@ export interface StoredBait {
 
 export interface StoredCampaign {
   id: string;
+  userId: string | null;
   sehir: string;
   sektor: string;
   markaAdi: string;

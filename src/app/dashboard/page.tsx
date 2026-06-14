@@ -24,8 +24,12 @@ export default function DashboardPage() {
     }
   }, [isLoggedIn]);
 
-  const handleAuthSuccess = (userName: string) => {
-    login(userName);
+  const handleAuthSuccess = (payload: {
+    userName: string;
+    userId: string;
+    accessToken: string;
+  }) => {
+    login(payload);
     setShowAuthModal(false);
     setShowApp(true);
   };

@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export interface CampaignInsertRow {
   id?: string;
+  userId?: string;
   sehir: string;
   sektor: string;
   markaAdi: string;

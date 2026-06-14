@@ -18,6 +18,7 @@ model Wallet {
 
 model Campaign {
   id            String    @id @default(uuid())
+  userId        String?   @map("userId")
   sehir         String
   sektor        String
   markaAdi      String

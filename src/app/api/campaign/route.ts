@@ -12,6 +12,7 @@ import { buildUniqueArticleSlug } from "@/lib/slugify";
 import { queryLlmInquiry } from "@/lib/llm-simulator";
 import { buildDynamicTerminalLogs } from "@/lib/terminal-logs";
 import { calculateDynamicMetrics } from "@/lib/mock-metrics";
+import { getActiveUserId } from "@/lib/auth-session";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -75,6 +76,17 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "Kampanya süresi geçerli olmalıdır." },
         { status: 400 },
+      );
+    }
+
+    const activeUserId = await getActiveUserId(request);
+    if (!activeUserId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Kampanya oluşturmak için oturum açmanız gerekiyor.",
+        },
+        { status: 401 },
       );
     }
 
@@ -176,6 +188,7 @@ export async function POST(request: Request) {
 
       const yeniKampanya = await prisma.campaign.create({
         data: {
+          userId: activeUserId,
           sehir: targetCity,
           sektor: targetNiche,
           markaAdi: targetBrand,

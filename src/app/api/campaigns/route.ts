@@ -1,9 +1,22 @@
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+import { getActiveUserId } from "@/lib/auth-session";
+
+export async function GET(request: Request) {
   try {
+    const activeUserId = await getActiveUserId(request);
+    if (!activeUserId) {
+      return NextResponse.json(
+        { error: "Kampanyaları görüntülemek için oturum açmanız gerekiyor." },
+        { status: 401 },
+      );
+    }
+
     const campaigns = await prisma.campaign.findMany({
+      where: {
+        userId: activeUserId,
+      },
       include: {
         baits: true,
       },

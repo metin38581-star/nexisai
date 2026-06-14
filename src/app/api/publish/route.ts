@@ -6,6 +6,7 @@ import { publishToHubAndMake } from "@/lib/hybrid-publish";
 import { buildPublishSlug } from "@/lib/slugify";
 import { buildHubArticlePath } from "@/lib/hub-url";
 import { prisma } from "@/lib/db";
+import { getActiveUserId } from "@/lib/auth-session";
 
 /**
  * App Router karşılığı — eski Pages API handler akışı:
@@ -39,8 +40,17 @@ export async function POST(request: Request) {
     const markaAdi = body.markaAdi?.trim() || "NexisAI Marka";
     const agresiflik = body.agresiflik?.trim() || "Orta";
 
+    const activeUserId = await getActiveUserId(request);
+    if (!activeUserId) {
+      return NextResponse.json(
+        { error: "Yayınlamak için oturum açmanız gerekiyor." },
+        { status: 401 },
+      );
+    }
+
     const campaign = await prisma.campaign.create({
       data: {
+        userId: activeUserId,
         sehir,
         sektor,
         markaAdi,
@@ -93,7 +103,7 @@ export async function POST(request: Request) {
       campaignId: campaign.id,
       baitId: bait.id,
       slug,
-      userId: body.userId ?? null,
+      userId: activeUserId,
     });
   } catch (error) {
     const message =

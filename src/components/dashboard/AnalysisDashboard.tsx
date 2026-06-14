@@ -20,6 +20,8 @@ import DistributionStatusPanel from "@/components/dashboard/DistributionStatusPa
 import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
 import CyberTerminal from "@/components/terminal/CyberTerminal";
 import CyberWalletBar from "@/components/wallet/CyberWalletBar";
+import { useAuth } from "@/context/AuthContext";
+import { buildAuthHeaders } from "@/lib/auth-headers";
 
 function formatLogTimestamp(): string {
   return new Date().toLocaleTimeString("tr-TR", {
@@ -58,6 +60,7 @@ function AnalysisDashboardContent({
     resetDistribution,
     status: distributionStatus,
   } = useDistribution();
+  const { accessToken } = useAuth();
 
   const [session, setSession] = useState<CampaignSessionPayload | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -81,7 +84,9 @@ function AnalysisDashboardContent({
       setCampaignsLoading(true);
     }
     try {
-      const response = await fetch("/api/campaigns");
+      const response = await fetch("/api/campaigns", {
+        headers: buildAuthHeaders(accessToken),
+      });
       if (!response.ok) {
         return;
       }
@@ -94,7 +99,7 @@ function AnalysisDashboardContent({
         setCampaignsLoading(false);
       }
     }
-  }, []);
+  }, [accessToken]);
 
   const runRadarScan = useCallback(async () => {
     try {
@@ -199,7 +204,7 @@ function AnalysisDashboardContent({
       try {
         const response = await fetch("/api/campaign", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: buildAuthHeaders(accessToken),
           body: JSON.stringify({
             markaAdi: payload.markaAdi,
             sektor: payload.sektor,
@@ -217,6 +222,7 @@ function AnalysisDashboardContent({
             typeof result.error === "string" &&
             (result.error.toLowerCase().includes("yetersiz") ||
               result.error.toLowerCase().includes("siber bakiye"));
+          const isUnauthorized = response.status === 401;
 
           setTerminalLogs([
             {
@@ -225,7 +231,9 @@ function AnalysisDashboardContent({
               category: isInsufficientBalance ? "HATA" : "SİSTEM",
               message: isInsufficientBalance
                 ? "⚠️ [SİBER KRİZ]: Yetersiz bakiye nedeniyle GEO Enjeksiyon Motoru bloke edildi. Lütfen bakiye yükleyin."
-                : `⚠️ [SİBER HATA]: ${result.error ?? "Operasyon başlatılamadı."}`,
+                : isUnauthorized
+                  ? "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor."
+                  : `⚠️ [SİBER HATA]: ${result.error ?? "Operasyon başlatılamadı."}`,
             },
           ]);
 
@@ -287,7 +295,7 @@ function AnalysisDashboardContent({
         setIsLoading(false);
       }
     },
-    [resetDistribution, runRadarScan, onWalletRefresh],
+    [accessToken, resetDistribution, runRadarScan, onWalletRefresh],
   );
 
   useEffect(() => {

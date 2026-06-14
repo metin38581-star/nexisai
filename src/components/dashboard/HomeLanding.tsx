@@ -252,8 +252,12 @@ export default function HomeLanding() {
     setShowAuthModal(true);
   };
 
-  const handleAuthSuccess = (userName: string) => {
-    login(userName);
+  const handleAuthSuccess = (payload: {
+    userName: string;
+    userId: string;
+    accessToken: string;
+  }) => {
+    login(payload);
     setShowAuthModal(false);
     router.push("/dashboard");
   };

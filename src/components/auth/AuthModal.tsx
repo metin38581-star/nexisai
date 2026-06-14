@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import BrandLogo from "@/components/brand/BrandLogo";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 export type AuthViewMode = "register" | "login";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (userName: string) => void;
+  onSuccess: (payload: {
+    userName: string;
+    userId: string;
+    accessToken: string;
+  }) => void;
   authMode: AuthViewMode;
   onAuthModeChange: (mode: AuthViewMode) => void;
 }
@@ -28,12 +33,14 @@ export default function AuthModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setFullName("");
       setEmail("");
       setPassword("");
+      setErrorMessage(null);
     }
   }, [isOpen]);
 
@@ -42,14 +49,63 @@ export default function AuthModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    const displayName =
-      fullName.trim() || email.split("@")[0]?.trim() || "İşletme Hesabı";
-    onSuccess(displayName);
-    setIsSubmitting(false);
-    setFullName("");
-    setEmail("");
-    setPassword("");
+    setErrorMessage(null);
+
+    try {
+      const supabase = getSupabaseBrowser();
+      const authResult = isRegister
+        ? await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: {
+              data: {
+                full_name: fullName.trim(),
+              },
+            },
+          })
+        : await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+
+      if (authResult.error) {
+        setErrorMessage(authResult.error.message);
+        return;
+      }
+
+      const activeSession = authResult.data.session;
+      const user = authResult.data.user ?? activeSession?.user;
+
+      if (!user || !activeSession?.access_token) {
+        setErrorMessage(
+          isRegister
+            ? "Kayıt oluşturuldu. E-posta doğrulaması sonrası giriş yapabilirsiniz."
+            : "Oturum başlatılamadı. Lütfen tekrar deneyin.",
+        );
+        return;
+      }
+
+      const displayName =
+        fullName.trim() ||
+        (typeof user.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : "") ||
+        email.split("@")[0]?.trim() ||
+        "İşletme Hesabı";
+
+      onSuccess({
+        userName: displayName,
+        userId: user.id,
+        accessToken: activeSession.access_token,
+      });
+      setFullName("");
+      setEmail("");
+      setPassword("");
+    } catch {
+      setErrorMessage("Supabase oturum servisine bağlanılamadı.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -144,6 +200,12 @@ export default function AuthModal({
                 className={inputClassName}
               />
             </div>
+
+            {errorMessage ? (
+              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {errorMessage}
+              </p>
+            ) : null}
 
             <button
               type="submit"
