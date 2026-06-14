@@ -1,0 +1,46 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  balance   Float    @default(500.0)
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Campaign {
+  id            String    @id @default(uuid())
+  sehir         String
+  sektor        String
+  markaAdi      String
+  skor          Int
+  gunlukButce   Float     @default(250)
+  gunSayisi     Int       @default(7)
+  agresiflik         String    @default("Orta")
+  makaleSayisi       Int       @default(2)
+  radarSikligi       String    @default("24 Saat")
+  radarSikligiDakika Int       @default(1440)
+  isOptimized        Boolean   @default(false)
+  lastCheckedAt DateTime?
+  llmFeedback   String?   @default("Yapay zeka taraması bekleniyor...")
+  createdAt     DateTime  @default(now())
+  baits         Bait[]
+}
+
+model Bait {
+  id         String   @id @default(uuid())
+  campaignId String
+  baslik     String
+  icerik     String
+  platform   String   @default("PBN")
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-color: #09090b;
+  }
+
+  ::selection {
+    background-color: rgba(124, 58, 237, 0.35);
+    color: #ffffff;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #a78bfa 0%, #60a5fa 50%, #c084fc 100%);
+  }
+
+  .glass-card {
+    @apply rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-xl;
+  }
+
+  .glow-orb {
+    @apply pointer-events-none absolute rounded-full blur-3xl;
+  }
+
+  .cyber-range {
+    @apply h-2 cursor-pointer appearance-none rounded-full bg-zinc-800;
+  }
+
+  .cyber-range::-webkit-slider-thumb {
+    @apply h-4 w-4 appearance-none rounded-full border border-cyan-300 bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)];
+  }
+
+  .cyber-range::-moz-range-thumb {
+    @apply h-4 w-4 rounded-full border border-cyan-300 bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)];
+  }
+
+  .landing-nebula {
+    animation: landing-nebula-drift 24s ease-in-out infinite;
+  }
+
+  .landing-badge-glow {
+    animation: landing-badge-pulse 2.5s ease-in-out infinite;
+  }
+
+  .accordion-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.35s ease;
+  }
+
+  .accordion-panel[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes landing-nebula-drift {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.12);
+    opacity: 0.85;
+  }
+}
+
+@keyframes landing-badge-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(52, 211, 153, 0.55);
+  }
+}
