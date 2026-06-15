@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
+import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
+import { createCampaignWithBaits } from "@/lib/campaign-store";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
 import {
   buildIntentArticleHtml,
@@ -9,7 +11,6 @@ import {
 } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
-import { prisma } from "@/lib/db";
 import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
 import { generateInvisibleBaits } from "@/lib/geo-engine";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
@@ -17,6 +18,11 @@ import { queryLlmInquiry } from "@/lib/llm-simulator";
 import { buildDynamicTerminalLogs } from "@/lib/terminal-logs";
 import { calculateDynamicMetrics } from "@/lib/mock-metrics";
 import { getActiveUserId } from "@/lib/auth-session";
+import { logServerEnvStatus } from "@/lib/server-env";
+import {
+  decrementWalletBalance,
+  getOrCreateWallet,
+} from "@/lib/wallet-service";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -27,6 +33,8 @@ function buildFallbackMakaleler(count: number): string[] {
 
 export async function POST(request: Request) {
   try {
+    logServerEnvStatus("campaign-post");
+    assertDataAccessEnv();
     const body = (await request.json()) as CampaignApiRequest;
 
     const gunlukButce = Number(body.gunlukButce) || 10;
@@ -107,11 +115,7 @@ export async function POST(request: Request) {
       makaleSayisi = selectedIntents.length;
     }
 
-    let wallet = await prisma.wallet.findFirst();
-
-    if (!wallet) {
-      wallet = await prisma.wallet.create({ data: { balance: 500.0 } });
-    }
+    const wallet = await getOrCreateWallet();
 
     if (wallet.balance < toplamMaliyet) {
       return NextResponse.json(
@@ -251,24 +255,19 @@ export async function POST(request: Request) {
               };
             });
 
-      const yeniKampanya = await prisma.campaign.create({
-        data: {
-          userId: activeUserId,
-          sehir: targetCity,
-          sektor: targetNiche,
-          markaAdi: targetBrand,
-          skor: currentScore,
-          gunlukButce,
-          gunSayisi,
-          agresiflik: agresiflikSeviyesi,
-          makaleSayisi,
-          radarSikligi,
-          radarSikligiDakika,
-          baits: {
-            create: baitRecords,
-          },
-        },
-        include: { baits: true },
+      const yeniKampanya = await createCampaignWithBaits({
+        userId: activeUserId,
+        sehir: targetCity,
+        sektor: targetNiche,
+        markaAdi: targetBrand,
+        skor: currentScore,
+        gunlukButce,
+        gunSayisi,
+        agresiflik: agresiflikSeviyesi,
+        makaleSayisi,
+        radarSikligi,
+        radarSikligiDakika,
+        baits: baitRecords,
       });
 
       persistedBaits = yeniKampanya.baits.map((bait) => ({
@@ -283,10 +282,7 @@ export async function POST(request: Request) {
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, radar=${radarSikligiDakika}dk`,
       );
 
-      await prisma.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { decrement: toplamMaliyet } },
-      });
+      await decrementWalletBalance(wallet.id, toplamMaliyet);
 
       console.log(
         `[CÜZDAN TASARRUFU]: $${toplamMaliyet} bakiyeden düşüldü. Yeni bakiye: $${wallet.balance - toplamMaliyet}`,
@@ -343,10 +339,7 @@ export async function POST(request: Request) {
     };
 
     return NextResponse.json(response);
-  } catch {
-    return NextResponse.json(
-      { success: false, error: "İşlem sırasında bir hata oluştu." },
-      { status: 500 },
-    );
+  } catch (error) {
+    return handleApiRouteError(error, "İşlem sırasında bir hata oluştu.");
   }
 }

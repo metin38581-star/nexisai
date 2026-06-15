@@ -4,7 +4,10 @@ import {
   computeNextRadarScanAt,
   isCampaignDueForRadarScan,
 } from "@/lib/campaign-budget";
-import { prisma } from "@/lib/db";
+import {
+  listRadarCampaigns,
+  updateRadarCampaignState,
+} from "@/lib/campaign-store";
 
 const GOOGLE_GENAI_API_VERSION = "v1";
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
@@ -63,13 +66,7 @@ function formatLogTimestamp(date: Date): string {
 
 export async function runBulkRadarScan(): Promise<RadarScanReport> {
   const apiKey = resolveApiKey();
-  if (!apiKey) {
-    throw new Error("Gemini API anahtarı yapılandırılmamış");
-  }
-
-  const campaigns = await prisma.campaign.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const campaigns = await listRadarCampaigns();
 
   if (campaigns.length === 0) {
     return {
@@ -82,6 +79,23 @@ export async function runBulkRadarScan(): Promise<RadarScanReport> {
       failedCount: 0,
       scanLogs: [],
       message: "Taranacak kampanya bulunamadı.",
+    };
+  }
+
+  if (!apiKey) {
+    console.warn(
+      "[RADAR] Gemini API anahtarı yapılandırılmamış; tarama atlandı.",
+    );
+    return {
+      success: true,
+      totalCampaigns: campaigns.length,
+      scannedCount: 0,
+      skippedCount: campaigns.length,
+      optimizedCount: 0,
+      pendingCount: 0,
+      failedCount: 0,
+      scanLogs: [],
+      message: "Radar taraması için LLM_API_KEY tanımlı değil; kampanyalar atlandı.",
     };
   }
 
@@ -149,13 +163,10 @@ export async function runBulkRadarScan(): Promise<RadarScanReport> {
         radarSikligiDakika,
       );
 
-      await prisma.campaign.update({
-        where: { id: campaign.id },
-        data: {
-          isOptimized: markaBulundu,
-          lastCheckedAt: scannedAt,
-          llmFeedback: feedback,
-        },
+      await updateRadarCampaignState(campaign.id, {
+        isOptimized: markaBulundu,
+        lastCheckedAt: scannedAt,
+        llmFeedback: feedback,
       });
 
       scannedCount += 1;

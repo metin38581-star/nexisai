@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 
+import { handleApiRouteError } from "@/lib/api-error";
 import { generateMicroIntents } from "@/lib/geo-engine";
 import { getActiveUserId } from "@/lib/auth-session";
+import { logServerEnvStatus } from "@/lib/server-env";
 import type { GeoIntentsRequestBody } from "@/types/geo-intent";
 
 export async function POST(request: Request) {
   try {
+    logServerEnvStatus("campaign-intents");
     const activeUserId = await getActiveUserId(request);
     if (!activeUserId) {
       return NextResponse.json(
-        { error: "Mikro niyet taraması için oturum açmanız gerekiyor." },
+        {
+          success: false,
+          error: "Mikro niyet taraması için oturum açmanız gerekiyor.",
+        },
         { status: 401 },
       );
     }
@@ -21,7 +27,7 @@ export async function POST(request: Request) {
 
     if (!sehir || !sektor || !markaAdi) {
       return NextResponse.json(
-        { error: "sehir, sektor ve markaAdi zorunludur." },
+        { success: false, error: "sehir, sektor ve markaAdi zorunludur." },
         { status: 400 },
       );
     }
@@ -35,10 +41,6 @@ export async function POST(request: Request) {
       markaAdi,
     });
   } catch (error) {
-    console.error("[API_CAMPAIGN_INTENTS_ERROR]:", error);
-    return NextResponse.json(
-      { error: "Mikro niyet motoru yanıt veremedi." },
-      { status: 500 },
-    );
+    return handleApiRouteError(error, "Mikro niyet motoru yanıt veremedi.");
   }
 }

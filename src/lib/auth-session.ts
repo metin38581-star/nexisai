@@ -2,8 +2,20 @@ import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+async function resolveSupabaseAuthClient() {
+  try {
+    return await createSupabaseServerClient();
+  } catch (error) {
+    console.error("API Hatası:", error);
+    return null;
+  }
+}
+
 export async function getActiveUserId(request?: Request): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await resolveSupabaseAuthClient();
+  if (!supabase) {
+    return null;
+  }
 
   if (request) {
     const authHeader = request.headers.get("authorization");
@@ -31,7 +43,10 @@ export async function getActiveUserId(request?: Request): Promise<string | null>
 }
 
 export async function getActiveSessionUser(request?: Request) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await resolveSupabaseAuthClient();
+  if (!supabase) {
+    return null;
+  }
 
   if (request) {
     const authHeader = request.headers.get("authorization");

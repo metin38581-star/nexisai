@@ -1,16 +1,17 @@
 import { runBulkRadarScan } from "@/lib/radar-engine";
 import { NextResponse } from "next/server";
 
+import { handleApiRouteError, assertDataAccessEnv } from "@/lib/api-error";
+import { logServerEnvStatus } from "@/lib/server-env";
+
 export async function GET() {
   try {
+    logServerEnvStatus("check-radar");
+    assertDataAccessEnv();
     const report = await runBulkRadarScan();
     return NextResponse.json(report);
   } catch (error) {
-    console.error("[RADAR_ERROR]:", error);
-    return NextResponse.json(
-      { error: "Toplu radar taraması başarısız oldu" },
-      { status: 500 },
-    );
+    return handleApiRouteError(error, "Toplu radar taraması başarısız oldu.");
   }
 }
 

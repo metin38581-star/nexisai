@@ -2,11 +2,13 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
+import { handleApiRouteError } from "@/lib/api-error";
 import { publishToHubAndMake } from "@/lib/hybrid-publish";
 import { buildPublishSlug } from "@/lib/slugify";
 import { buildHubArticlePath } from "@/lib/hub-url";
 import { prisma } from "@/lib/db";
 import { getActiveUserId } from "@/lib/auth-session";
+import { logServerEnvStatus } from "@/lib/server-env";
 
 /**
  * App Router karşılığı — eski Pages API handler akışı:
@@ -14,6 +16,7 @@ import { getActiveUserId } from "@/lib/auth-session";
  */
 export async function POST(request: Request) {
   try {
+    logServerEnvStatus("publish-post");
     const body = (await request.json()) as {
       title?: string;
       content?: string;
@@ -29,7 +32,7 @@ export async function POST(request: Request) {
 
     if (!title || !content) {
       return NextResponse.json(
-        { error: "title ve content zorunludur." },
+        { success: false, error: "title ve content zorunludur." },
         { status: 400 },
       );
     }
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
     const activeUserId = await getActiveUserId(request);
     if (!activeUserId) {
       return NextResponse.json(
-        { error: "Yayınlamak için oturum açmanız gerekiyor." },
+        { success: false, error: "Yayınlamak için oturum açmanız gerekiyor." },
         { status: 401 },
       );
     }
@@ -78,7 +81,7 @@ export async function POST(request: Request) {
     const bait = campaign.baits[0];
     if (!bait) {
       return NextResponse.json(
-        { error: "Makale kaydı oluşturulamadı." },
+        { success: false, error: "Makale kaydı oluşturulamadı." },
         { status: 500 },
       );
     }
@@ -106,8 +109,6 @@ export async function POST(request: Request) {
       userId: activeUserId,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Yayın sırasında hata oluştu.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiRouteError(error, "Yayın sırasında hata oluştu.");
   }
 }
