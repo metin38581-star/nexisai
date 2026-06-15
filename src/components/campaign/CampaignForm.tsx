@@ -7,7 +7,10 @@ import {
   TURKEY_CITY_OPTIONS,
 } from "@/lib/constants";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
-import { CAMPAIGN_SELECT_PLACEHOLDER } from "@/lib/campaign-form-utils";
+import {
+  CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
+  CAMPAIGN_SELECT_PLACEHOLDER,
+} from "@/lib/campaign-form-utils";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 
 interface CampaignFormProps {
@@ -58,7 +61,7 @@ export default function CampaignForm({
           <input
             type="text"
             required
-            placeholder="Örn: Kayseri Dent Klinik"
+            placeholder={CAMPAIGN_BUSINESS_NAME_PLACEHOLDER}
             value={form.businessName}
             onChange={(e) => updateField("businessName", e.target.value)}
             className={inputClass}

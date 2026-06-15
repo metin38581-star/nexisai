@@ -217,6 +217,8 @@ function AnalysisDashboardContent({
               sehir: payload.sehir,
               gunlukButce: payload.gunlukButce,
               gunSayisi: payload.gunSayisi,
+              selectedQuestions: payload.selectedQuestions,
+              selectedAnswers: payload.selectedAnswers,
               selectedIntents: payload.selectedIntents,
               bonusIntentUnlocks: payload.bonusIntentUnlocks,
             }),

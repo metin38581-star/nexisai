@@ -18,6 +18,10 @@ export interface CampaignFormData {
   city: CampaignFormCity;
   dailyBudget: number;
   campaignDays: number;
+  /** UI sırasına göre seçilen soru metinleri — backend üretiminde birincil kaynak. */
+  selectedQuestions?: string[];
+  /** selectedQuestions ile aynı sırada simüle LLM cevapları. */
+  selectedAnswers?: string[];
   selectedIntents?: SelectedGeoIntent[];
   bonusIntentUnlocks?: number;
 }
@@ -28,6 +32,8 @@ export interface CampaignApiRequest {
   sehir: string;
   gunlukButce: number;
   gunSayisi: number;
+  selectedQuestions?: string[];
+  selectedAnswers?: string[];
   selectedIntents?: SelectedGeoIntent[];
   bonusIntentUnlocks?: number;
 }

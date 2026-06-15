@@ -12,6 +12,8 @@ interface CyberBudgetFieldProps {
   suffix?: string;
   onChange: (value: number) => void;
   showAgresiflik?: boolean;
+  /** true iken 0 değeri boş input olarak gösterilir (tarama öncesi bütçe zorunluluğu). */
+  allowUnset?: boolean;
 }
 
 export default function CyberBudgetField({
@@ -24,10 +26,16 @@ export default function CyberBudgetField({
   suffix,
   onChange,
   showAgresiflik = false,
+  allowUnset = false,
 }: CyberBudgetFieldProps) {
-  const profile = showAgresiflik ? resolveAgresiflikProfile(value) : null;
+  const profile =
+    showAgresiflik && value > 0 ? resolveAgresiflikProfile(value) : null;
 
   const handleChange = (next: number) => {
+    if (allowUnset && next <= 0) {
+      onChange(0);
+      return;
+    }
     onChange(Math.min(max, Math.max(min, next)));
   };
 
@@ -46,9 +54,17 @@ export default function CyberBudgetField({
             min={min}
             max={max}
             step={step}
-            value={value}
-            onChange={(e) => handleChange(Number(e.target.value) || min)}
-            className="w-16 bg-transparent text-right text-sm font-semibold text-white outline-none"
+            value={allowUnset && value === 0 ? "" : value}
+            placeholder={allowUnset ? "Bütçe girin" : undefined}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (allowUnset && raw === "") {
+                onChange(0);
+                return;
+              }
+              handleChange(Number(raw));
+            }}
+            className="w-16 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600"
           />
           {suffix && <span className="ml-1 text-xs text-zinc-500">{suffix}</span>}
         </div>
@@ -59,7 +75,7 @@ export default function CyberBudgetField({
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={value > 0 ? value : min}
         onChange={(e) => handleChange(Number(e.target.value))}
         className="cyber-range w-full"
       />

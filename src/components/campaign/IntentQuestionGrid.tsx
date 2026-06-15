@@ -25,7 +25,7 @@ export default function IntentQuestionGrid({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
-          Akıllı Niyet Motoru — {intents.length} Mikro Soru
+          Akıllı Niyet Motoru — {intents.length} Kritik LLM Arama Hedefi
         </p>
         <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">
           Seçim: {selectedIds.size}/{softCap}
@@ -66,7 +66,7 @@ export default function IntentQuestionGrid({
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Soru {index + 1}
+                    Arama Hedefi {index + 1}
                   </p>
                   <p className="mt-1 text-sm font-medium leading-snug text-white">
                     {intent.question}

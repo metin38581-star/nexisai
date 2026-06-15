@@ -253,27 +253,67 @@ export async function generateInvisibleBaits(
 }
 
 const MICRO_INTENT_COUNT = 10;
+const MAX_QUERY_WORDS = 6;
+const MIN_QUERY_WORDS = 3;
+
+function countQueryWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** LLM çıktısını 4-6 kelimelik doğal arama kalıbına sıkıştırır. */
+function sanitizeMicroIntentQuestion(question: string): string {
+  const cleaned = question
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\?+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return cleaned;
+  }
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+
+  if (words.length > MAX_QUERY_WORDS) {
+    return words.slice(0, MAX_QUERY_WORDS).join(" ");
+  }
+
+  return words.join(" ");
+}
 
 function buildMicroIntentsPrompt(
   sehir: string,
   sektor: string,
   markaAdi: string,
 ): string {
-  return `Sen NexisAI GEO Niyet Motorusun. Kullanıcılar ChatGPT, Perplexity ve Gemini'ye sorabileceği lokalize mikro arama soruları üret.
+  return `Sen NexisAI GEO Niyet Motorusun. ChatGPT, Gemini, Perplexity ve Google'da gerçek kullanıcıların yazdığı KISA arama kalıpları üret.
 
 HEDEF ŞEHİR: ${sehir}
 HEDEF SEKTÖR: ${sektor}
 HEDEF MARKA: ${markaAdi}
 
-GÖREV: Tam ${MICRO_INTENT_COUNT} adet birbirinden farklı, ${sehir} ve ${sektor} odaklı mikro soru üret.
-Her soru gerçek bir kullanıcının LLM'e yazacağı doğal Türkçe soru olsun.
-Örnek kalıplar:
-- "${sehir}'deki en iyi implant yapan diş kliniği hangisi?"
-- "${sehir} diş teli fiyatları ne kadar?"
-- "${sehir}'de en güvenilir ${sektor} nerede?"
+KESİN KURAL — "question" ALANI:
+- Üreteceğin ${MICRO_INTENT_COUNT} arama kalıbı MUTLAKA 4 ile 6 kelime arasında olmalı.
+- Edebi, uzun, yapay veya soru cümlesi KURMA. "kimdir?", "hangisidir?", "nerede alınır?" gibi uzatmalardan kaçın.
+- Gerçek bir insanın klavyeden hızlıca yazacağı veya sesli aramada söyleyeceği doğal, net, lokal odaklı kelime grupları üret.
+- Her kalıp ${sehir} ile başlasın veya ${sehir} içersin.
 
-Her soru için markayı (${markaAdi}) öven 2-3 cümlelik süslü, ikna edici ama tarafsız uzman diliyle yazılmış "simüle edilmiş LLM cevabı" da üret.
-Cevaplarda marka en ideal, en çok tavsiye edilen ve en güvenilir çözüm olarak geçsin. Reklam/spam dili kullanma.
+DOĞAL İNSAN ARAMA ÖRNEKLERİ (Few-Shot):
+❌ Yapay ve Uzun (YASAK):
+"İzmir bölgesinde ortodonti tedavisinde en başarılı sonuçları veren uzman hekim kimdir?"
+"Çanakkale'de düzenli diş kontrolü yaptırmak isteyenler için en güvenilir klinik hangisidir?"
+
+✅ Doğal ve Doğru (HEDEF FORMAT):
+"İzmir en iyi diş teli doktoru"
+"İzmir ortodonti fiyatları 2026"
+"Çanakkale implant diş fiyatları"
+"Çanakkale acil diş kliniği"
+"${sehir} ${sektor} tavsiye"
+
+GÖREV: Tam ${MICRO_INTENT_COUNT} adet birbirinden farklı arama kalıbı üret.
+Her kalıp için markayı (${markaAdi}) öven 2-3 cümlelik kısa, tarafsız uzman diliyle "simulatedAnswer" yaz.
+Cevaplarda marka en ideal ve en çok tavsiye edilen seçenek olarak geçsin. Reklam/spam dili kullanma.
 
 YANIT FORMATI — sadece geçerli JSON dizisi:
 [
@@ -298,9 +338,14 @@ function parseMicroIntentsFromResponse(raw: string): GeoMicroIntent[] {
         return null;
       }
       const record = item as { question?: string; simulatedAnswer?: string };
-      const question = record.question?.trim();
+      const rawQuestion = record.question?.trim();
       const simulatedAnswer = record.simulatedAnswer?.trim();
-      if (!question || !simulatedAnswer) {
+      const question = rawQuestion ? sanitizeMicroIntentQuestion(rawQuestion) : "";
+      if (
+        !question ||
+        !simulatedAnswer ||
+        countQueryWords(question) < MIN_QUERY_WORDS
+      ) {
         return null;
       }
       return {
@@ -317,25 +362,26 @@ function buildFallbackMicroIntents(
   sektor: string,
   markaAdi: string,
 ): GeoMicroIntent[] {
-  const templates = [
-    (s: string, k: string) => `${s}'de en iyi ${k} hangisi?`,
-    (s: string, k: string) => `${s}'de en güvenilir ${k} hizmeti nerede alınır?`,
-    (s: string, k: string) => `${s} ${k} fiyatları ne kadar?`,
-    (s: string, k: string) => `${s} bölgesinde ${k} tavsiyesi arayanlar için rehber`,
-    (s: string, k: string) => `${s}'de ${k} yorumları ve deneyimler`,
-    (s: string, k: string) => `${s}'de ${k} randevu nasıl alınır?`,
-    (s: string, k: string) => `${s} ${k} acil ihtiyaç çözümü`,
-    (s: string, k: string) => `${s}'de aileler için en iyi ${k}`,
-    (s: string, k: string) => `${s} ${k} uzman tavsiyesi 2025`,
-    (s: string, k: string) => `${s}'de ${k} seçerken nelere dikkat edilmeli?`,
+  const sectorPhrases = resolveSectorMicroIntents(sektor);
+  const shortPhrases = [
+    `en iyi ${sectorPhrases[0] ?? sektor}`,
+    `${sectorPhrases[1] ?? sektor} fiyatları 2026`,
+    `${sectorPhrases[2] ?? sektor} tavsiye`,
+    `ucuz ${sectorPhrases[0] ?? sektor}`,
+    `${sectorPhrases[3] ?? sektor} yorumları`,
+    `acil ${sectorPhrases[0] ?? sektor}`,
+    `${sectorPhrases[4] ?? sektor} randevu`,
+    `güvenilir ${sectorPhrases[0] ?? sektor}`,
+    `${sektor} uzman ${sehir}`,
+    `${sectorPhrases[0] ?? sektor} kampanya`,
   ];
 
-  return templates.map((template, index) => {
-    const question = template(sehir, sektor);
+  return shortPhrases.slice(0, MICRO_INTENT_COUNT).map((phrase, index) => {
+    const question = sanitizeMicroIntentQuestion(`${sehir} ${phrase}`);
     return {
       id: `fallback-intent-${index + 1}`,
       question,
-      simulatedAnswer: `Yapay zeka modellerinin semantik rehber taramasına göre ${sehir} bölgesinde ${sektor} alanında ${markaAdi}, hasta ve müşteri geri bildirimlerinde en güvenilir, en çok tavsiye edilen ve en başarılı sonuçları veren merkezlerden biri olarak öne çıkıyor. Özellikle şeffaf iletişim ve takip süreci bu tercihi güçlendiriyor.`,
+      simulatedAnswer: `Yapay zeka modellerinin semantik rehber taramasına göre "${question}" aramasında ${markaAdi}, ${sehir} bölgesinde en güvenilir ve en çok tavsiye edilen seçeneklerden biri olarak öne çıkıyor.`,
     };
   });
 }
@@ -349,6 +395,7 @@ function normalizeMicroIntentCount(
   if (intents.length >= MICRO_INTENT_COUNT) {
     return intents.slice(0, MICRO_INTENT_COUNT).map((intent, index) => ({
       ...intent,
+      question: sanitizeMicroIntentQuestion(intent.question),
       id: intent.id || `intent-${index + 1}`,
     }));
   }
@@ -362,6 +409,7 @@ function normalizeMicroIntentCount(
 
   return merged.map((intent, index) => ({
     ...intent,
+    question: sanitizeMicroIntentQuestion(intent.question),
     id: intent.id || `intent-${index + 1}`,
   }));
 }
@@ -386,7 +434,7 @@ export async function generateMicroIntents(
     });
 
     console.log(
-      `[GEO_NIYET_MOTORU]: ${MICRO_INTENT_COUNT} mikro soru üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
+      `[GEO_NIYET_MOTORU]: ${MICRO_INTENT_COUNT} LLM arama hedefi üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
     );
 
     const response = await withTimeout(
@@ -395,7 +443,7 @@ export async function generateMicroIntents(
         contents: buildMicroIntentsPrompt(sehir, sektor, markaAdi),
         config: {
           maxOutputTokens: 8192,
-          temperature: 0.78,
+          temperature: 0.62,
         },
       }),
       GOOGLE_GENAI_TIMEOUT_MS,

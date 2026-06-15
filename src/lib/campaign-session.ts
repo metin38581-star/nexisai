@@ -11,6 +11,8 @@ export interface CampaignSessionPayload {
   gunlukButce: number;
   gunSayisi: number;
   withTahsilat?: boolean;
+  selectedQuestions?: string[];
+  selectedAnswers?: string[];
   selectedIntents?: SelectedGeoIntent[];
   bonusIntentUnlocks?: number;
 }
@@ -30,6 +32,8 @@ export function buildCampaignSession(
     gunlukButce: data.dailyBudget,
     gunSayisi: data.campaignDays,
     withTahsilat: options?.withTahsilat,
+    selectedQuestions: data.selectedQuestions,
+    selectedAnswers: data.selectedAnswers,
     selectedIntents: data.selectedIntents,
     bonusIntentUnlocks: data.bonusIntentUnlocks,
   };

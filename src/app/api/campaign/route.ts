@@ -4,11 +4,7 @@ import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
 import { createCampaignWithBaits } from "@/lib/campaign-store";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
-import {
-  buildIntentArticleHtml,
-  buildIntentPostTitle,
-  buildSemanticAnchorSlug,
-} from "@/lib/geo-prompt";
+import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
 import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
@@ -23,6 +19,10 @@ import {
   decrementWalletBalance,
   getOrCreateWallet,
 } from "@/lib/wallet-service";
+import {
+  buildBaitRecordsFromSelectedQuestions,
+  resolveSelectedQuestionPairs,
+} from "@/lib/selected-questions";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -106,13 +106,15 @@ export async function POST(request: Request) {
     const trimmedSektor = sektor.trim();
     const trimmedSehir = sehir.trim();
 
-    const selectedIntents =
-      body.selectedIntents?.filter(
-        (intent) => intent.question?.trim() && intent.simulatedAnswer?.trim(),
-      ) ?? [];
+    const selectedQuestionPairs = resolveSelectedQuestionPairs(body);
+    const hasSelectedQuestions = selectedQuestionPairs.length > 0;
 
-    if (selectedIntents.length > 0) {
-      makaleSayisi = selectedIntents.length;
+    if (hasSelectedQuestions) {
+      console.log(
+        "Üretim İçin Gelen Sorular:",
+        selectedQuestionPairs.map((pair) => pair.question),
+      );
+      makaleSayisi = selectedQuestionPairs.length;
     }
 
     const wallet = await getOrCreateWallet();
@@ -137,7 +139,7 @@ export async function POST(request: Request) {
         gunSayisi,
       ),
       deployBaitsToNetwork(aiBaits, gunlukButce),
-      selectedIntents.length > 0
+      hasSelectedQuestions
         ? Promise.resolve([] as string[])
         : generateInvisibleBaits(
             trimmedSehir,
@@ -205,55 +207,27 @@ export async function POST(request: Request) {
 
       const usedSlugs = new Set<string>();
 
-      const baitRecords =
-        selectedIntents.length > 0
-          ? selectedIntents.map((intent, index) => {
-              const baslik = buildIntentPostTitle(
-                targetCity,
-                targetNiche,
-                index,
-                intent.question,
-              );
-              let slug = buildSemanticAnchorSlug(
-                targetCity,
-                targetNiche,
-                intent.question,
-                targetBrand,
-                index,
-              );
-              while (usedSlugs.has(slug)) {
-                slug = `${slug}-${usedSlugs.size + 1}`;
-              }
-              usedSlugs.add(slug);
+      const baitRecords = hasSelectedQuestions
+        ? buildBaitRecordsFromSelectedQuestions(selectedQuestionPairs, {
+            targetCity,
+            targetNiche,
+            targetBrand,
+          })
+        : kaydedilecekMakaleler.map((makale, index) => {
+            const baslik = buildIntentPostTitle(
+              targetCity,
+              targetNiche,
+              index,
+            );
+            const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
 
-              return {
-                baslik,
-                icerik: buildIntentArticleHtml(
-                  intent.question,
-                  intent.simulatedAnswer,
-                  targetBrand,
-                  targetCity,
-                  targetNiche,
-                ),
-                slug,
-                platform: "NexisAI Hub",
-              };
-            })
-          : kaydedilecekMakaleler.map((makale, index) => {
-              const baslik = buildIntentPostTitle(
-                targetCity,
-                targetNiche,
-                index,
-              );
-              const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
-
-              return {
-                baslik,
-                icerik: makale,
-                slug,
-                platform: "NexisAI Hub",
-              };
-            });
+            return {
+              baslik,
+              icerik: makale,
+              slug,
+              platform: "NexisAI Hub",
+            };
+          });
 
       const yeniKampanya = await createCampaignWithBaits({
         userId: activeUserId,
@@ -329,7 +303,12 @@ export async function POST(request: Request) {
       metrics,
       terminalLogs,
       llmResult,
-      baitsGenerated: kaydedilecekMakaleler.length,
+      baitsGenerated:
+        persistedBaits.length > 0
+          ? persistedBaits.length
+          : hasSelectedQuestions
+            ? selectedQuestionPairs.length
+            : kaydedilecekMakaleler.length,
       message: "İçerikler başarıyla yayınlandı!",
       liveUrl: campaignExternalUrl,
       externalUrl: campaignExternalUrl ?? null,

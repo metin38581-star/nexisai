@@ -122,7 +122,7 @@ export default function LiveLlmVisibilitySimulator({
           <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center">
             <Bot className="mb-3 h-10 w-10 text-zinc-600" />
             <p className="text-sm text-zinc-500">
-              Bir anahtar soruya tıklayın; ChatGPT/Gemini simülasyonu canlı
+              Bir arama hedefine tıklayın; ChatGPT/Gemini simülasyonu canlı
               başlasın.
             </p>
           </div>
@@ -130,7 +130,7 @@ export default function LiveLlmVisibilitySimulator({
           <>
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-violet-400">
-                Kullanıcı Sorusu
+                Kullanıcı Sorgusu
               </p>
               <p className="text-sm leading-relaxed text-zinc-200">
                 {typedQuestion}

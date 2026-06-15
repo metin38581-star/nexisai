@@ -18,6 +18,7 @@ import {
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
 import {
   CAMPAIGN_SELECT_PLACEHOLDER,
+  CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
   isCampaignFormReadyForScan,
 } from "@/lib/campaign-form-utils";
 import {
@@ -43,7 +44,7 @@ const initialForm: CampaignFormData = {
   businessName: "",
   sector: "",
   city: "",
-  dailyBudget: 20,
+  dailyBudget: 0,
   campaignDays: 7,
   bonusIntentUnlocks: 0,
 };
@@ -118,7 +119,9 @@ export default function CampaignCreationStudio({
 
   const scanIntents = useCallback(async () => {
     if (!canScanIntents) {
-      setScanError("İşletme adı, sektör ve şehir alanlarını doldurun.");
+      setScanError(
+        "İşletme adı, sektör, şehir ve günlük bütçe alanlarını doldurun.",
+      );
       return;
     }
 
@@ -166,7 +169,7 @@ export default function CampaignCreationStudio({
     }, 700);
 
     return () => window.clearTimeout(timeoutId);
-  }, [form.city, form.sector, form.businessName, scanIntents, canScanIntents]);
+  }, [form.city, form.sector, form.businessName, form.dailyBudget, scanIntents, canScanIntents]);
 
   const updateField = <K extends keyof CampaignFormData>(
     key: K,
@@ -245,17 +248,26 @@ export default function CampaignCreationStudio({
     event.preventDefault();
 
     if (selectedIds.size === 0) {
-      setScanError("En az bir anahtar soru seçmelisiniz.");
+      setScanError("En az bir arama hedefi seçmelisiniz.");
       return;
     }
 
-    const selectedIntents = intents.filter((intent) =>
+    const selectedItems = intents.filter((intent) =>
       selectedIds.has(intent.id),
+    );
+
+    const selectedQuestions = selectedItems.map((intent) =>
+      intent.question.trim(),
+    );
+    const selectedAnswers = selectedItems.map((intent) =>
+      intent.simulatedAnswer.trim(),
     );
 
     onSubmit({
       ...form,
-      selectedIntents,
+      selectedQuestions,
+      selectedAnswers,
+      selectedIntents: selectedItems,
     });
   };
 
@@ -272,8 +284,8 @@ export default function CampaignCreationStudio({
               GEO Kampanya Oluşturma Odası
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-              LLM&apos;lerin tarayacağı mikro soruları seçin; sağ panelde canlı
-              yapay zeka cevap simülasyonunu izleyin.
+              LLM&apos;lerin tarayacağı popüler kullanıcı sorgularını seçin; sağ
+              panelde canlı yapay zeka cevap simülasyonunu izleyin.
             </p>
           </div>
           <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-right">
@@ -281,7 +293,7 @@ export default function CampaignCreationStudio({
               {softCapResult.tierLabel}
             </p>
             <p className="text-sm font-semibold text-white">
-              Soft Cap: {softCapResult.softCap} soru
+              Soft Cap: {softCapResult.softCap} arama hedefi
             </p>
           </div>
         </div>
@@ -292,7 +304,7 @@ export default function CampaignCreationStudio({
               <input
                 type="text"
                 required
-                placeholder="Örn: Kayseri Dent Klinik"
+                placeholder={CAMPAIGN_BUSINESS_NAME_PLACEHOLDER}
                 value={form.businessName}
                 onChange={(e) => updateField("businessName", e.target.value)}
                 className={inputClass}
@@ -361,6 +373,7 @@ export default function CampaignCreationStudio({
               min={10}
               max={150}
               step={5}
+              allowUnset
               onChange={(value) => updateField("dailyBudget", value)}
               showAgresiflik
             />
@@ -389,7 +402,7 @@ export default function CampaignCreationStudio({
                   <div className="text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-violet-400" />
                     <p className="mt-3 text-sm text-zinc-500">
-                      Gemini mikro niyetleri tarıyor...
+                      Gemini arama hedeflerini tarıyor...
                     </p>
                   </div>
                 </div>
@@ -404,8 +417,8 @@ export default function CampaignCreationStudio({
                 />
               ) : (
                 <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/30 p-6 text-center text-sm text-zinc-500">
-                  İşletme adı, sektör ve şehir seçildiğinde 10 mikro soru
-                  otomatik üretilecek.
+                  İşletme adı, sektör, şehir ve günlük bütçe girildiğinde 10
+                  popüler kullanıcı sorgusu otomatik üretilecek.
                 </div>
               )}
             </div>
@@ -434,7 +447,7 @@ export default function CampaignCreationStudio({
               ) : (
                 <>
                   <Rocket className="h-5 w-5" />
-                  {selectedIds.size} Anahtar Soru ile GEO Kampanyasını Başlat
+                  {selectedIds.size} Arama Hedefi ile GEO Kampanyasını Başlat
                   <Target className="h-5 w-5" />
                 </>
               )}
