@@ -31,17 +31,40 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { amount?: number };
+    const body = (await request.json()) as {
+      amount?: number;
+      operation?: "topup" | "deduct";
+    };
     const amount = Number(body.amount);
+    const operation = body.operation ?? "topup";
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
-        { error: "Geçerli bir yükleme miktarı girin." },
+        { error: "Geçerli bir miktar girin." },
         { status: 400 },
       );
     }
 
     const wallet = await getOrCreateWallet();
+
+    if (operation === "deduct") {
+      if (wallet.balance < amount) {
+        return NextResponse.json(
+          { error: "Yetersiz cüzdan bakiyesi." },
+          { status: 400 },
+        );
+      }
+
+      const updated = await prisma.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: amount } },
+      });
+
+      return NextResponse.json({
+        success: true,
+        balance: updated.balance,
+      });
+    }
 
     const updated = await prisma.wallet.update({
       where: { id: wallet.id },

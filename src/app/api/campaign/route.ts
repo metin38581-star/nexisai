@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
-import { buildGeoPostTitle } from "@/lib/geo-prompt";
+import {
+  buildIntentArticleHtml,
+  buildIntentPostTitle,
+  buildSemanticAnchorSlug,
+} from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
 import { prisma } from "@/lib/db";
@@ -94,6 +98,15 @@ export async function POST(request: Request) {
     const trimmedSektor = sektor.trim();
     const trimmedSehir = sehir.trim();
 
+    const selectedIntents =
+      body.selectedIntents?.filter(
+        (intent) => intent.question?.trim() && intent.simulatedAnswer?.trim(),
+      ) ?? [];
+
+    if (selectedIntents.length > 0) {
+      makaleSayisi = selectedIntents.length;
+    }
+
     let wallet = await prisma.wallet.findFirst();
 
     if (!wallet) {
@@ -120,12 +133,14 @@ export async function POST(request: Request) {
         gunSayisi,
       ),
       deployBaitsToNetwork(aiBaits, gunlukButce),
-      generateInvisibleBaits(
-        trimmedSehir,
-        trimmedSektor,
-        trimmedMarka,
-        makaleSayisi,
-      ),
+      selectedIntents.length > 0
+        ? Promise.resolve([] as string[])
+        : generateInvisibleBaits(
+            trimmedSehir,
+            trimmedSektor,
+            trimmedMarka,
+            makaleSayisi,
+          ),
     ]);
 
     console.log(
@@ -186,6 +201,56 @@ export async function POST(request: Request) {
 
       const usedSlugs = new Set<string>();
 
+      const baitRecords =
+        selectedIntents.length > 0
+          ? selectedIntents.map((intent, index) => {
+              const baslik = buildIntentPostTitle(
+                targetCity,
+                targetNiche,
+                index,
+                intent.question,
+              );
+              let slug = buildSemanticAnchorSlug(
+                targetCity,
+                targetNiche,
+                intent.question,
+                targetBrand,
+                index,
+              );
+              while (usedSlugs.has(slug)) {
+                slug = `${slug}-${usedSlugs.size + 1}`;
+              }
+              usedSlugs.add(slug);
+
+              return {
+                baslik,
+                icerik: buildIntentArticleHtml(
+                  intent.question,
+                  intent.simulatedAnswer,
+                  targetBrand,
+                  targetCity,
+                  targetNiche,
+                ),
+                slug,
+                platform: "NexisAI Hub",
+              };
+            })
+          : kaydedilecekMakaleler.map((makale, index) => {
+              const baslik = buildIntentPostTitle(
+                targetCity,
+                targetNiche,
+                index,
+              );
+              const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
+
+              return {
+                baslik,
+                icerik: makale,
+                slug,
+                platform: "NexisAI Hub",
+              };
+            });
+
       const yeniKampanya = await prisma.campaign.create({
         data: {
           userId: activeUserId,
@@ -200,17 +265,7 @@ export async function POST(request: Request) {
           radarSikligi,
           radarSikligiDakika,
           baits: {
-            create: kaydedilecekMakaleler.map((makale, index) => {
-              const baslik = buildGeoPostTitle(targetCity, targetNiche, index);
-              const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
-
-              return {
-                baslik,
-                icerik: makale,
-                slug,
-                platform: "NexisAI Hub",
-              };
-            }),
+            create: baitRecords,
           },
         },
         include: { baits: true },

@@ -1,3 +1,4 @@
+import type { SelectedGeoIntent } from "@/types/geo-intent";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
 
 export type BusinessSector =
@@ -14,6 +15,8 @@ export interface CampaignFormData {
   city: TurkishCitySlug;
   dailyBudget: number;
   campaignDays: number;
+  selectedIntents?: SelectedGeoIntent[];
+  bonusIntentUnlocks?: number;
 }
 
 export interface CampaignApiRequest {
@@ -22,6 +25,8 @@ export interface CampaignApiRequest {
   sehir: string;
   gunlukButce: number;
   gunSayisi: number;
+  selectedIntents?: SelectedGeoIntent[];
+  bonusIntentUnlocks?: number;
 }
 
 export interface CampaignMetrics {

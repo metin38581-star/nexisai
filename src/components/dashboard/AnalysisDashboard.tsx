@@ -14,7 +14,7 @@ import {
   DistributionProvider,
   useDistribution,
 } from "@/context/DistributionContext";
-import CampaignForm from "@/components/campaign/CampaignForm";
+import CampaignCreationStudio from "@/components/campaign/CampaignCreationStudio";
 import AnalysisInsightsPanel from "@/components/dashboard/AnalysisInsightsPanel";
 import DistributionStatusPanel from "@/components/dashboard/DistributionStatusPanel";
 import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
@@ -217,6 +217,8 @@ function AnalysisDashboardContent({
               sehir: payload.sehir,
               gunlukButce: payload.gunlukButce,
               gunSayisi: payload.gunSayisi,
+              selectedIntents: payload.selectedIntents,
+              bonusIntentUnlocks: payload.bonusIntentUnlocks,
             }),
           }),
         );
@@ -402,9 +404,13 @@ function AnalysisDashboardContent({
       </section>
 
       <section className="mb-10">
-        <div className="mx-auto max-w-xl lg:max-w-2xl">
-          <CampaignForm onSubmit={handleFormSubmit} isLoading={isLoading} />
-        </div>
+        <CampaignCreationStudio
+          onSubmit={handleFormSubmit}
+          isLoading={isLoading}
+          accessToken={accessToken}
+          walletRefreshToken={walletRefreshToken}
+          onWalletRefresh={onWalletRefresh}
+        />
       </section>
 
       {session && (

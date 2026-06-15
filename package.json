@@ -20,6 +20,7 @@
     "better-sqlite3": "^12.10.0",
     "btoa": "^1.2.1",
     "google-auth-library": "^9.15.1",
+    "lucide-react": "^1.18.0",
     "next": "^15.1.0",
     "pg": "^8.21.0",
     "prisma": "^7.8.0",
