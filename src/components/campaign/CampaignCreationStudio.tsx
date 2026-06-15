@@ -14,10 +14,12 @@ import type { GeoMicroIntent } from "@/types/geo-intent";
 import {
   SECTOR_OPTIONS,
   TURKEY_CITY_OPTIONS,
-  DEFAULT_CITY,
-  DEFAULT_SECTOR,
 } from "@/lib/constants";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
+import {
+  CAMPAIGN_SELECT_PLACEHOLDER,
+  isCampaignFormReadyForScan,
+} from "@/lib/campaign-form-utils";
 import {
   INTENT_UNLOCK_BUDGET_COST,
   resolveIntentSoftCap,
@@ -39,8 +41,8 @@ interface CampaignCreationStudioProps {
 
 const initialForm: CampaignFormData = {
   businessName: "",
-  sector: DEFAULT_SECTOR,
-  city: DEFAULT_CITY,
+  sector: "",
+  city: "",
   dailyBudget: 20,
   campaignDays: 7,
   bonusIntentUnlocks: 0,
@@ -71,6 +73,8 @@ export default function CampaignCreationStudio({
     null,
   );
   const [isUnlocking, setIsUnlocking] = useState(false);
+
+  const canScanIntents = isCampaignFormReadyForScan(form);
 
   const sektorLabel =
     SECTOR_OPTIONS.find((option) => option.value === form.sector)?.label ??
@@ -113,8 +117,8 @@ export default function CampaignCreationStudio({
   }, [fetchWalletBalance, walletRefreshToken]);
 
   const scanIntents = useCallback(async () => {
-    if (!form.businessName.trim()) {
-      setScanError("Önce işletme adını girin.");
+    if (!canScanIntents) {
+      setScanError("İşletme adı, sektör ve şehir alanlarını doldurun.");
       return;
     }
 
@@ -150,10 +154,10 @@ export default function CampaignCreationStudio({
     } finally {
       setIsScanning(false);
     }
-  }, [accessToken, form.businessName, sehirLabel, sektorLabel]);
+  }, [accessToken, canScanIntents, form.businessName, sehirLabel, sektorLabel]);
 
   useEffect(() => {
-    if (!form.businessName.trim()) {
+    if (!canScanIntents) {
       return;
     }
 
@@ -162,7 +166,7 @@ export default function CampaignCreationStudio({
     }, 700);
 
     return () => window.clearTimeout(timeoutId);
-  }, [form.city, form.sector, form.businessName, scanIntents]);
+  }, [form.city, form.sector, form.businessName, scanIntents, canScanIntents]);
 
   const updateField = <K extends keyof CampaignFormData>(
     key: K,
@@ -299,10 +303,13 @@ export default function CampaignCreationStudio({
               <select
                 value={form.sector}
                 onChange={(e) =>
-                  updateField("sector", e.target.value as BusinessSector)
+                  updateField("sector", e.target.value as BusinessSector | "")
                 }
                 className={inputClass}
               >
+                <option value="" disabled hidden>
+                  {CAMPAIGN_SELECT_PLACEHOLDER}
+                </option>
                 {SECTOR_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -313,13 +320,15 @@ export default function CampaignCreationStudio({
 
             <FormField label="Şehir">
               <select
-                required
                 value={form.city}
                 onChange={(e) =>
-                  updateField("city", e.target.value as TurkishCitySlug)
+                  updateField("city", e.target.value as TurkishCitySlug | "")
                 }
                 className={inputClass}
               >
+                <option value="" disabled hidden>
+                  {CAMPAIGN_SELECT_PLACEHOLDER}
+                </option>
                 {TURKEY_CITY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -332,8 +341,8 @@ export default function CampaignCreationStudio({
               <button
                 type="button"
                 onClick={() => void scanIntents()}
-                disabled={isScanning || !form.businessName.trim()}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/15 disabled:opacity-60"
+                disabled={isScanning || !canScanIntents}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isScanning ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -395,8 +404,8 @@ export default function CampaignCreationStudio({
                 />
               ) : (
                 <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/30 p-6 text-center text-sm text-zinc-500">
-                  Şehir ve sektör seçildiğinde 10 mikro soru otomatik
-                  üretilecek.
+                  İşletme adı, sektör ve şehir seçildiğinde 10 mikro soru
+                  otomatik üretilecek.
                 </div>
               )}
             </div>

@@ -26,7 +26,7 @@ export function buildCampaignSession(
   return {
     markaAdi: data.businessName.trim(),
     sektor: sektorLabel,
-    sehir: getCityLabel(data.city),
+    sehir: data.city ? getCityLabel(data.city) : "",
     gunlukButce: data.dailyBudget,
     gunSayisi: data.campaignDays,
     withTahsilat: options?.withTahsilat,

@@ -5,10 +5,9 @@ import type { CampaignFormData, BusinessSector } from "@/types/campaign";
 import {
   SECTOR_OPTIONS,
   TURKEY_CITY_OPTIONS,
-  DEFAULT_CITY,
-  DEFAULT_SECTOR,
 } from "@/lib/constants";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
+import { CAMPAIGN_SELECT_PLACEHOLDER } from "@/lib/campaign-form-utils";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 
 interface CampaignFormProps {
@@ -18,8 +17,8 @@ interface CampaignFormProps {
 
 const initialForm: CampaignFormData = {
   businessName: "",
-  sector: DEFAULT_SECTOR,
-  city: DEFAULT_CITY,
+  sector: "",
+  city: "",
   dailyBudget: 20,
   campaignDays: 7,
 };
@@ -70,10 +69,13 @@ export default function CampaignForm({
           <select
             value={form.sector}
             onChange={(e) =>
-              updateField("sector", e.target.value as BusinessSector)
+              updateField("sector", e.target.value as BusinessSector | "")
             }
             className={inputClass}
           >
+            <option value="" disabled hidden>
+              {CAMPAIGN_SELECT_PLACEHOLDER}
+            </option>
             {SECTOR_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -84,13 +86,15 @@ export default function CampaignForm({
 
         <FormField label="Şehir">
           <select
-            required
             value={form.city}
             onChange={(e) =>
-              updateField("city", e.target.value as TurkishCitySlug)
+              updateField("city", e.target.value as TurkishCitySlug | "")
             }
             className={inputClass}
           >
+            <option value="" disabled hidden>
+              {CAMPAIGN_SELECT_PLACEHOLDER}
+            </option>
             {TURKEY_CITY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}

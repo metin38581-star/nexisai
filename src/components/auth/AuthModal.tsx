@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import {
+  isSupabaseConfigured,
+  SUPABASE_SETUP_HINT,
+} from "@/lib/supabase-config";
 
 export type AuthViewMode = "register" | "login";
 
@@ -46,10 +51,20 @@ export default function AuthModal({
 
   if (!isOpen) return null;
 
+  const supabaseReady = isSupabaseConfigured();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+
+    if (!supabaseReady) {
+      setErrorMessage(
+        `Supabase anahtarları tanımlı değil. ${SUPABASE_SETUP_HINT}`,
+      );
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const supabase = getSupabaseBrowser();
@@ -93,6 +108,12 @@ export default function AuthModal({
         email.split("@")[0]?.trim() ||
         "İşletme Hesabı";
 
+      if (isRegister) {
+        toast.success(
+          "Hesabınız başarıyla oluşturuldu! Panele yönlendiriliyorsunuz... 🚀",
+        );
+      }
+
       onSuccess({
         userName: displayName,
         userId: user.id,
@@ -101,8 +122,12 @@ export default function AuthModal({
       setFullName("");
       setEmail("");
       setPassword("");
-    } catch {
-      setErrorMessage("Supabase oturum servisine bağlanılamadı.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Supabase oturum servisine bağlanılamadı.";
+      setErrorMessage(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -204,6 +229,10 @@ export default function AuthModal({
             {errorMessage ? (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                 {errorMessage}
+              </p>
+            ) : !supabaseReady ? (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                Supabase Auth yapılandırması eksik. {SUPABASE_SETUP_HINT}
               </p>
             ) : null}
 

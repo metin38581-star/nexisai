@@ -9,10 +9,13 @@ export type BusinessSector =
   | "guzellik-sac-salonu"
   | "e-ticaret-giyim";
 
+export type CampaignFormSector = BusinessSector | "";
+export type CampaignFormCity = TurkishCitySlug | "";
+
 export interface CampaignFormData {
   businessName: string;
-  sector: BusinessSector;
-  city: TurkishCitySlug;
+  sector: CampaignFormSector;
+  city: CampaignFormCity;
   dailyBudget: number;
   campaignDays: number;
   selectedIntents?: SelectedGeoIntent[];
