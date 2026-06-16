@@ -61,7 +61,11 @@ export async function generateMetadata({
     return { title: "Makale Bulunamadı | NexisAI Hub" };
   }
 
-  const description = article.content.slice(0, 160).replace(/\s+/g, " ").trim();
+  const description = (article.content ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .slice(0, 160)
+    .replace(/\s+/g, " ")
+    .trim();
   const canonical = buildHubArticleUrl(slug);
 
   return {
