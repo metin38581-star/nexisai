@@ -14,46 +14,6 @@ function hasLiveUrl(url: string | null | undefined): url is string {
   return typeof url === "string" && url.trim().length > 0;
 }
 
-function CampaignPublishLinks({
-  slug,
-  externalLiveUrl,
-}: {
-  slug?: string | null;
-  externalLiveUrl?: string | null;
-}) {
-  const hasSlug = hasLiveUrl(slug);
-  const hasExternal = hasLiveUrl(externalLiveUrl);
-
-  if (!hasSlug && !hasExternal) {
-    return null;
-  }
-
-  return (
-    <div className="mt-4 flex flex-wrap gap-3">
-      {hasSlug ? (
-        <a
-          href={buildHubArticleUrl(slug)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
-        >
-          🌐 Canlı Yayını Gör
-        </a>
-      ) : null}
-      {hasExternal ? (
-        <a
-          href={externalLiveUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
-        >
-          🚀 WordPress / Dış Yayını Gör
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
 function resolveExternalUrl(
   externalLiveUrl: string | null | undefined,
   liveUrl: string | null | undefined,
@@ -326,10 +286,6 @@ function resolveActivePublicationCount(campaign: StoredCampaign): number {
   return campaign.makaleSayisi ?? 0;
 }
 
-function isHtmlContent(content: string): boolean {
-  return /<\/?[a-z][\s\S]*>/i.test(content);
-}
-
 function resolveBaitStatusLabel(bait: StoredCampaign["baits"][number]): {
   text: string;
   className: string;
@@ -343,52 +299,57 @@ function resolveBaitStatusLabel(bait: StoredCampaign["baits"][number]): {
   return { text: "Dağıtılıyor", className: "text-amber-400" };
 }
 
-function BaitArticleCard({
+function BaitPublicationRow({
   bait,
   index,
-  total,
 }: {
   bait: StoredCampaign["baits"][number];
   index: number;
-  total: number;
 }) {
   const status = resolveBaitStatusLabel(bait);
+  const hubUrl = hasLiveUrl(bait.slug) ? buildHubArticleUrl(bait.slug) : null;
+  const externalUrl = resolveExternalUrl(bait.externalLiveUrl, bait.liveUrl);
 
   return (
-    <article className="rounded-xl border border-white/5 bg-zinc-900/60 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-400">
-            Yayın {index + 1}/{total}
-          </p>
-          <h4 className="mt-1 text-sm font-semibold text-white">{bait.baslik}</h4>
-          <p className="mt-1 text-[10px] text-zinc-500">
-            {bait.platform}
-            <span className={`ml-2 font-medium ${status.className}`}>
-              · {status.text}
-            </span>
-          </p>
-        </div>
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-zinc-900/50 px-4 py-3 transition-colors hover:border-violet-500/20 hover:bg-zinc-900/70">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-white">{bait.baslik}</p>
+        <p className="mt-0.5 text-[10px] text-zinc-500">
+          Yayın {index + 1}
+          <span className={`ml-2 font-medium ${status.className}`}>
+            · {status.text}
+          </span>
+        </p>
       </div>
 
-      <CampaignPublishLinks
-        slug={bait.slug}
-        externalLiveUrl={resolveExternalUrl(bait.externalLiveUrl, bait.liveUrl)}
-      />
-
-      <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-white/5 bg-zinc-950/50 p-3">
-        {isHtmlContent(bait.icerik) ? (
-          <div
-            className="prose prose-invert prose-sm max-w-none text-zinc-300 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_li]:text-sm"
-            dangerouslySetInnerHTML={{ __html: bait.icerik }}
-          />
-        ) : (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
-            {bait.icerik}
-          </p>
-        )}
+      <div className="flex shrink-0 items-center gap-2">
+        {hubUrl ? (
+          <a
+            href={hubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400/50 hover:bg-indigo-500/20"
+          >
+            İçeriği Gör
+          </a>
+        ) : null}
+        {externalUrl ? (
+          <a
+            href={externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
+          >
+            Yayın Linki
+          </a>
+        ) : null}
+        {!hubUrl && !externalUrl ? (
+          <span className="text-[10px] font-medium text-zinc-500">
+            Link bekleniyor
+          </span>
+        ) : null}
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -449,7 +410,6 @@ function LlmInjectionStatus({
 }
 
 function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
-  const [expanded, setExpanded] = useState(false);
   const scoreStyle = resolveScoreStyle(campaign.skor);
   const toplamButce = campaign.gunlukButce * campaign.gunSayisi;
   const meta = getCampaignMetaFromDb(campaign);
@@ -458,12 +418,6 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
   const sortedBaits = [...campaign.baits].sort(
     (a, b) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
-  const primaryBait = sortedBaits[0];
-  const hubSlug = primaryBait?.slug;
-  const externalUrl = resolveExternalUrl(
-    campaign.externalLiveUrl ?? primaryBait?.externalLiveUrl,
-    primaryBait?.liveUrl ?? campaign.liveUrl,
   );
 
   return (
@@ -519,7 +473,6 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
                 ${campaign.gunlukButce}/gün · {campaign.gunSayisi} gün
               </span>
             </div>
-            <CampaignPublishLinks slug={hubSlug} externalLiveUrl={externalUrl} />
           </div>
         </div>
 
@@ -535,40 +488,28 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
           >
             {scoreStyle.label}
           </span>
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            disabled={sortedBaits.length === 0}
-            className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {expanded ? "Detayları Gizle" : "Canlı İçerikleri Gör"}
-            <span
-              className={`transition-transform ${expanded ? "rotate-180" : ""}`}
-            >
-              ▾
-            </span>
-          </button>
         </div>
       </div>
 
-      {expanded && (
-        <div className="border-t border-violet-500/10 bg-zinc-950/50 px-5 py-4">
+      {(sortedBaits.length > 0 || publicationCount > 0) && (
+        <div className="border-t border-violet-500/10 bg-zinc-950/40 px-5 py-4">
           <p className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-cyan-400">
-            Canlı GEO Yayınları · {sortedBaits.length} aktif içerik
+            Canlı GEO Yayınları
+            {sortedBaits.length > 0 ? (
+              <span className="ml-2 normal-case tracking-normal text-zinc-500">
+                · {sortedBaits.length} aktif içerik
+              </span>
+            ) : null}
           </p>
+
           {sortedBaits.length > 0 ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-2">
               {sortedBaits.map((bait, index) => (
-                <BaitArticleCard
-                  key={bait.id}
-                  bait={bait}
-                  index={index}
-                  total={sortedBaits.length}
-                />
+                <BaitPublicationRow key={bait.id} bait={bait} index={index} />
               ))}
             </div>
           ) : (
-            <p className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90">
+            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90">
               Bu operasyon için {publicationCount} içerik üretildi; yayın
               kayıtları henüz senkronize edilmedi. Sayfayı yenileyin veya birkaç
               dakika sonra tekrar deneyin.
