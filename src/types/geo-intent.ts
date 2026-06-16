@@ -21,4 +21,6 @@ export interface GeoIntentsRequestBody {
   sehir: string;
   sektor: string;
   markaAdi: string;
+  gunlukButce?: number;
+  dailyBudget?: number;
 }

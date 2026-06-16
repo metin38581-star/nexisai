@@ -149,6 +149,7 @@ export default function CampaignCreationStudio({
             sehir: sehirLabel,
             sektor: sektorLabel,
             markaAdi: form.businessName.trim(),
+            gunlukButce: form.dailyBudget,
           }),
         }),
       );
@@ -170,7 +171,7 @@ export default function CampaignCreationStudio({
     } finally {
       setIsScanning(false);
     }
-  }, [accessToken, canScanIntents, form.businessName, sehirLabel, sektorLabel]);
+  }, [accessToken, canScanIntents, form.businessName, form.dailyBudget, sehirLabel, sektorLabel]);
 
   useEffect(() => {
     if (!canScanIntents) {
@@ -415,16 +416,23 @@ export default function CampaignCreationStudio({
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <CyberBudgetField
-              label="Günlük Operasyon Bütçesi ($)"
-              value={form.dailyBudget}
-              min={10}
-              max={350}
-              step={5}
-              allowUnset
-              onChange={(value) => updateField("dailyBudget", value)}
-              showAgresiflik
-            />
+            <div>
+              <CyberBudgetField
+                label="Günlük Operasyon Bütçesi ($)"
+                value={form.dailyBudget}
+                min={10}
+                max={350}
+                step={5}
+                allowUnset
+                onChange={(value) => updateField("dailyBudget", value)}
+                showAgresiflik
+              />
+              {form.dailyBudget > 0 ? (
+                <p className="mt-2 text-xs leading-relaxed text-violet-300/90">
+                  {softCapResult.analysisDescription}
+                </p>
+              ) : null}
+            </div>
             <CyberBudgetField
               label="Operasyon Süresi (Gün)"
               value={form.campaignDays}
@@ -459,14 +467,19 @@ export default function CampaignCreationStudio({
                   intents={intents}
                   selectedIds={selectedIds}
                   softCap={softCapResult.softCap}
+                  analysisDescription={softCapResult.analysisDescription}
                   previewId={previewIntent?.id ?? null}
                   onPreview={setPreviewIntent}
                   onToggle={toggleIntent}
                 />
               ) : (
                 <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/30 p-6 text-center text-sm text-zinc-500">
-                  İşletme adı, sektör, şehir ve günlük bütçe girildiğinde 10
-                  popüler kullanıcı sorgusu otomatik üretilecek.
+                  İşletme adı, sektör, şehir ve günlük bütçe girildiğinde{" "}
+                  {softCapResult.maxQuestions} popüler kullanıcı sorgusu otomatik
+                  üretilecek.
+                  <span className="mt-2 block text-xs text-violet-300/80">
+                    {softCapResult.analysisDescription}
+                  </span>
                 </div>
               )}
             </div>

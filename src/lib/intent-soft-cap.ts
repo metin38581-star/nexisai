@@ -1,7 +1,7 @@
 /** Kampanya bütçesine +50 ekleyerek kilidi açılan ek anahtar kelime slotu maliyeti ($). */
 export const INTENT_UNLOCK_BUDGET_COST = 50;
 
-export const MAX_GEO_INTENTS = 10;
+export const MAX_GEO_INTENTS = 20;
 
 export interface IntentSoftCapInput {
   dailyBudget: number;
@@ -16,9 +16,10 @@ export interface IntentSoftCapResult {
   effectiveBudget: number;
   tier: "low" | "medium" | "high" | "domination";
   tierLabel: string;
+  analysisDescription: string;
 }
 
-/** Günlük bütçeye göre seçilebilir maksimum soru sayısı. */
+/** Günlük bütçeye göre LLM soru havuzu / seçim limiti. */
 export function resolveMaxQuestionsFromDailyBudget(dailyBudget: number): number {
   if (dailyBudget <= 50) {
     return 2;
@@ -27,9 +28,27 @@ export function resolveMaxQuestionsFromDailyBudget(dailyBudget: number): number 
     return 5;
   }
   if (dailyBudget <= 300) {
-    return 8;
+    return 10;
   }
   return MAX_GEO_INTENTS;
+}
+
+/** Slider yanında gösterilecek canlı pazar analizi açıklaması. */
+export function resolveMarketAnalysisDepthDescription(
+  dailyBudget: number,
+): string {
+  const maxQuestions = resolveMaxQuestionsFromDailyBudget(dailyBudget);
+
+  if (dailyBudget <= 50) {
+    return `Düşük bütçe: En popüler ${maxQuestions} soru analiz edilecek`;
+  }
+  if (dailyBudget <= 150) {
+    return `Orta bütçe: En popüler ${maxQuestions} soru analiz edilecek`;
+  }
+  if (dailyBudget <= 300) {
+    return `Yüksek bütçe: En popüler ${maxQuestions} soru derinlemesine analiz edilecek`;
+  }
+  return `Agresif bütçe: En popüler ${maxQuestions} soru analiz edilip domine edilecek`;
 }
 
 export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapResult {
@@ -61,6 +80,7 @@ export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapRe
     effectiveBudget: dailyBudget,
     tier,
     tierLabel,
+    analysisDescription: resolveMarketAnalysisDepthDescription(dailyBudget),
   };
 }
 

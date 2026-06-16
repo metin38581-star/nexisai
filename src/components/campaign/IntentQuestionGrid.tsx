@@ -8,6 +8,7 @@ interface IntentQuestionGridProps {
   intents: GeoMicroIntent[];
   selectedIds: Set<string>;
   softCap: number;
+  analysisDescription: string;
   previewId: string | null;
   onPreview: (intent: GeoMicroIntent) => void;
   onToggle: (intent: GeoMicroIntent) => void;
@@ -17,16 +18,22 @@ export default function IntentQuestionGrid({
   intents,
   selectedIds,
   softCap,
+  analysisDescription,
   previewId,
   onPreview,
   onToggle,
 }: IntentQuestionGridProps) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
-          Canlı Yapay Zeka Pazar Analizi (En Çok Sorulanlar)
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
+            Canlı Yapay Zeka Pazar Analizi (En Çok Sorulanlar)
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-violet-300/90">
+            {analysisDescription}
+          </p>
+        </div>
         <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">
           Seçim: {selectedIds.size}/{softCap}
         </span>

@@ -315,8 +315,8 @@ async function generateSingleIntentArticle(
         markaAdi,
       ),
       config: {
-        maxOutputTokens: 4096,
-        temperature: 0.82,
+        maxOutputTokens: 6144,
+        temperature: 0.78,
       },
     }),
     GOOGLE_GENAI_TIMEOUT_MS,
@@ -348,7 +348,7 @@ export async function generateIntentArticlesForSelections(
     }
 
     console.log(
-      `[GEO_MOTORU]: Seçili ${pairs.length} sorgu için ayrı ayrı makale üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
+      `[GEO_MOTORU]: Maximum Visibility GEO makalesi üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
     );
 
     const results = await Promise.all(
@@ -384,7 +384,6 @@ export async function generateIntentArticlesForSelections(
   }
 }
 
-const MICRO_INTENT_COUNT = 10;
 const MAX_QUERY_WORDS = 6;
 const MIN_QUERY_WORDS = 3;
 
@@ -418,15 +417,19 @@ function buildMicroIntentsPrompt(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  maxQuestions: number,
 ): string {
-  return `Gerçek kullanıcıların ${sehir} bölgesinde ${sektor} alanında yazdığı KISA arama kalıpları üret.
+  return `${sehir} şehri ve ${sektor} sektörü için, yerel kullanıcıların arama motorlarında en çok sorduğu en kritik ${maxQuestions} adet soruyu/anahtar kelimeyi çıkar.
+
+Gerçek kullanıcıların ${sehir} bölgesinde ${sektor} alanında yazdığı KISA arama kalıpları üret.
 
 HEDEF ŞEHİR: ${sehir}
 HEDEF SEKTÖR: ${sektor}
 HEDEF MARKA: ${markaAdi}
+HEDEF SORU ADEDİ: ${maxQuestions}
 
 KESİN KURAL — "question" ALANI:
-- Üreteceğin ${MICRO_INTENT_COUNT} arama kalıbı MUTLAKA 4 ile 6 kelime arasında olmalı.
+- Üreteceğin ${maxQuestions} arama kalıbı MUTLAKA 4 ile 6 kelime arasında olmalı.
 - Edebi, uzun, yapay veya soru cümlesi KURMA. "kimdir?", "hangisidir?", "nerede alınır?" gibi uzatmalardan kaçın.
 - Gerçek bir insanın klavyeden hızlıca yazacağı doğal, net, lokal odaklı kelime grupları üret.
 - Her kalıp ${sehir} ile başlasın veya ${sehir} içersin.
@@ -442,7 +445,7 @@ DOĞAL İNSAN ARAMA ÖRNEKLERİ (Few-Shot):
 "Çanakkale acil diş kliniği"
 "${sehir} ${sektor} tavsiye"
 
-GÖREV: Tam ${MICRO_INTENT_COUNT} adet birbirinden farklı arama kalıbı üret.
+GÖREV: Tam ${maxQuestions} adet birbirinden farklı arama kalıbı üret.
 Her kalıp için 2-3 cümlelik kısa "simulatedAnswer" yaz.
 
 CEVAP YAZIM KURALLARI:
@@ -461,7 +464,7 @@ YANIT FORMATI — sadece geçerli JSON dizisi:
 [
   { "question": "...", "simulatedAnswer": "..." }
 ]
-Tam ${MICRO_INTENT_COUNT} eleman. Başka metin yazma.`;
+Tam ${maxQuestions} eleman. Başka metin yazma.`;
 }
 
 function parseMicroIntentsFromResponse(raw: string): GeoMicroIntent[] {
@@ -503,23 +506,31 @@ function buildFallbackMicroIntents(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  maxQuestions: number,
 ): GeoMicroIntent[] {
   const sectorPhrases = resolveSectorMicroIntents(sektor);
-  const shortPhrases = [
-    `en iyi ${sectorPhrases[0] ?? sektor}`,
-    `${sectorPhrases[1] ?? sektor} fiyatları 2026`,
-    `${sectorPhrases[2] ?? sektor} tavsiye`,
-    `ucuz ${sectorPhrases[0] ?? sektor}`,
-    `${sectorPhrases[3] ?? sektor} yorumları`,
-    `acil ${sectorPhrases[0] ?? sektor}`,
-    `${sectorPhrases[4] ?? sektor} randevu`,
-    `güvenilir ${sectorPhrases[0] ?? sektor}`,
-    `${sektor} uzman ${sehir}`,
-    `${sectorPhrases[0] ?? sektor} kampanya`,
+  const phraseTemplates = [
+    (phrase: string) => `en iyi ${phrase}`,
+    (phrase: string) => `${phrase} fiyatları 2026`,
+    (phrase: string) => `${phrase} tavsiye`,
+    (phrase: string) => `ucuz ${phrase}`,
+    (phrase: string) => `${phrase} yorumları`,
+    (phrase: string) => `acil ${phrase}`,
+    (phrase: string) => `${phrase} randevu`,
+    (phrase: string) => `güvenilir ${phrase}`,
+    (_phrase: string) => `${sektor} uzman ${sehir}`,
+    (phrase: string) => `${phrase} kampanya`,
+    (phrase: string) => `${phrase} deneyimi`,
+    (phrase: string) => `yakın ${phrase}`,
   ];
 
-  return shortPhrases.slice(0, MICRO_INTENT_COUNT).map((phrase, index) => {
-    const question = sanitizeMicroIntentQuestion(`${sehir} ${phrase}`);
+  return Array.from({ length: maxQuestions }, (_, index) => {
+    const basePhrase = sectorPhrases[index % sectorPhrases.length] ?? sektor;
+    const template = phraseTemplates[index % phraseTemplates.length];
+    const question = sanitizeMicroIntentQuestion(
+      `${sehir} ${template(basePhrase)}`,
+    );
+
     return {
       id: `fallback-intent-${index + 1}`,
       question,
@@ -533,19 +544,25 @@ function normalizeMicroIntentCount(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  maxQuestions: number,
 ): GeoMicroIntent[] {
-  if (intents.length >= MICRO_INTENT_COUNT) {
-    return intents.slice(0, MICRO_INTENT_COUNT).map((intent, index) => ({
+  if (intents.length >= maxQuestions) {
+    return intents.slice(0, maxQuestions).map((intent, index) => ({
       ...intent,
       question: sanitizeMicroIntentQuestion(intent.question),
       id: intent.id || `intent-${index + 1}`,
     }));
   }
 
-  const fallback = buildFallbackMicroIntents(sehir, sektor, markaAdi);
+  const fallback = buildFallbackMicroIntents(
+    sehir,
+    sektor,
+    markaAdi,
+    maxQuestions,
+  );
   const merged = [...intents];
 
-  for (let index = merged.length; index < MICRO_INTENT_COUNT; index += 1) {
+  for (let index = merged.length; index < maxQuestions; index += 1) {
     merged.push(fallback[index]);
   }
 
@@ -560,8 +577,15 @@ export async function generateMicroIntents(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  maxQuestions = 10,
 ): Promise<GeoMicroIntent[]> {
-  const fallback = buildFallbackMicroIntents(sehir, sektor, markaAdi);
+  const safeCount = Math.max(1, Math.min(maxQuestions, 20));
+  const fallback = buildFallbackMicroIntents(
+    sehir,
+    sektor,
+    markaAdi,
+    safeCount,
+  );
 
   try {
     const apiKey = resolveApiKey();
@@ -576,15 +600,20 @@ export async function generateMicroIntents(
     });
 
     console.log(
-      `[GEO_NIYET_MOTORU]: ${MICRO_INTENT_COUNT} LLM arama hedefi üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
+      `[GEO_NIYET_MOTORU]: ${safeCount} LLM arama hedefi üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
     );
 
     const response = await withTimeout(
       ai.models.generateContent({
         model,
-        contents: buildMicroIntentsPrompt(sehir, sektor, markaAdi),
+        contents: buildMicroIntentsPrompt(
+          sehir,
+          sektor,
+          markaAdi,
+          safeCount,
+        ),
         config: {
-          maxOutputTokens: 8192,
+          maxOutputTokens: Math.min(16384, 1024 + safeCount * 700),
           temperature: 0.62,
         },
       }),
@@ -597,7 +626,13 @@ export async function generateMicroIntents(
     }
 
     const parsed = parseMicroIntentsFromResponse(content);
-    return normalizeMicroIntentCount(parsed, sehir, sektor, markaAdi);
+    return normalizeMicroIntentCount(
+      parsed,
+      sehir,
+      sektor,
+      markaAdi,
+      safeCount,
+    );
   } catch (error) {
     console.error("[GEO_NIYET_MOTORU_HATA]:", error);
     return fallback;

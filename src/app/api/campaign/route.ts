@@ -8,8 +8,6 @@ import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
 import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
-import { generateInvisibleBaits } from "@/lib/geo-engine";
-import { buildUniqueArticleSlug } from "@/lib/slugify";
 import { queryLlmInquiry } from "@/lib/llm-simulator";
 import { buildDynamicTerminalLogs } from "@/lib/terminal-logs";
 import { calculateDynamicMetrics } from "@/lib/mock-metrics";
@@ -22,14 +20,36 @@ import {
 import {
   buildBaitRecordsFromSelectedQuestionsAsync,
   resolveSelectedQuestionPairs,
+  type SelectedQuestionPair,
 } from "@/lib/selected-questions";
-import { resolveSelectedQuestionLimit } from "@/lib/intent-soft-cap";
+import { generateMicroIntents } from "@/lib/geo-engine";
+import { buildUniqueArticleSlug } from "@/lib/slugify";
+import { resolveMaxQuestionsFromDailyBudget, resolveSelectedQuestionLimit } from "@/lib/intent-soft-cap";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
     { length: count },
     (_, index) => `Alternatif GEO yemleme içeriği ${index + 1}`,
   );
+}
+
+async function resolveAutonomousQuestionPairs(
+  sehir: string,
+  sektor: string,
+  markaAdi: string,
+  maxQuestions: number,
+): Promise<SelectedQuestionPair[]> {
+  const intents = await generateMicroIntents(
+    sehir,
+    sektor,
+    markaAdi,
+    maxQuestions,
+  );
+
+  return intents.slice(0, maxQuestions).map((intent) => ({
+    question: intent.question,
+    simulatedAnswer: intent.simulatedAnswer,
+  }));
 }
 
 export async function POST(request: Request) {
@@ -106,6 +126,7 @@ export async function POST(request: Request) {
     const trimmedMarka = markaAdi.trim();
     const trimmedSektor = sektor.trim();
     const trimmedSehir = sehir.trim();
+    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
 
     const selectedQuestionPairs = resolveSelectedQuestionPairs(body);
     const hasSelectedQuestions = selectedQuestionPairs.length > 0;
@@ -131,6 +152,8 @@ export async function POST(request: Request) {
         selectedQuestionPairs.map((pair) => pair.question),
       );
       makaleSayisi = selectedQuestionPairs.length;
+    } else {
+      makaleSayisi = maxQuestions;
     }
 
     const wallet = await getOrCreateWallet();
@@ -146,7 +169,16 @@ export async function POST(request: Request) {
 
     const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
 
-    const [llmResult, baitDeployment, gizliMakaleler] = await Promise.all([
+    const autonomousQuestionPairs = hasSelectedQuestions
+      ? []
+      : await resolveAutonomousQuestionPairs(
+          trimmedSehir,
+          trimmedSektor,
+          trimmedMarka,
+          maxQuestions,
+        );
+
+    const [llmResult, baitDeployment] = await Promise.all([
       queryLlmInquiry(
         trimmedSehir,
         trimmedSektor,
@@ -155,21 +187,16 @@ export async function POST(request: Request) {
         gunSayisi,
       ),
       deployBaitsToNetwork(aiBaits, gunlukButce),
-      hasSelectedQuestions
-        ? Promise.resolve([] as string[])
-        : generateInvisibleBaits(
-            trimmedSehir,
-            trimmedSektor,
-            trimmedMarka,
-            makaleSayisi,
-          ),
     ]);
 
     console.log(
-      "[GİZLİ GEO MOTORU]: Üretilen Makaleler ->",
-      gizliMakaleler.length,
+      "[GİZLİ GEO MOTORU]: Üretilecek soru/makale ->",
+      hasSelectedQuestions
+        ? selectedQuestionPairs.length
+        : autonomousQuestionPairs.length,
       "/ hedef",
       makaleSayisi,
+      `(maxQuestions=${maxQuestions})`,
     );
     console.log("[GEO MOD]:", {
       gunlukButce,
@@ -181,10 +208,9 @@ export async function POST(request: Request) {
     });
 
     const pazarAnalizSkoru = llmResult.yapayZekaGorunurlukOrani;
-    const kaydedilecekMakaleler =
-      gizliMakaleler.length > 0
-        ? gizliMakaleler.slice(0, makaleSayisi)
-        : buildFallbackMakaleler(makaleSayisi);
+    const questionPairsForBaits = hasSelectedQuestions
+      ? selectedQuestionPairs
+      : autonomousQuestionPairs;
 
     let persistedBaits: Array<{
       id: string;
@@ -223,30 +249,31 @@ export async function POST(request: Request) {
 
       const usedSlugs = new Set<string>();
 
-      const baitRecords = hasSelectedQuestions
-        ? await buildBaitRecordsFromSelectedQuestionsAsync(
-            selectedQuestionPairs,
-            {
-              targetCity,
-              targetNiche,
-              targetBrand,
-            },
-          )
-        : kaydedilecekMakaleler.map((makale, index) => {
-            const baslik = buildIntentPostTitle(
-              targetCity,
-              targetNiche,
-              index,
-            );
-            const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
+      const baitRecords =
+        questionPairsForBaits.length > 0
+          ? await buildBaitRecordsFromSelectedQuestionsAsync(
+              questionPairsForBaits,
+              {
+                targetCity,
+                targetNiche,
+                targetBrand,
+              },
+            )
+          : buildFallbackMakaleler(makaleSayisi).map((makale, index) => {
+              const baslik = buildIntentPostTitle(
+                targetCity,
+                targetNiche,
+                index,
+              );
+              const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
 
-            return {
-              baslik,
-              icerik: makale,
-              slug,
-              platform: "NexisAI Hub",
-            };
-          });
+              return {
+                baslik,
+                icerik: makale,
+                slug,
+                platform: "NexisAI Hub",
+              };
+            });
 
       const yeniKampanya = await createCampaignWithBaits({
         userId: activeUserId,
@@ -325,9 +352,9 @@ export async function POST(request: Request) {
       baitsGenerated:
         persistedBaits.length > 0
           ? persistedBaits.length
-          : hasSelectedQuestions
-            ? selectedQuestionPairs.length
-            : kaydedilecekMakaleler.length,
+          : questionPairsForBaits.length > 0
+            ? questionPairsForBaits.length
+            : makaleSayisi,
       message: "İçerikler başarıyla yayınlandı!",
       liveUrl: campaignExternalUrl,
       externalUrl: campaignExternalUrl ?? null,

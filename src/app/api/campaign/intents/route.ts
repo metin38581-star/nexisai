@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
 import { generateMicroIntents } from "@/lib/geo-engine";
+import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { getActiveUserId } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import type { GeoIntentsRequestBody } from "@/types/geo-intent";
@@ -32,10 +33,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const intents = await generateMicroIntents(sehir, sektor, markaAdi);
+    const gunlukButce = Number(body.gunlukButce ?? body.dailyBudget) || 50;
+    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
+
+    const intents = await generateMicroIntents(
+      sehir,
+      sektor,
+      markaAdi,
+      maxQuestions,
+    );
 
     return NextResponse.json({
       intents,
+      maxQuestions,
+      gunlukButce,
       sehir,
       sektor,
       markaAdi,

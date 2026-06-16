@@ -7,6 +7,8 @@ export interface MarketAnalyzeRequest {
   sehir: string;
   sektor: string;
   markaAdi: string;
+  gunlukButce?: number;
+  dailyBudget?: number;
 }
 
 export interface MarketAnalyzeResponse {
@@ -18,6 +20,8 @@ export interface MarketAnalyzeResponse {
   }>;
   cached: boolean;
   source: "cache" | "gemini";
+  maxQuestions: number;
+  gunlukButce: number;
   sehir: string;
   sektor: string;
   markaAdi: string;

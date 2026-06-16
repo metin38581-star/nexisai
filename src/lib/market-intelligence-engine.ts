@@ -6,15 +6,19 @@ import {
 } from "@/lib/market-intelligence-store";
 import { generateMicroIntents } from "@/lib/geo-engine";
 
-const MARKET_INTELLIGENCE_COUNT = 10;
-
 export async function generateMarketIntelligence(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  maxQuestions: number,
 ): Promise<MarketIntelligenceEntry[]> {
-  const intents = await generateMicroIntents(sehir, sektor, markaAdi);
-  const sliced = intents.slice(0, MARKET_INTELLIGENCE_COUNT);
+  const intents = await generateMicroIntents(
+    sehir,
+    sektor,
+    markaAdi,
+    maxQuestions,
+  );
+  const sliced = intents.slice(0, maxQuestions);
 
   const cacheEntries: MarketIntelligenceEntry[] = sliced.map((intent) => ({
     question: intent.question,
