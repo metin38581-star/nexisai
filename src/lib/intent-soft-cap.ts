@@ -51,6 +51,22 @@ export function resolveMarketAnalysisDepthDescription(
   return `Agresif bütçe: En popüler ${maxQuestions} soru analiz edilip domine edilecek`;
 }
 
+/** Otonom kampanya başlat butonu metni — bütçe tier'ına göre. */
+export function resolveAutonomousCampaignButtonLabel(dailyBudget: number): string {
+  const count = resolveMaxQuestionsFromDailyBudget(dailyBudget);
+
+  if (dailyBudget <= 50) {
+    return `${count} Kritik Hedefle Otonom Kampanyayı Başlat`;
+  }
+  if (dailyBudget <= 150) {
+    return `${count} Hedefle Otonom Kampanyayı Başlat`;
+  }
+  if (dailyBudget <= 300) {
+    return `${count} Derin Hedefle Otonom Kampanyayı Başlat`;
+  }
+  return `${count} Derin Hedefle Otonom Kampanyayı Başlat`;
+}
+
 export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapResult {
   const dailyBudget = Math.max(0, input.dailyBudget);
   const bonusUnlocks = input.bonusUnlocks ?? 0;

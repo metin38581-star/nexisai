@@ -1,72 +1,54 @@
-import {
-  resolveMaxQuestionsFromDailyBudget,
-  MAX_GEO_INTENTS,
-} from "@/lib/intent-soft-cap";
+import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 
 export interface ContentVolumePlan {
   dailyBudget: number;
   publishCount: number;
-  maxSelectable: number;
+  autonomousTargetCount: number;
   label: string;
   description: string;
 }
 
-/** Günlük bütçe + seçim sayısına göre yayınlanacak içerik hacmi. */
+/** Günlük bütçeye göre otonom yayınlanacak içerik hacmi. */
 export function resolveContentVolumePlan(
   dailyBudget: number,
-  selectedCount = 0,
 ): ContentVolumePlan {
-  const maxSelectable = resolveMaxQuestionsFromDailyBudget(dailyBudget);
-  const publishCount =
-    selectedCount > 0 ? selectedCount : Math.min(maxSelectable, MAX_GEO_INTENTS);
+  const autonomousTargetCount = resolveMaxQuestionsFromDailyBudget(dailyBudget);
 
   if (dailyBudget > 300) {
     return {
       dailyBudget,
-      publishCount,
-      maxSelectable,
+      publishCount: autonomousTargetCount,
+      autonomousTargetCount,
       label: "Dominasyon Modu",
-      description:
-        selectedCount > 0
-          ? `${selectedCount} bağımsız makale üretilip veri ağına dağıtılacak.`
-          : `En fazla ${maxSelectable} soru seçilebilir — tüm popüler aramalar açık.`,
+      description: `${autonomousTargetCount} bağımsız makale arka planda üretilip yayınlanacak.`,
     };
   }
 
   if (dailyBudget > 150) {
     return {
       dailyBudget,
-      publishCount,
-      maxSelectable,
+      publishCount: autonomousTargetCount,
+      autonomousTargetCount,
       label: "Agresif Mod",
-      description:
-        selectedCount > 0
-          ? `${selectedCount} bağımsız makale üretilip yayınlanacak.`
-          : `En fazla ${maxSelectable} soru seçilebilir.`,
+      description: `${autonomousTargetCount} otonom hedef için makale üretilecek.`,
     };
   }
 
   if (dailyBudget > 50) {
     return {
       dailyBudget,
-      publishCount,
-      maxSelectable,
+      publishCount: autonomousTargetCount,
+      autonomousTargetCount,
       label: "Büyüme Modu",
-      description:
-        selectedCount > 0
-          ? `${selectedCount} bağımsız makale üretilip yayınlanacak.`
-          : `En fazla ${maxSelectable} soru seçilebilir.`,
+      description: `${autonomousTargetCount} otonom hedef için makale üretilecek.`,
     };
   }
 
   return {
     dailyBudget,
-    publishCount,
-    maxSelectable,
+    publishCount: autonomousTargetCount,
+    autonomousTargetCount,
     label: "Keşif Modu",
-    description:
-      selectedCount > 0
-        ? `${selectedCount} bağımsız makale üretilip yayınlanacak.`
-        : `En fazla ${maxSelectable} soru seçilebilir — bütçeyi artırarak limiti yükseltin.`,
+    description: `${autonomousTargetCount} otonom hedef üretilecek — bütçeyi artırarak derinliği yükseltin.`,
   };
 }

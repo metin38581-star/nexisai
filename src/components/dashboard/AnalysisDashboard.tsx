@@ -212,15 +212,11 @@ function AnalysisDashboardContent({
           buildAuthFetchInit(accessToken, {
             method: "POST",
             body: JSON.stringify({
-              markaAdi: payload.markaAdi,
-              sektor: payload.sektor,
-              sehir: payload.sehir,
-              gunlukButce: payload.gunlukButce,
-              gunSayisi: payload.gunSayisi,
-              selectedQuestions: payload.selectedQuestions,
-              selectedAnswers: payload.selectedAnswers,
-              selectedIntents: payload.selectedIntents,
-              bonusIntentUnlocks: payload.bonusIntentUnlocks,
+              companyName: payload.markaAdi,
+              sector: payload.sektor,
+              city: payload.sehir,
+              budget: payload.gunlukButce,
+              campaignDays: payload.gunSayisi,
             }),
           }),
         );
@@ -409,9 +405,6 @@ function AnalysisDashboardContent({
         <CampaignCreationStudio
           onSubmit={handleFormSubmit}
           isLoading={isLoading}
-          accessToken={accessToken}
-          walletRefreshToken={walletRefreshToken}
-          onWalletRefresh={onWalletRefresh}
         />
       </section>
 

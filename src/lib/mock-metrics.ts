@@ -1,4 +1,5 @@
-import type { CampaignApiRequest, CampaignMetrics } from "@/types/campaign";
+import type { NormalizedCampaignApiRequest } from "@/lib/campaign-api-normalize";
+import type { CampaignMetrics } from "@/types/campaign";
 import type { LlmInquiryResult } from "@/types/campaign";
 
 function getSectorMultiplier(sektor: string): number {
@@ -14,7 +15,7 @@ function getSectorMultiplier(sektor: string): number {
 }
 
 export function calculateDynamicMetrics(
-  params: CampaignApiRequest,
+  params: NormalizedCampaignApiRequest,
   llmResult: LlmInquiryResult,
 ): CampaignMetrics {
   const { gunlukButce, gunSayisi } = params;

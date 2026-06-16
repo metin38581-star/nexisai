@@ -1,8 +1,8 @@
 import type {
-  CampaignApiRequest,
   LlmInquiryResult,
   TerminalLogEntry,
 } from "@/types/campaign";
+import type { NormalizedCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import type { BaitDeploymentResult, NetworkDeployment } from "@/lib/bait-engine";
 import { getDeploymentLogMessage } from "@/lib/bait-engine";
 import { normalizeTerminalMessage } from "@/lib/terminal-message";
@@ -28,7 +28,7 @@ function getSegmentCount(
 }
 
 export function buildDynamicTerminalLogs(
-  params: CampaignApiRequest,
+  params: NormalizedCampaignApiRequest,
   llmResult: LlmInquiryResult,
   baitDeployment: BaitDeploymentResult,
 ): TerminalLogEntry[] {

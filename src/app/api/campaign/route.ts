@@ -19,12 +19,12 @@ import {
 } from "@/lib/wallet-service";
 import {
   buildBaitRecordsFromSelectedQuestionsAsync,
-  resolveSelectedQuestionPairs,
   type SelectedQuestionPair,
 } from "@/lib/selected-questions";
 import { generateMicroIntents } from "@/lib/geo-engine";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
-import { resolveMaxQuestionsFromDailyBudget, resolveSelectedQuestionLimit } from "@/lib/intent-soft-cap";
+import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
+import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -57,9 +57,13 @@ export async function POST(request: Request) {
     logServerEnvStatus("campaign-post");
     assertDataAccessEnv();
     const body = (await request.json()) as CampaignApiRequest;
-
-    const gunlukButce = Number(body.gunlukButce) || 10;
-    const gunSayisi = Number(body.gunSayisi) || 7;
+    const {
+      markaAdi,
+      sektor,
+      sehir,
+      gunlukButce,
+      gunSayisi,
+    } = normalizeCampaignApiRequest(body);
     const toplamMaliyet = gunlukButce * gunSayisi;
 
     let makaleSayisi = 2;
@@ -82,16 +86,14 @@ export async function POST(request: Request) {
 
     const radarSikligi = formatRadarSikligi(radarSikligiDakika);
 
-    const { markaAdi, sektor, sehir } = body;
-
-    if (!markaAdi?.trim() || !sehir?.trim()) {
+    if (!markaAdi || !sehir) {
       return NextResponse.json(
         { success: false, error: "İşletme adı ve şehir zorunludur." },
         { status: 400 },
       );
     }
 
-    if (!sektor?.trim()) {
+    if (!sektor) {
       return NextResponse.json(
         { success: false, error: "Sektör bilgisi zorunludur." },
         { status: 400 },
@@ -123,38 +125,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const trimmedMarka = markaAdi.trim();
-    const trimmedSektor = sektor.trim();
-    const trimmedSehir = sehir.trim();
+    const trimmedMarka = markaAdi;
+    const trimmedSektor = sektor;
+    const trimmedSehir = sehir;
     const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
-
-    const selectedQuestionPairs = resolveSelectedQuestionPairs(body);
-    const hasSelectedQuestions = selectedQuestionPairs.length > 0;
-
-    if (hasSelectedQuestions) {
-      const selectionLimit = resolveSelectedQuestionLimit(
-        gunlukButce,
-        body.bonusIntentUnlocks ?? 0,
-      );
-
-      if (selectedQuestionPairs.length > selectionLimit) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Günlük bütçeniz en fazla ${selectionLimit} soru seçmenize izin veriyor. Bütçeyi artırın veya seçim sayısını azaltın.`,
-          },
-          { status: 400 },
-        );
-      }
-
-      console.log(
-        "Üretim İçin Gelen Sorular:",
-        selectedQuestionPairs.map((pair) => pair.question),
-      );
-      makaleSayisi = selectedQuestionPairs.length;
-    } else {
-      makaleSayisi = maxQuestions;
-    }
+    makaleSayisi = maxQuestions;
 
     const wallet = await getOrCreateWallet();
 
@@ -169,15 +144,20 @@ export async function POST(request: Request) {
 
     const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
 
-    const autonomousQuestionPairs = hasSelectedQuestions
-      ? []
-      : await resolveAutonomousQuestionPairs(
-          trimmedSehir,
-          trimmedSektor,
-          trimmedMarka,
-          maxQuestions,
-        );
+    const autonomousQuestionPairs = await resolveAutonomousQuestionPairs(
+      trimmedSehir,
+      trimmedSektor,
+      trimmedMarka,
+      maxQuestions,
+    );
 
+    console.log(
+      "[OTONOM GEO MOTORU]: Üretilecek soru/makale ->",
+      autonomousQuestionPairs.length,
+      "/ hedef",
+      makaleSayisi,
+      `(maxQuestions=${maxQuestions})`,
+    );
     const [llmResult, baitDeployment] = await Promise.all([
       queryLlmInquiry(
         trimmedSehir,
@@ -188,16 +168,6 @@ export async function POST(request: Request) {
       ),
       deployBaitsToNetwork(aiBaits, gunlukButce),
     ]);
-
-    console.log(
-      "[GİZLİ GEO MOTORU]: Üretilecek soru/makale ->",
-      hasSelectedQuestions
-        ? selectedQuestionPairs.length
-        : autonomousQuestionPairs.length,
-      "/ hedef",
-      makaleSayisi,
-      `(maxQuestions=${maxQuestions})`,
-    );
     console.log("[GEO MOD]:", {
       gunlukButce,
       gunSayisi,
@@ -208,9 +178,7 @@ export async function POST(request: Request) {
     });
 
     const pazarAnalizSkoru = llmResult.yapayZekaGorunurlukOrani;
-    const questionPairsForBaits = hasSelectedQuestions
-      ? selectedQuestionPairs
-      : autonomousQuestionPairs;
+    const questionPairsForBaits = autonomousQuestionPairs;
 
     let persistedBaits: Array<{
       id: string;
@@ -229,9 +197,9 @@ export async function POST(request: Request) {
     }> = [];
 
     try {
-      const targetCity = body?.sehir || "Kayseri";
-      const targetNiche = body?.sektor || "Diş Kliniği & Sağlık";
-      const targetBrand = body?.markaAdi || "Bilinmeyen Marka";
+      const targetCity = trimmedSehir || "Kayseri";
+      const targetNiche = trimmedSektor || "Diş Kliniği & Sağlık";
+      const targetBrand = trimmedMarka || "Bilinmeyen Marka";
       const currentScore =
         typeof pazarAnalizSkoru === "number" ? pazarAnalizSkoru : 38;
 
@@ -335,12 +303,12 @@ export async function POST(request: Request) {
     }));
 
     const terminalLogs = buildDynamicTerminalLogs(
-      { ...body, gunlukButce, gunSayisi },
+      { markaAdi, sektor, sehir, gunlukButce, gunSayisi },
       llmResult,
       baitDeployment,
     );
     const metrics = calculateDynamicMetrics(
-      { ...body, gunlukButce, gunSayisi },
+      { markaAdi, sektor, sehir, gunlukButce, gunSayisi },
       llmResult,
     );
 

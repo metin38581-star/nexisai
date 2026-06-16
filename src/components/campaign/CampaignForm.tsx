@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Cpu, Loader2, Rocket } from "lucide-react";
+
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
 import {
   SECTOR_OPTIONS,
@@ -11,6 +13,11 @@ import {
   CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
   CAMPAIGN_SELECT_PLACEHOLDER,
 } from "@/lib/campaign-form-utils";
+import {
+  resolveAutonomousCampaignButtonLabel,
+  resolveIntentSoftCap,
+} from "@/lib/intent-soft-cap";
+import { resolveContentVolumePlan } from "@/lib/content-volume";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 
 interface CampaignFormProps {
@@ -26,15 +33,39 @@ const initialForm: CampaignFormData = {
   campaignDays: 7,
 };
 
+const inputClass =
+  "w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 transition-colors duration-200 focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/20";
+
 export default function CampaignForm({
   onSubmit,
   isLoading,
 }: CampaignFormProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
 
+  const softCapResult = useMemo(
+    () => resolveIntentSoftCap({ dailyBudget: form.dailyBudget }),
+    [form.dailyBudget],
+  );
+
+  const contentVolumePlan = useMemo(
+    () => resolveContentVolumePlan(form.dailyBudget),
+    [form.dailyBudget],
+  );
+
+  const submitButtonLabel = useMemo(
+    () => resolveAutonomousCampaignButtonLabel(form.dailyBudget),
+    [form.dailyBudget],
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({
+      businessName: form.businessName.trim(),
+      sector: form.sector,
+      city: form.city,
+      dailyBudget: form.dailyBudget,
+      campaignDays: form.campaignDays,
+    });
   };
 
   const updateField = <K extends keyof CampaignFormData>(
@@ -48,11 +79,11 @@ export default function CampaignForm({
     <div className="glass-card p-6 lg:p-8">
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-white">
-          Yapay Zeka Reklam Yönetimi
+          Otonom GEO Kampanya
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          İşletme bilgilerinizi girin, bütçe ve operasyon süresine göre GEO
-          agresiflik seviyeniz otomatik belirlensin.
+          Bilgilerinizi girin; hedef belirleme ve makale üretimi tamamen arka
+          planda otomatik işler.
         </p>
       </div>
 
@@ -110,7 +141,7 @@ export default function CampaignForm({
           label="Günlük Operasyon Bütçesi ($)"
           value={form.dailyBudget}
           min={10}
-          max={150}
+          max={350}
           step={5}
           onChange={(value) => updateField("dailyBudget", value)}
           showAgresiflik
@@ -127,16 +158,42 @@ export default function CampaignForm({
           onChange={(value) => updateField("campaignDays", value)}
         />
 
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+          <div className="flex items-start gap-3">
+            <Cpu className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
+                Otonom Pazar Analizi
+              </p>
+              <p className="mt-1 text-sm text-zinc-300">
+                {softCapResult.analysisDescription}
+              </p>
+              <p className="mt-2 text-[11px] text-zinc-500">
+                {contentVolumePlan.description}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <button
           type="submit"
           disabled={isLoading}
           className="group relative mt-2 w-full overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity duration-500 group-hover:opacity-100" />
-          <span className="absolute inset-0 bg-neon-gradient opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-60" />
-          <span className="absolute inset-[1px] rounded-[11px] bg-zinc-950/20 backdrop-blur-sm transition-all duration-500 group-hover:bg-zinc-950/10" />
-          <span className="relative flex items-center justify-center gap-2 transition-shadow duration-500 group-hover:drop-shadow-[0_0_12px_rgba(167,139,250,0.6)]">
-            {isLoading ? "Kampanya Başlatılıyor..." : "Yapay Zeka Reklamını Başlat 🚀"}
+          <span className="absolute inset-[1px] rounded-[11px] bg-zinc-950/20 backdrop-blur-sm" />
+          <span className="relative flex items-center justify-center gap-2">
+            {isLoading ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Kampanya Başlatılıyor...
+              </>
+            ) : (
+              <>
+                <Rocket className="h-5 w-5" />
+                {submitButtonLabel}
+              </>
+            )}
           </span>
         </button>
       </form>
@@ -160,6 +217,3 @@ function FormField({
     </div>
   );
 }
-
-const inputClass =
-  "w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 transition-colors duration-200 focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/20";
