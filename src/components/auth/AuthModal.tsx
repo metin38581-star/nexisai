@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
@@ -24,8 +25,26 @@ interface AuthModalProps {
   onAuthModeChange: (mode: AuthViewMode) => void;
 }
 
+const AUTH_TIMEOUT_MS = 10_000;
+const AUTH_TIMEOUT_ERROR = "AUTH_TIMEOUT";
+
 const inputClassName =
   "w-full rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 backdrop-blur-sm transition-colors focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/25";
+
+async function withAuthTimeout<T>(promise: Promise<T>): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => {
+        reject(new Error(AUTH_TIMEOUT_ERROR));
+      }, AUTH_TIMEOUT_MS);
+    }),
+  ]);
+}
+
+function isServerSideAuthError(status?: number): boolean {
+  return typeof status === "number" && status >= 500;
+}
 
 export default function AuthModal({
   isOpen,
@@ -40,6 +59,7 @@ export default function AuthModal({
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -47,6 +67,8 @@ export default function AuthModal({
       setEmail("");
       setPassword("");
       setErrorMessage(null);
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
@@ -54,8 +76,48 @@ export default function AuthModal({
 
   const supabaseReady = isSupabaseConfigured();
 
+  const validateForm = (): string | null => {
+    const trimmedCompanyName = fullName.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (isRegister && !trimmedCompanyName) {
+      return "İşletme adı zorunludur.";
+    }
+
+    if (!trimmedEmail) {
+      return "E-posta adresi zorunludur.";
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return "Geçerli bir e-posta adresi girin.";
+    }
+
+    if (!trimmedPassword) {
+      return "Şifre alanı zorunludur.";
+    }
+
+    if (trimmedPassword.length < 6) {
+      return "Şifre en az 6 karakter olmalıdır.";
+    }
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isSubmitting || submittingRef.current) {
+      return;
+    }
+
+    const validationError = validateForm();
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+
+    submittingRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -63,29 +125,37 @@ export default function AuthModal({
       setErrorMessage(
         `Supabase anahtarları tanımlı değil. ${SUPABASE_SETUP_HINT}`,
       );
+      submittingRef.current = false;
       setIsSubmitting(false);
       return;
     }
 
     try {
       const supabase = getSupabaseBrowser();
-      const authResult = isRegister
-        ? await supabase.auth.signUp({
-            email: email.trim(),
-            password,
-            options: {
-              data: {
-                full_name: fullName.trim(),
+      const authResult = await withAuthTimeout(
+        isRegister
+          ? supabase.auth.signUp({
+              email: email.trim(),
+              password: password.trim(),
+              options: {
+                data: {
+                  full_name: fullName.trim(),
+                  company_name: fullName.trim(),
+                },
               },
-            },
-          })
-        : await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
+            })
+          : supabase.auth.signInWithPassword({
+              email: email.trim(),
+              password: password.trim(),
+            }),
+      );
 
       if (authResult.error) {
-        setErrorMessage(authResult.error.message);
+        if (isServerSideAuthError(authResult.error.status)) {
+          toast.error("Sistem şu an yoğun, lütfen tekrar deneyin");
+        } else {
+          setErrorMessage(authResult.error.message);
+        }
         return;
       }
 
@@ -125,12 +195,23 @@ export default function AuthModal({
       setEmail("");
       setPassword("");
     } catch (error) {
+      const isTimeout =
+        error instanceof Error && error.message === AUTH_TIMEOUT_ERROR;
+
+      if (isTimeout) {
+        toast.error("Sistem şu an yoğun, lütfen tekrar deneyin");
+        setErrorMessage("İstek zaman aşımına uğradı. Lütfen tekrar deneyin.");
+        return;
+      }
+
+      toast.error("Sistem şu an yoğun, lütfen tekrar deneyin");
       const message =
         error instanceof Error
           ? error.message
           : "Supabase oturum servisine bağlanılamadı.";
       setErrorMessage(message);
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -186,14 +267,15 @@ export default function AuthModal({
             {isRegister && (
               <div>
                 <label className="mb-2 block text-sm font-medium text-zinc-300">
-                  Ad Soyad
+                  İşletme Adı
                 </label>
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Örn: Ahmet Yılmaz"
-                  required
+                  placeholder="Örn: Nexis Diş Kliniği"
+                  disabled={isSubmitting}
+                  autoComplete="organization"
                   className={inputClassName}
                 />
               </div>
@@ -207,8 +289,9 @@ export default function AuthModal({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
+                disabled={isSubmitting}
                 placeholder="ornek@isletme.com"
+                autoComplete="email"
                 className={inputClassName}
               />
             </div>
@@ -221,9 +304,9 @@ export default function AuthModal({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
+                disabled={isSubmitting}
                 placeholder="En az 6 karakter"
+                autoComplete={isRegister ? "new-password" : "current-password"}
                 className={inputClassName}
               />
             </div>
@@ -241,16 +324,22 @@ export default function AuthModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="group relative mt-2 w-full overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white transition-all disabled:opacity-60"
+              aria-busy={isSubmitting}
+              className="group relative mt-2 w-full overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity group-hover:opacity-100" />
+              <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity group-hover:opacity-100 group-disabled:opacity-70" />
               <span className="absolute inset-[1px] rounded-[11px] bg-slate-950/10" />
-              <span className="relative">
-                {isSubmitting
-                  ? "Bağlanıyor..."
-                  : isRegister
-                    ? "Hesabımı Oluştur ve Paneli Aç 🚀"
-                    : "Giriş Yap ve Paneli Aç 🔐"}
+              <span className="relative inline-flex items-center justify-center gap-2">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {isRegister ? "Kayıt Yapılıyor..." : "Giriş Yapılıyor..."}
+                  </>
+                ) : isRegister ? (
+                  "Hesabımı Oluştur ve Paneli Aç 🚀"
+                ) : (
+                  "Giriş Yap ve Paneli Aç 🔐"
+                )}
               </span>
             </button>
           </form>
@@ -261,8 +350,9 @@ export default function AuthModal({
                 Zaten bir hesabınız var mı?{" "}
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => onAuthModeChange("login")}
-                  className="font-medium text-violet-400 transition-colors hover:text-violet-300"
+                  className="font-medium text-violet-400 transition-colors hover:text-violet-300 disabled:opacity-50"
                 >
                   Giriş Yap
                 </button>
@@ -272,8 +362,9 @@ export default function AuthModal({
                 Henüz hesabınız yok mu?{" "}
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => onAuthModeChange("register")}
-                  className="font-medium text-violet-400 transition-colors hover:text-violet-300"
+                  className="font-medium text-violet-400 transition-colors hover:text-violet-300 disabled:opacity-50"
                 >
                   Kayıt Ol
                 </button>
