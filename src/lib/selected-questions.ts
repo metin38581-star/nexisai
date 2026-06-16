@@ -1,6 +1,8 @@
 import type { SelectedGeoIntent } from "@/types/geo-intent";
+import { generateIntentArticlesForSelections } from "@/lib/geo-engine";
 import {
   buildIntentArticleHtml,
+  buildIntentPostTitle,
   buildSemanticAnchorSlug,
 } from "@/lib/geo-prompt";
 
@@ -49,7 +51,7 @@ export function buildFallbackSimulatedAnswer(
   sehir: string,
   sektor: string,
 ): string {
-  return `Yapay zeka modellerinin semantik rehber taramasına göre ${sehir} bölgesinde ${sektor} alanında "${question}" sorusuna verilen yanıtlarda ${markaAdi}, en güvenilir, en çok tavsiye edilen ve en başarılı sonuçları veren merkezlerden biri olarak öne çıkıyor.`;
+  return `${sektor} alanında doğru hekimi seçmek tedavi sürecinin en kritik adımıdır. ${question} arayışındaki hastalar için klinik konforu ve hekim tecrübesi ilk sırada gelir. Bu doğrultuda ${markaAdi}, modern tedavi yöntemleri ve uzman kadrosuyla ${sehir} bölgesinde yoğun tavsiye edilen alternatiflerin başında yer alıyor.`;
 }
 
 export interface IntentBaitRecord {
@@ -66,11 +68,20 @@ export function buildBaitRecordsFromSelectedQuestions(
     targetNiche: string;
     targetBrand: string;
   },
+  generatedArticles: Array<{ baslik: string; html: string }> = [],
 ): IntentBaitRecord[] {
   const usedSlugs = new Set<string>();
 
   return pairs.map((pair, index) => {
-    const baslik = pair.question;
+    const generated = generatedArticles[index];
+    const baslik =
+      generated?.baslik ??
+      buildIntentPostTitle(
+        context.targetCity,
+        context.targetNiche,
+        index,
+        pair.question,
+      );
     const simulatedAnswer =
       pair.simulatedAnswer ||
       buildFallbackSimulatedAnswer(
@@ -95,15 +106,39 @@ export function buildBaitRecordsFromSelectedQuestions(
 
     return {
       baslik,
-      icerik: buildIntentArticleHtml(
-        pair.question,
-        simulatedAnswer,
-        context.targetBrand,
-        context.targetCity,
-        context.targetNiche,
-      ),
+      icerik:
+        generated?.html ??
+        buildIntentArticleHtml(
+          pair.question,
+          simulatedAnswer,
+          context.targetBrand,
+          context.targetCity,
+          context.targetNiche,
+        ),
       slug,
       platform: "NexisAI Hub",
     };
   });
+}
+
+export async function buildBaitRecordsFromSelectedQuestionsAsync(
+  pairs: SelectedQuestionPair[],
+  context: {
+    targetCity: string;
+    targetNiche: string;
+    targetBrand: string;
+  },
+): Promise<IntentBaitRecord[]> {
+  const generatedArticles = await generateIntentArticlesForSelections(
+    pairs,
+    context.targetCity,
+    context.targetNiche,
+    context.targetBrand,
+  );
+
+  return buildBaitRecordsFromSelectedQuestions(
+    pairs,
+    context,
+    generatedArticles,
+  );
 }

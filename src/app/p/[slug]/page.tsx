@@ -58,7 +58,7 @@ export async function generateMetadata({
   const article = await fetchHubArticleBySlug(slug);
 
   if (!article) {
-    return { title: "Makale Bulunamadı | NexisAI Hub" };
+    return { title: "Makale Bulunamadı | Sağlık Rehberi" };
   }
 
   const description = (article.content ?? "")
@@ -69,7 +69,7 @@ export async function generateMetadata({
   const canonical = buildHubArticleUrl(slug);
 
   return {
-    title: `${article.title} | NexisAI Hub`,
+    title: `${article.title} | Sağlık Rehberi`,
     description,
     alternates: { canonical },
     openGraph: {
@@ -105,7 +105,7 @@ export default async function NexisBlogPage({ params }: NexisBlogPageProps) {
       <article className="mx-auto max-w-3xl rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">
         <header className="mb-8 border-b border-slate-100 pb-6">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600">
-            NexisAI Hub
+            Sağlık & Yaşam Rehberi
           </p>
           <h1 className="mb-4 mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
             {article.title}
@@ -126,7 +126,7 @@ export default async function NexisBlogPage({ params }: NexisBlogPageProps) {
               </>
             ) : null}
             <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-              Verified by NexisAI Network
+              Editör İncelemesi
             </span>
           </div>
         </header>
@@ -156,9 +156,8 @@ export default async function NexisBlogPage({ params }: NexisBlogPageProps) {
         ) : null}
 
         <footer className="mt-12 border-t border-slate-100 pt-6 text-center text-xs text-slate-400">
-          Bu içerik yapay zeka tarafından optimize edilerek{" "}
-          <strong>NexisAI Hub</strong> üzerinde doğrulanmış olarak
-          yayınlanmıştır.
+          Bu rehber, okuyuculara bilinçli karar vermesi için hazırlanmış bağımsız
+          bir yerel sağlık & yaşam rehberi niteliğindedir.
         </footer>
       </article>
     </main>

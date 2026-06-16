@@ -24,6 +24,7 @@ import {
 import {
   INTENT_UNLOCK_BUDGET_COST,
   resolveIntentSoftCap,
+  resolveSoftCapAfterBudgetIncrease,
 } from "@/lib/intent-soft-cap";
 import { resolveContentVolumePlan } from "@/lib/content-volume";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
@@ -89,24 +90,26 @@ export default function CampaignCreationStudio({
     form.city;
 
   const contentVolumePlan = useMemo(
-    () => resolveContentVolumePlan(form.dailyBudget),
-    [form.dailyBudget],
+    () => resolveContentVolumePlan(form.dailyBudget, selectedIds.size),
+    [form.dailyBudget, selectedIds.size],
   );
 
   const softCapResult = useMemo(
     () =>
       resolveIntentSoftCap({
         dailyBudget: form.dailyBudget,
-        campaignDays: form.campaignDays,
-        walletBalance,
         bonusUnlocks: form.bonusIntentUnlocks ?? 0,
       }),
-    [
-      form.dailyBudget,
-      form.campaignDays,
-      walletBalance,
-      form.bonusIntentUnlocks,
-    ],
+    [form.dailyBudget, form.bonusIntentUnlocks],
+  );
+
+  const nextSoftCapAfterUnlock = useMemo(
+    () =>
+      resolveSoftCapAfterBudgetIncrease(
+        form.dailyBudget,
+        INTENT_UNLOCK_BUDGET_COST,
+      ),
+    [form.dailyBudget],
   );
 
   const fetchWalletBalance = useCallback(async () => {
@@ -180,6 +183,16 @@ export default function CampaignCreationStudio({
 
     return () => window.clearTimeout(timeoutId);
   }, [form.city, form.sector, form.businessName, form.dailyBudget, scanIntents, canScanIntents]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size <= softCapResult.softCap) {
+        return prev;
+      }
+
+      return new Set([...prev].slice(0, softCapResult.softCap));
+    });
+  }, [softCapResult.softCap]);
 
   const updateField = <K extends keyof CampaignFormData>(
     key: K,
@@ -311,7 +324,9 @@ export default function CampaignCreationStudio({
                 İçerik Hacmi
               </p>
               <p className="text-sm font-semibold text-white">
-                {contentVolumePlan.publishCount} varyasyon
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} bağımsız makale`
+                  : `${contentVolumePlan.maxSelectable} soruya kadar`}
               </p>
               <p className="mt-1 max-w-[220px] text-[10px] leading-relaxed text-zinc-500">
                 {contentVolumePlan.description}
@@ -322,7 +337,10 @@ export default function CampaignCreationStudio({
                 {softCapResult.tierLabel}
               </p>
               <p className="text-sm font-semibold text-white">
-                Soft Cap: {softCapResult.softCap} arama hedefi
+                Seçim: {selectedIds.size}/{softCapResult.softCap}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Günlük bütçe: ${form.dailyBudget || 0}
               </p>
             </div>
           </div>
@@ -401,7 +419,7 @@ export default function CampaignCreationStudio({
               label="Günlük Operasyon Bütçesi ($)"
               value={form.dailyBudget}
               min={10}
-              max={150}
+              max={350}
               step={5}
               allowUnset
               onChange={(value) => updateField("dailyBudget", value)}
@@ -488,6 +506,9 @@ export default function CampaignCreationStudio({
 
       <IntentSoftCapModal
         isOpen={softCapModalOpen}
+        currentCap={softCapResult.softCap}
+        nextCap={nextSoftCapAfterUnlock}
+        budgetIncrease={INTENT_UNLOCK_BUDGET_COST}
         onClose={() => {
           setSoftCapModalOpen(false);
           setPendingIntent(null);

@@ -20,9 +20,10 @@ import {
   getOrCreateWallet,
 } from "@/lib/wallet-service";
 import {
-  buildBaitRecordsFromSelectedQuestions,
+  buildBaitRecordsFromSelectedQuestionsAsync,
   resolveSelectedQuestionPairs,
 } from "@/lib/selected-questions";
+import { resolveSelectedQuestionLimit } from "@/lib/intent-soft-cap";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -110,6 +111,21 @@ export async function POST(request: Request) {
     const hasSelectedQuestions = selectedQuestionPairs.length > 0;
 
     if (hasSelectedQuestions) {
+      const selectionLimit = resolveSelectedQuestionLimit(
+        gunlukButce,
+        body.bonusIntentUnlocks ?? 0,
+      );
+
+      if (selectedQuestionPairs.length > selectionLimit) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Günlük bütçeniz en fazla ${selectionLimit} soru seçmenize izin veriyor. Bütçeyi artırın veya seçim sayısını azaltın.`,
+          },
+          { status: 400 },
+        );
+      }
+
       console.log(
         "Üretim İçin Gelen Sorular:",
         selectedQuestionPairs.map((pair) => pair.question),
@@ -208,11 +224,14 @@ export async function POST(request: Request) {
       const usedSlugs = new Set<string>();
 
       const baitRecords = hasSelectedQuestions
-        ? buildBaitRecordsFromSelectedQuestions(selectedQuestionPairs, {
-            targetCity,
-            targetNiche,
-            targetBrand,
-          })
+        ? await buildBaitRecordsFromSelectedQuestionsAsync(
+            selectedQuestionPairs,
+            {
+              targetCity,
+              targetNiche,
+              targetBrand,
+            },
+          )
         : kaydedilecekMakaleler.map((makale, index) => {
             const baslik = buildIntentPostTitle(
               targetCity,
@@ -253,7 +272,7 @@ export async function POST(request: Request) {
       persistedCampaignId = yeniKampanya.id;
 
       console.log(
-        `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, radar=${radarSikligiDakika}dk`,
+        `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk`,
       );
 
       await decrementWalletBalance(wallet.id, toplamMaliyet);

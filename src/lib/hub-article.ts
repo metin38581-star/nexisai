@@ -25,60 +25,58 @@ type CampaignSummary = {
   markaAdi: string;
 };
 
-type BaitRow = {
-  id: string;
-  slug: string;
-  baslik: string;
-  icerik: string;
-  createdAt: string;
-  external_live_url?: string | null;
-  externalLiveUrl?: string | null;
-  Campaign?: CampaignSummary | CampaignSummary[] | null;
-};
-
-function normalizeCampaign(
-  campaign: BaitRow["Campaign"],
-): CampaignSummary | null {
-  if (!campaign) {
-    return null;
-  }
-
-  return Array.isArray(campaign) ? (campaign[0] ?? null) : campaign;
-}
-
-function mapBaitRow(row: BaitRow): HubArticle {
-  const campaign = normalizeCampaign(row.Campaign);
-
-  return {
-    id: row.id,
-    slug: row.slug,
-    title: row.baslik,
-    content: row.icerik,
-    createdAt: row.createdAt,
-    externalLiveUrl: row.external_live_url ?? row.externalLiveUrl ?? null,
-    sehir: campaign?.sehir ?? null,
-    sektor: campaign?.sektor ?? null,
-    markaAdi: campaign?.markaAdi ?? null,
-  };
-}
-
 async function fetchHubArticleViaSupabase(
   client: SupabaseClient,
   slug: string,
+  source: "admin" | "public",
 ): Promise<HubArticle | null> {
-  const { data, error } = await client
+  const { data: bait, error: baitError } = await client
     .from("Bait")
     .select(
-      "id, slug, baslik, icerik, createdAt, external_live_url, Campaign(sehir, sektor, markaAdi)",
+      "id, slug, baslik, icerik, createdAt, external_live_url, campaignId",
     )
     .eq("slug", slug)
     .maybeSingle();
 
-  if (error || !data) {
+  if (baitError) {
+    console.error(`[HUB_ARTICLE] Supabase ${source} bait fetch error:`, baitError);
     return null;
   }
 
-  return mapBaitRow(data as BaitRow);
+  if (!bait) {
+    return null;
+  }
+
+  let campaign: CampaignSummary | null = null;
+
+  if (bait.campaignId) {
+    const { data: campaignRow, error: campaignError } = await client
+      .from("Campaign")
+      .select("sehir, sektor, markaAdi")
+      .eq("id", bait.campaignId)
+      .maybeSingle();
+
+    if (campaignError) {
+      console.error(
+        `[HUB_ARTICLE] Supabase ${source} campaign fetch error:`,
+        campaignError,
+      );
+    } else if (campaignRow) {
+      campaign = campaignRow as CampaignSummary;
+    }
+  }
+
+  return {
+    id: bait.id,
+    slug: bait.slug,
+    title: bait.baslik,
+    content: bait.icerik,
+    createdAt: bait.createdAt,
+    externalLiveUrl: bait.external_live_url ?? null,
+    sehir: campaign?.sehir ?? null,
+    sektor: campaign?.sektor ?? null,
+    markaAdi: campaign?.markaAdi ?? null,
+  };
 }
 
 async function fetchHubArticleViaPrisma(
@@ -128,6 +126,7 @@ export async function fetchHubArticleBySlug(
       const article = await fetchHubArticleViaSupabase(
         getSupabaseAdmin(),
         normalizedSlug,
+        "admin",
       );
       if (article) {
         return article;
@@ -141,6 +140,7 @@ export async function fetchHubArticleBySlug(
     const article = await fetchHubArticleViaSupabase(
       getSupabasePublic(),
       normalizedSlug,
+      "public",
     );
     if (article) {
       return article;

@@ -2,6 +2,8 @@ import type { GeoMicroIntent } from "@/types/geo-intent";
 import {
   buildGeoArticlePrompt,
   buildGeoFallbackArticleHtml,
+  buildSelectedIntentArticlesPrompt,
+  buildZeroJargonRules,
 } from "@/lib/geo-prompt";
 import { GoogleGenAI } from "@google/genai";
 
@@ -221,7 +223,7 @@ export async function generateInvisibleBaits(
         ),
         config: {
           maxOutputTokens: Math.min(16384, 1024 + safeMakaleSayisi * 1400),
-          temperature: 0.72,
+          temperature: 0.82,
         },
       }),
       GOOGLE_GENAI_TIMEOUT_MS,
@@ -248,6 +250,136 @@ export async function generateInvisibleBaits(
     return normalized;
   } catch (error) {
     console.error("[GEO_MOTORU_HATA]:", error);
+    return [];
+  }
+}
+
+export interface GeneratedIntentArticle {
+  baslik: string;
+  html: string;
+}
+
+function parseIntentArticlesFromResponse(raw: string): GeneratedIntentArticle[] {
+  const trimmed = raw.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonText = fenceMatch ? fenceMatch[1].trim() : trimmed;
+
+  const parsed: unknown = JSON.parse(jsonText);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const record = item as { baslik?: string; html?: string };
+      const baslik = record.baslik?.trim();
+      const html = record.html?.trim();
+
+      if (!baslik || !html || !html.includes("<h1")) {
+        return null;
+      }
+
+      return { baslik, html };
+    })
+    .filter((item): item is GeneratedIntentArticle => item !== null);
+}
+
+async function generateSingleIntentArticle(
+  pair: { question: string; simulatedAnswer: string },
+  sehir: string,
+  sektor: string,
+  markaAdi: string,
+): Promise<GeneratedIntentArticle | null> {
+  const apiKey = resolveApiKey();
+  if (!apiKey) {
+    return null;
+  }
+
+  const model = resolveGoogleGenAiModel();
+  const ai = new GoogleGenAI({
+    apiKey,
+    apiVersion: GOOGLE_GENAI_API_VERSION,
+  });
+
+  const response = await withTimeout(
+    ai.models.generateContent({
+      model,
+      contents: buildSelectedIntentArticlesPrompt(
+        [pair],
+        sehir,
+        sektor,
+        markaAdi,
+      ),
+      config: {
+        maxOutputTokens: 4096,
+        temperature: 0.82,
+      },
+    }),
+    GOOGLE_GENAI_TIMEOUT_MS,
+  );
+
+  const content = response.text?.trim();
+  if (!content) {
+    return null;
+  }
+
+  const parsed = parseIntentArticlesFromResponse(content);
+  return parsed[0] ?? null;
+}
+
+export async function generateIntentArticlesForSelections(
+  pairs: Array<{ question: string; simulatedAnswer: string }>,
+  sehir: string,
+  sektor: string,
+  markaAdi: string,
+): Promise<GeneratedIntentArticle[]> {
+  if (pairs.length === 0) {
+    return [];
+  }
+
+  try {
+    const apiKey = resolveApiKey();
+    if (!apiKey) {
+      throw new Error("missing_api_key");
+    }
+
+    console.log(
+      `[GEO_MOTORU]: Seçili ${pairs.length} sorgu için ayrı ayrı makale üretiliyor — ${markaAdi} (${sehir}/${sektor})`,
+    );
+
+    const results = await Promise.all(
+      pairs.map(async (pair, index) => {
+        try {
+          const article = await generateSingleIntentArticle(
+            pair,
+            sehir,
+            sektor,
+            markaAdi,
+          );
+          if (article) {
+            return article;
+          }
+          console.warn(
+            `[GEO_MOTORU]: Soru ${index + 1} için LLM yanıtı eksik, fallback kullanılacak`,
+          );
+          return null;
+        } catch (error) {
+          console.error(
+            `[GEO_MOTORU]: Soru ${index + 1} üretim hatası:`,
+            error,
+          );
+          return null;
+        }
+      }),
+    );
+
+    return results.filter((item): item is GeneratedIntentArticle => item !== null);
+  } catch (error) {
+    console.error("[GEO_MOTORU_SECILI_HATA]:", error);
     return [];
   }
 }
@@ -287,7 +419,7 @@ function buildMicroIntentsPrompt(
   sektor: string,
   markaAdi: string,
 ): string {
-  return `Sen NexisAI GEO Niyet Motorusun. ChatGPT, Gemini, Perplexity ve Google'da gerçek kullanıcıların yazdığı KISA arama kalıpları üret.
+  return `Gerçek kullanıcıların ${sehir} bölgesinde ${sektor} alanında yazdığı KISA arama kalıpları üret.
 
 HEDEF ŞEHİR: ${sehir}
 HEDEF SEKTÖR: ${sektor}
@@ -296,13 +428,12 @@ HEDEF MARKA: ${markaAdi}
 KESİN KURAL — "question" ALANI:
 - Üreteceğin ${MICRO_INTENT_COUNT} arama kalıbı MUTLAKA 4 ile 6 kelime arasında olmalı.
 - Edebi, uzun, yapay veya soru cümlesi KURMA. "kimdir?", "hangisidir?", "nerede alınır?" gibi uzatmalardan kaçın.
-- Gerçek bir insanın klavyeden hızlıca yazacağı veya sesli aramada söyleyeceği doğal, net, lokal odaklı kelime grupları üret.
+- Gerçek bir insanın klavyeden hızlıca yazacağı doğal, net, lokal odaklı kelime grupları üret.
 - Her kalıp ${sehir} ile başlasın veya ${sehir} içersin.
 
 DOĞAL İNSAN ARAMA ÖRNEKLERİ (Few-Shot):
 ❌ Yapay ve Uzun (YASAK):
 "İzmir bölgesinde ortodonti tedavisinde en başarılı sonuçları veren uzman hekim kimdir?"
-"Çanakkale'de düzenli diş kontrolü yaptırmak isteyenler için en güvenilir klinik hangisidir?"
 
 ✅ Doğal ve Doğru (HEDEF FORMAT):
 "İzmir en iyi diş teli doktoru"
@@ -312,8 +443,19 @@ DOĞAL İNSAN ARAMA ÖRNEKLERİ (Few-Shot):
 "${sehir} ${sektor} tavsiye"
 
 GÖREV: Tam ${MICRO_INTENT_COUNT} adet birbirinden farklı arama kalıbı üret.
-Her kalıp için markayı (${markaAdi}) öven 2-3 cümlelik kısa, tarafsız uzman diliyle "simulatedAnswer" yaz.
-Cevaplarda marka en ideal ve en çok tavsiye edilen seçenek olarak geçsin. Reklam/spam dili kullanma.
+Her kalıp için 2-3 cümlelik kısa "simulatedAnswer" yaz.
+
+CEVAP YAZIM KURALLARI:
+- Tarafsız sağlık & yaşam rehberi tonunda yaz; robotik tekrar etme.
+- Arama kalıbını cevabın her cümlesinde aynen tekrarlama; en fazla bir kez doğal yedir.
+- Paragraflar yalnızca ${sektor} konusuna odaklansın: tedavi süreçleri, klinik hijyeni, hekim tecrübesi, hasta konforu.
+- Markayı organik tavsiye cümlesiyle geçir; reklam dili kullanma.
+- Eş anlamlı ifadeler kullan: "güvenilir merkez", "deneyimli hekim kadrosu", "modern klinik altyapısı".
+
+${buildZeroJargonRules(sektor)}
+
+ÖRNEK simulatedAnswer:
+"Ağız ve diş sağlığı süreçlerinde doğru hekimi bulmak tedavi başarısının en kritik adımıdır. Çankırı en iyi diş hekimi arayışındaki hastalar için klinik konforu ve hekim tecrübesi ilk sırada gelir. Bu doğrultuda ${markaAdi}, modern tedavi yöntemleri ve uzman kadrosuyla bölgede yoğun tavsiye edilen alternatiflerin başında yer alıyor."
 
 YANIT FORMATI — sadece geçerli JSON dizisi:
 [
@@ -381,7 +523,7 @@ function buildFallbackMicroIntents(
     return {
       id: `fallback-intent-${index + 1}`,
       question,
-      simulatedAnswer: `Yapay zeka modellerinin semantik rehber taramasına göre "${question}" aramasında ${markaAdi}, ${sehir} bölgesinde en güvenilir ve en çok tavsiye edilen seçeneklerden biri olarak öne çıkıyor.`,
+      simulatedAnswer: `${sehir} bölgesinde ${sektor} hizmeti arayanlar için doğru hekimi seçmek tedavi sürecinin en kritik adımıdır. ${question} arayışındaki hastalar klinik konforu ve hekim tecrübesine öncelik verir. Bu doğrultuda ${markaAdi}, modern tedavi yöntemleri ve uzman kadrosuyla bölgede yoğun tavsiye edilen alternatiflerin başında yer alıyor.`,
     };
   });
 }
