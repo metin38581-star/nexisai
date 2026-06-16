@@ -4,6 +4,7 @@ import type { StoredBait, StoredCampaign } from "@/types/campaign";
 import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
+import { buildHubArticleUrl } from "@/lib/hub-url";
 
 type SupabaseBaitRow = {
   id: string;
@@ -122,6 +123,70 @@ export async function listCampaignsByUserId(
   }
 
   return listCampaignsByUserViaSupabase(userId);
+}
+
+const DUPLICATE_CAMPAIGN_WINDOW_MS = 60_000;
+
+/** Son 1 dakikada aynı marka + şehir için kampanya var mı? */
+export async function hasRecentDuplicateCampaign(
+  userId: string,
+  markaAdi: string,
+  sehir: string,
+  windowMs = DUPLICATE_CAMPAIGN_WINDOW_MS,
+): Promise<boolean> {
+  const since = new Date(Date.now() - windowMs);
+  const normalizedBrand = markaAdi.trim().toLowerCase();
+  const normalizedCity = sehir.trim().toLowerCase();
+
+  if (hasDatabaseUrl()) {
+    try {
+      const recent = await prisma.campaign.findFirst({
+        where: {
+          userId,
+          createdAt: { gte: since },
+          markaAdi: { equals: markaAdi.trim(), mode: "insensitive" },
+          sehir: { equals: sehir.trim(), mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      return recent !== null;
+    } catch (error) {
+      console.error("[DUPLICATE_CHECK]: Prisma sorgusu başarısız:", error);
+    }
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("Campaign")
+      .select("id, markaAdi, sehir, createdAt")
+      .eq("userId", userId)
+      .gte("createdAt", since.toISOString())
+      .order("createdAt", { ascending: false })
+      .limit(10);
+
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? []).some(
+      (row) =>
+        row.markaAdi?.trim().toLowerCase() === normalizedBrand &&
+        row.sehir?.trim().toLowerCase() === normalizedCity,
+    );
+  } catch (error) {
+    console.error("[DUPLICATE_CHECK]: Supabase sorgusu başarısız:", error);
+    return false;
+  }
+}
+
+function buildPublishedBaitFields(slug: string) {
+  const hubUrl = buildHubArticleUrl(slug);
+  return {
+    yayinlandi: true,
+    status: "PUBLISHED",
+    liveUrl: hubUrl,
+  };
 }
 
 export interface RadarCampaignRecord {
@@ -243,7 +308,10 @@ async function createCampaignViaPrisma(
       radarSikligi: input.radarSikligi,
       radarSikligiDakika: input.radarSikligiDakika,
       baits: {
-        create: input.baits,
+        create: input.baits.map((bait) => ({
+          ...bait,
+          ...buildPublishedBaitFields(bait.slug),
+        })),
       },
     },
     include: { baits: true },
@@ -292,8 +360,8 @@ async function createCampaignViaSupabase(
     icerik: bait.icerik,
     slug: bait.slug,
     platform: bait.platform,
-    status: "published",
-    yayinlandi: true,
+    ...buildPublishedBaitFields(bait.slug),
+    live_url: buildHubArticleUrl(bait.slug),
   }));
 
   const { data: createdBaits, error: baitError } = await supabase

@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CampaignFormData, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
 import {
   buildCampaignSession,
-  getCampaignSession,
-  saveCampaignSession,
+  clearCampaignSession,
   type CampaignSessionPayload,
 } from "@/lib/campaign-session";
 import { getCampaignMeta } from "@/lib/agresiflik";
@@ -71,7 +70,7 @@ function AnalysisDashboardContent({
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [terminalSessionKey, setTerminalSessionKey] = useState(0);
-  const hasAutoStartedRef = useRef(false);
+  const analysisInFlightRef = useRef(false);
   const pendingDistributionRef = useRef<{
     count: number;
     sehir: string;
@@ -197,6 +196,10 @@ function AnalysisDashboardContent({
 
   const runAnalysis = useCallback(
     async (payload: CampaignSessionPayload) => {
+      if (analysisInFlightRef.current) {
+        return;
+      }
+      analysisInFlightRef.current = true;
       resetDistribution();
       setTerminalLogs([]);
       setLlmResult(null);
@@ -224,6 +227,10 @@ function AnalysisDashboardContent({
         const result = await response.json();
 
         if (!response.ok) {
+          const isDuplicate =
+            response.status === 429 &&
+            typeof result.error === "string" &&
+            result.error.toLowerCase().includes("duplicate");
           const isInsufficientBalance =
             response.status === 400 &&
             typeof result.error === "string" &&
@@ -238,7 +245,9 @@ function AnalysisDashboardContent({
               category: isInsufficientBalance ? "HATA" : "SİSTEM",
               message: isInsufficientBalance
                 ? "⚠️ [SİBER KRİZ]: Yetersiz bakiye nedeniyle GEO Enjeksiyon Motoru bloke edildi. Lütfen bakiye yükleyin."
-                : isUnauthorized
+                : isDuplicate
+                  ? "⚠️ [KORUMA]: Yinelenen kampanya isteği engellendi. Operasyon zaten başlatıldı."
+                  : isUnauthorized
                   ? "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor."
                   : `⚠️ [SİBER HATA]: ${result.error ?? "Operasyon başlatılamadı."}`,
             },
@@ -275,6 +284,7 @@ function AnalysisDashboardContent({
 
           onWalletRefresh?.();
           void runRadarScan();
+          void fetchCampaigns({ silent: true });
         } else {
           setTerminalLogs([
             {
@@ -299,30 +309,30 @@ function AnalysisDashboardContent({
         resetDistribution();
         setIsActive(false);
       } finally {
+        analysisInFlightRef.current = false;
         setIsLoading(false);
       }
     },
-    [accessToken, resetDistribution, runRadarScan, onWalletRefresh],
+    [accessToken, resetDistribution, runRadarScan, onWalletRefresh, fetchCampaigns],
   );
 
   useEffect(() => {
-    const payload = getCampaignSession();
-    if (payload && !hasAutoStartedRef.current) {
-      hasAutoStartedRef.current = true;
-      setSession(payload);
-      void runAnalysis(payload);
-    }
     setSessionReady(true);
-  }, [runAnalysis]);
+  }, []);
 
   const handleFormSubmit = useCallback(
     (data: CampaignFormData) => {
+      if (analysisInFlightRef.current || isLoading) {
+        return;
+      }
+
+      clearCampaignSession();
+
       const payload = buildCampaignSession(data);
-      saveCampaignSession(payload);
       setSession(payload);
       void runAnalysis(payload);
     },
-    [runAnalysis],
+    [runAnalysis, isLoading],
   );
 
   const handleFlowComplete = useCallback(() => {

@@ -290,7 +290,10 @@ function resolveBaitStatusLabel(bait: StoredCampaign["baits"][number]): {
   text: string;
   className: string;
 } {
-  if (bait.yayinlandi || bait.status === "SUCCESS" || bait.status === "published") {
+  if (bait.yayinlandi || bait.status === "SUCCESS" || bait.status === "published" || bait.status === "PUBLISHED") {
+    return { text: "Yayında", className: "text-emerald-400" };
+  }
+  if (bait.slug) {
     return { text: "Yayında", className: "text-emerald-400" };
   }
   if (bait.status === "FAILED") {

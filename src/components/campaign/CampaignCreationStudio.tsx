@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
@@ -42,6 +42,15 @@ export default function CampaignCreationStudio({
 }: CampaignCreationStudioProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const isSubmitLocked = submitting || isLoading;
+
+  useEffect(() => {
+    if (!isLoading) {
+      setSubmitting(false);
+    }
+  }, [isLoading]);
 
   const softCapResult = useMemo(
     () => resolveIntentSoftCap({ dailyBudget: form.dailyBudget }),
@@ -79,6 +88,10 @@ export default function CampaignCreationStudio({
     event.preventDefault();
     setFormError(null);
 
+    if (isSubmitLocked) {
+      return;
+    }
+
     if (!isFormReadyToSubmit) {
       setFormError(
         "İşletme adı, sektör, şehir ve günlük bütçe alanlarını doldurun.",
@@ -86,6 +99,7 @@ export default function CampaignCreationStudio({
       return;
     }
 
+    setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
       sector: form.sector,
@@ -202,13 +216,14 @@ export default function CampaignCreationStudio({
 
         <button
           type="submit"
-          disabled={isLoading || !isFormReadyToSubmit}
+          disabled={isSubmitLocked || !isFormReadyToSubmit}
+          aria-busy={isSubmitLocked}
           className="group relative w-full overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity duration-500 group-hover:opacity-100" />
           <span className="absolute inset-[1px] rounded-[11px] bg-zinc-950/20 backdrop-blur-sm" />
           <span className="relative inline-flex items-center justify-center gap-2">
-            {isLoading ? (
+            {isSubmitLocked ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
                 Kampanya Başlatılıyor...

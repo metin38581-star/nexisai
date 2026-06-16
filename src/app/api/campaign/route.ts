@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
-import { createCampaignWithBaits } from "@/lib/campaign-store";
+import { createCampaignWithBaits, hasRecentDuplicateCampaign } from "@/lib/campaign-store";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
@@ -122,6 +122,26 @@ export async function POST(request: Request) {
           error: "Kampanya oluşturmak için oturum açmanız gerekiyor.",
         },
         { status: 401 },
+      );
+    }
+
+    const isDuplicate = await hasRecentDuplicateCampaign(
+      activeUserId,
+      markaAdi,
+      sehir,
+    );
+    if (isDuplicate) {
+      console.warn(
+        "[OTONOM GEO]: Yinelenen istek reddedildi —",
+        markaAdi,
+        sehir,
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Duplicate request",
+        },
+        { status: 429 },
       );
     }
 

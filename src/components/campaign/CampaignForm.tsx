@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Cpu, Loader2, Rocket } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
@@ -41,6 +41,15 @@ export default function CampaignForm({
   isLoading,
 }: CampaignFormProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
+  const [submitting, setSubmitting] = useState(false);
+
+  const isSubmitLocked = submitting || isLoading;
+
+  useEffect(() => {
+    if (!isLoading) {
+      setSubmitting(false);
+    }
+  }, [isLoading]);
 
   const softCapResult = useMemo(
     () => resolveIntentSoftCap({ dailyBudget: form.dailyBudget }),
@@ -59,6 +68,12 @@ export default function CampaignForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isSubmitLocked) {
+      return;
+    }
+
+    setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
       sector: form.sector,
@@ -177,13 +192,14 @@ export default function CampaignForm({
 
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isSubmitLocked}
+          aria-busy={isSubmitLocked}
           className="group relative mt-2 w-full overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity duration-500 group-hover:opacity-100" />
           <span className="absolute inset-[1px] rounded-[11px] bg-zinc-950/20 backdrop-blur-sm" />
           <span className="relative flex items-center justify-center gap-2">
-            {isLoading ? (
+            {isSubmitLocked ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
                 Kampanya Başlatılıyor...

@@ -36,19 +36,8 @@ async function markBaitPublished(
     where: { id: baitId },
     data: {
       yayinlandi: true,
-      status: "SUCCESS",
-      ...(externalLiveUrl
-        ? { externalLiveUrl, liveUrl: externalLiveUrl }
-        : {}),
-    },
-  });
-}
-
-async function markBaitFailed(baitId: string): Promise<void> {
-  await prisma.bait.update({
-    where: { id: baitId },
-    data: {
-      status: "FAILED",
+      status: "PUBLISHED",
+      ...(externalLiveUrl ? { externalLiveUrl } : {}),
     },
   });
 }
@@ -139,16 +128,8 @@ export async function distributeBaitsToNetwork(
           return;
         }
 
-        try {
-          await markBaitFailed(bait.id);
-        } catch (dbError) {
-          console.error(
-            `[NEXISAI HUB] Bait FAILED durumu yazılamadı (${bait.id}):`,
-            dbError,
-          );
-        }
         console.error(
-          `[NEXISAI HUB HATASI]: /p/${bait.slug} — Make.com webhook reddetti.`,
+          `[NEXISAI HUB HATASI]: /p/${bait.slug} — Dış webhook reddetti; NexisAI Hub yayını korunuyor.`,
         );
         results.push({ baitId: bait.id, slug: bait.slug, ok: false });
       },
