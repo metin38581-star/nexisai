@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Loader2, Rocket } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
@@ -42,11 +42,13 @@ export default function CampaignForm({
 }: CampaignFormProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const isSubmitLocked = submitting || isLoading;
 
   useEffect(() => {
     if (!isLoading) {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }, [isLoading]);
@@ -69,10 +71,11 @@ export default function CampaignForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isSubmitLocked) {
+    if (isSubmitLocked || submittingRef.current) {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
@@ -192,8 +195,8 @@ export default function CampaignForm({
 
         <button
           type="submit"
-          disabled={isSubmitLocked}
-          aria-busy={isSubmitLocked}
+          disabled={submitting || isLoading}
+          aria-busy={submitting || isLoading}
           className="group relative mt-2 w-full overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity duration-500 group-hover:opacity-100" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
@@ -43,11 +43,13 @@ export default function CampaignCreationStudio({
   const [form, setForm] = useState<CampaignFormData>(initialForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const isSubmitLocked = submitting || isLoading;
 
   useEffect(() => {
     if (!isLoading) {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }, [isLoading]);
@@ -88,7 +90,7 @@ export default function CampaignCreationStudio({
     event.preventDefault();
     setFormError(null);
 
-    if (isSubmitLocked) {
+    if (isSubmitLocked || submittingRef.current) {
       return;
     }
 
@@ -99,6 +101,7 @@ export default function CampaignCreationStudio({
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
@@ -216,8 +219,8 @@ export default function CampaignCreationStudio({
 
         <button
           type="submit"
-          disabled={isSubmitLocked || !isFormReadyToSubmit}
-          aria-busy={isSubmitLocked}
+          disabled={submitting || isLoading || !isFormReadyToSubmit}
+          aria-busy={submitting || isLoading}
           className="group relative w-full overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity duration-500 group-hover:opacity-100" />

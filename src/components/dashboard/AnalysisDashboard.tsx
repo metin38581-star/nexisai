@@ -227,6 +227,7 @@ function AnalysisDashboardContent({
         const result = await response.json();
 
         if (!response.ok) {
+          analysisInFlightRef.current = false;
           const isDuplicate =
             response.status === 429 &&
             typeof result.error === "string" &&

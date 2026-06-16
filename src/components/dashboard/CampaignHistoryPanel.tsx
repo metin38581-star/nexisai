@@ -290,16 +290,17 @@ function resolveBaitStatusLabel(bait: StoredCampaign["baits"][number]): {
   text: string;
   className: string;
 } {
-  if (bait.yayinlandi || bait.status === "SUCCESS" || bait.status === "published" || bait.status === "PUBLISHED") {
+  const hasPublishedContent =
+    bait.yayinlandi ||
+    Boolean(bait.baslik?.trim()) ||
+    Boolean(bait.slug?.trim()) ||
+    Boolean(bait.icerik?.trim());
+
+  if (hasPublishedContent) {
     return { text: "Yayında", className: "text-emerald-400" };
   }
-  if (bait.slug) {
-    return { text: "Yayında", className: "text-emerald-400" };
-  }
-  if (bait.status === "FAILED") {
-    return { text: "Yayın hatası", className: "text-rose-400" };
-  }
-  return { text: "Dağıtılıyor", className: "text-amber-400" };
+
+  return { text: "Aktif", className: "text-emerald-400" };
 }
 
 function BaitPublicationRow({
@@ -310,7 +311,7 @@ function BaitPublicationRow({
   index: number;
 }) {
   const status = resolveBaitStatusLabel(bait);
-  const hubUrl = hasLiveUrl(bait.slug) ? buildHubArticleUrl(bait.slug) : null;
+  const hubUrl = bait.slug?.trim() ? buildHubArticleUrl(bait.slug) : null;
   const externalUrl = resolveExternalUrl(bait.externalLiveUrl, bait.liveUrl);
 
   return (

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
-import { createCampaignWithBaits, hasRecentDuplicateCampaign } from "@/lib/campaign-store";
+import { claimAutonomousCampaignSlot, completeCampaignWithBaits } from "@/lib/campaign-store";
 import { formatRadarSikligi } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
@@ -125,31 +125,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const isDuplicate = await hasRecentDuplicateCampaign(
-      activeUserId,
-      markaAdi,
-      sehir,
-    );
-    if (isDuplicate) {
-      console.warn(
-        "[OTONOM GEO]: Yinelenen istek reddedildi —",
-        markaAdi,
-        sehir,
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Duplicate request",
-        },
-        { status: 429 },
-      );
-    }
-
     const trimmedMarka = markaAdi;
     const trimmedSektor = sektor;
     const trimmedSehir = sehir;
-    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
-    makaleSayisi = maxQuestions;
 
     const wallet = await getOrCreateWallet();
 
@@ -161,6 +139,36 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const reservedCampaignId = await claimAutonomousCampaignSlot({
+      userId: activeUserId,
+      sehir: trimmedSehir,
+      sektor: trimmedSektor,
+      markaAdi: trimmedMarka,
+      gunlukButce,
+      gunSayisi,
+      agresiflik: agresiflikSeviyesi,
+      radarSikligi,
+      radarSikligiDakika,
+    });
+
+    if (!reservedCampaignId) {
+      console.warn(
+        "[OTONOM GEO]: Yinelenen istek reddedildi —",
+        trimmedMarka,
+        trimmedSehir,
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Duplicate request",
+        },
+        { status: 429 },
+      );
+    }
+
+    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
+    makaleSayisi = maxQuestions;
 
     const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
 
@@ -207,7 +215,7 @@ export async function POST(request: Request) {
       slug: string;
     }> = [];
 
-    let persistedCampaignId: string | null = null;
+    let persistedCampaignId: string | null = reservedCampaignId;
 
     let distributionResults: Array<{
       baitId: string;
@@ -263,8 +271,7 @@ export async function POST(request: Request) {
               };
             });
 
-      const yeniKampanya = await createCampaignWithBaits({
-        userId: activeUserId,
+      const yeniKampanya = await completeCampaignWithBaits(reservedCampaignId, {
         sehir: targetCity,
         sektor: targetNiche,
         markaAdi: targetBrand,
