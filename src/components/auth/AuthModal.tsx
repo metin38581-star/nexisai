@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
-import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import {
   isSupabaseConfigured,
   SUPABASE_SETUP_HINT,
@@ -25,25 +24,56 @@ interface AuthModalProps {
   onAuthModeChange: (mode: AuthViewMode) => void;
 }
 
-const AUTH_TIMEOUT_MS = 10_000;
+const AUTH_TIMEOUT_MS = 30_000;
 const AUTH_TIMEOUT_ERROR = "AUTH_TIMEOUT";
 
 const inputClassName =
   "w-full rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 backdrop-blur-sm transition-colors focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/25";
 
-async function withAuthTimeout<T>(promise: Promise<T>): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      window.setTimeout(() => {
-        reject(new Error(AUTH_TIMEOUT_ERROR));
-      }, AUTH_TIMEOUT_MS);
-    }),
-  ]);
+interface AuthSessionResponse {
+  success?: boolean;
+  error?: string;
+  requiresEmailConfirmation?: boolean;
+  message?: string;
+  user?: {
+    id: string;
+    email: string;
+    userName: string;
+  };
+  accessToken?: string;
 }
 
-function isServerSideAuthError(status?: number): boolean {
-  return typeof status === "number" && status >= 500;
+async function requestAuthSession(
+  payload: {
+    action: "register" | "login";
+    email: string;
+    password: string;
+    companyName?: string;
+  },
+  signal: AbortSignal,
+): Promise<AuthSessionResponse> {
+  const response = await fetch("/api/auth/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  const result = (await response.json()) as AuthSessionResponse;
+
+  if (!response.ok) {
+    if (response.status >= 500) {
+      throw new Error("SERVER_ERROR");
+    }
+
+    return {
+      success: false,
+      error: result.error ?? "Oturum işlemi başarısız oldu.",
+    };
+  }
+
+  return result;
 }
 
 export default function AuthModal({
@@ -131,53 +161,56 @@ export default function AuthModal({
     }
 
     try {
-      const supabase = getSupabaseBrowser();
-      const authResult = await withAuthTimeout(
-        isRegister
-          ? supabase.auth.signUp({
-              email: email.trim(),
-              password: password.trim(),
-              options: {
-                data: {
-                  full_name: fullName.trim(),
-                  company_name: fullName.trim(),
-                },
-              },
-            })
-          : supabase.auth.signInWithPassword({
-              email: email.trim(),
-              password: password.trim(),
-            }),
-      );
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => {
+        controller.abort();
+      }, AUTH_TIMEOUT_MS);
 
-      if (authResult.error) {
-        if (isServerSideAuthError(authResult.error.status)) {
-          toast.error("Sistem şu an yoğun, lütfen tekrar deneyin");
-        } else {
-          setErrorMessage(authResult.error.message);
+      let authResult: AuthSessionResponse;
+
+      try {
+        authResult = await requestAuthSession(
+          {
+            action: isRegister ? "register" : "login",
+            email: email.trim(),
+            password: password.trim(),
+            ...(isRegister ? { companyName: fullName.trim() } : {}),
+          },
+          controller.signal,
+        );
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new Error(AUTH_TIMEOUT_ERROR);
         }
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+
+      if (!authResult.success) {
+        setErrorMessage(authResult.error ?? "Oturum işlemi başarısız oldu.");
         return;
       }
 
-      const activeSession = authResult.data.session;
-      const user = authResult.data.user ?? activeSession?.user;
-
-      if (!user || !activeSession?.access_token) {
+      if (authResult.requiresEmailConfirmation) {
+        toast.success(
+          authResult.message ??
+            "Kayıt oluşturuldu. E-posta doğrulaması sonrası giriş yapabilirsiniz.",
+        );
         setErrorMessage(
-          isRegister
-            ? "Kayıt oluşturuldu. E-posta doğrulaması sonrası giriş yapabilirsiniz."
-            : "Oturum başlatılamadı. Lütfen tekrar deneyin.",
+          authResult.message ??
+            "Kayıt oluşturuldu. E-posta doğrulaması sonrası giriş yapabilirsiniz.",
         );
         return;
       }
 
-      const displayName =
-        fullName.trim() ||
-        (typeof user.user_metadata?.full_name === "string"
-          ? user.user_metadata.full_name
-          : "") ||
-        email.split("@")[0]?.trim() ||
-        "İşletme Hesabı";
+      const user = authResult.user;
+      const accessToken = authResult.accessToken;
+
+      if (!user?.id || !accessToken) {
+        setErrorMessage("Oturum başlatılamadı. Lütfen tekrar deneyin.");
+        return;
+      }
 
       if (isRegister) {
         toast.success(
@@ -186,10 +219,10 @@ export default function AuthModal({
       }
 
       onSuccess({
-        userName: displayName,
+        userName: user.userName,
         userEmail: user.email?.trim() || email.trim() || null,
         userId: user.id,
-        accessToken: activeSession.access_token,
+        accessToken,
       });
       setFullName("");
       setEmail("");
@@ -197,10 +230,20 @@ export default function AuthModal({
     } catch (error) {
       const isTimeout =
         error instanceof Error && error.message === AUTH_TIMEOUT_ERROR;
+      const isAbort =
+        error instanceof DOMException && error.name === "AbortError";
 
-      if (isTimeout) {
+      if (isTimeout || isAbort) {
         toast.error("Sistem şu an yoğun, lütfen tekrar deneyin");
-        setErrorMessage("İstek zaman aşımına uğradı. Lütfen tekrar deneyin.");
+        setErrorMessage(
+          "Kimlik doğrulama sunucusuna ulaşılamadı. Lütfen birkaç saniye sonra tekrar deneyin.",
+        );
+        return;
+      }
+
+      if (error instanceof Error && error.message === "SERVER_ERROR") {
+        toast.error("Sistem şu an yoğun, lütfen tekrar deneyin");
+        setErrorMessage("Sunucu geçici olarak yanıt vermiyor.");
         return;
       }
 
@@ -208,7 +251,7 @@ export default function AuthModal({
       const message =
         error instanceof Error
           ? error.message
-          : "Supabase oturum servisine bağlanılamadı.";
+          : "Oturum servisine bağlanılamadı.";
       setErrorMessage(message);
     } finally {
       submittingRef.current = false;
