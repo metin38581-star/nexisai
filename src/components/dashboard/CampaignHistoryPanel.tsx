@@ -37,7 +37,7 @@ function CampaignPublishLinks({
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
         >
-          🌐 NexisAI Sayfasını Gör
+          🌐 Canlı Yayını Gör
         </a>
       ) : null}
       {hasExternal ? (
@@ -309,6 +309,89 @@ function RadarTrackingStatus({
   );
 }
 
+function formatPublicationLabel(count: number): string {
+  if (count <= 0) {
+    return "Yayın bekleniyor";
+  }
+  if (count === 1) {
+    return "1 Canlı GEO İçeriği";
+  }
+  return `${count} Canlı GEO İçeriği`;
+}
+
+function resolveActivePublicationCount(campaign: StoredCampaign): number {
+  if (campaign.baits.length > 0) {
+    return campaign.baits.length;
+  }
+  return campaign.makaleSayisi ?? 0;
+}
+
+function isHtmlContent(content: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(content);
+}
+
+function resolveBaitStatusLabel(bait: StoredCampaign["baits"][number]): {
+  text: string;
+  className: string;
+} {
+  if (bait.yayinlandi || bait.status === "SUCCESS" || bait.status === "published") {
+    return { text: "Yayında", className: "text-emerald-400" };
+  }
+  if (bait.status === "FAILED") {
+    return { text: "Yayın hatası", className: "text-rose-400" };
+  }
+  return { text: "Dağıtılıyor", className: "text-amber-400" };
+}
+
+function BaitArticleCard({
+  bait,
+  index,
+  total,
+}: {
+  bait: StoredCampaign["baits"][number];
+  index: number;
+  total: number;
+}) {
+  const status = resolveBaitStatusLabel(bait);
+
+  return (
+    <article className="rounded-xl border border-white/5 bg-zinc-900/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-400">
+            Yayın {index + 1}/{total}
+          </p>
+          <h4 className="mt-1 text-sm font-semibold text-white">{bait.baslik}</h4>
+          <p className="mt-1 text-[10px] text-zinc-500">
+            {bait.platform}
+            <span className={`ml-2 font-medium ${status.className}`}>
+              · {status.text}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <CampaignPublishLinks
+        slug={bait.slug}
+        externalLiveUrl={resolveExternalUrl(bait.externalLiveUrl, bait.liveUrl)}
+      />
+
+      <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-white/5 bg-zinc-950/50 p-3">
+        {isHtmlContent(bait.icerik) ? (
+          <div
+            className="prose prose-invert prose-sm max-w-none text-zinc-300 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_li]:text-sm"
+            dangerouslySetInnerHTML={{ __html: bait.icerik }}
+          />
+        ) : (
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
+            {bait.icerik}
+          </p>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function LlmInjectionStatus({
   isOptimized,
   lastCheckedAt,
@@ -371,7 +454,12 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
   const toplamButce = campaign.gunlukButce * campaign.gunSayisi;
   const meta = getCampaignMetaFromDb(campaign);
   const badgeClass = `inline-flex rounded-full border bg-zinc-950/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${meta.renk}`;
-  const primaryBait = campaign.baits[0];
+  const publicationCount = resolveActivePublicationCount(campaign);
+  const sortedBaits = [...campaign.baits].sort(
+    (a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  const primaryBait = sortedBaits[0];
   const hubSlug = primaryBait?.slug;
   const externalUrl = resolveExternalUrl(
     campaign.externalLiveUrl ?? primaryBait?.externalLiveUrl,
@@ -407,7 +495,15 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
               <span>{campaign.sektor}</span>
             </p>
             <p className="mt-2 text-[11px] text-zinc-500">
-              {formatCampaignDate(campaign.createdAt)} · {campaign.baits.length} gizli makale
+              {formatCampaignDate(campaign.createdAt)}
+              {publicationCount > 0 ? (
+                <>
+                  <span className="mx-2 text-zinc-600">·</span>
+                  <span className="font-medium text-emerald-400/90">
+                    {formatPublicationLabel(publicationCount)}
+                  </span>
+                </>
+              ) : null}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
@@ -442,9 +538,10 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/15"
+            disabled={sortedBaits.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {expanded ? "Detayları Gizle" : "GEO Makalelerini Aç"}
+            {expanded ? "Detayları Gizle" : "Canlı İçerikleri Gör"}
             <span
               className={`transition-transform ${expanded ? "rotate-180" : ""}`}
             >
@@ -457,44 +554,26 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
       {expanded && (
         <div className="border-t border-violet-500/10 bg-zinc-950/50 px-5 py-4">
           <p className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-cyan-400">
-            NexisAI Hub · Hibrid Dağıtım Makaleleri
+            Canlı GEO Yayınları · {sortedBaits.length} aktif içerik
           </p>
-          <div className="space-y-3">
-            {campaign.baits.map((bait, index) => (
-              <details
-                key={bait.id}
-                className="group rounded-xl border border-white/5 bg-zinc-900/60 p-4"
-                open={index === 0}
-              >
-                <summary className="cursor-pointer list-none text-sm font-semibold text-white marker:content-none">
-                  <span className="text-violet-400">
-                    [{index + 1}/{campaign.baits.length}]
-                  </span>{" "}
-                  {bait.baslik}
-                  <span className="ml-2 text-[10px] font-normal text-zinc-500">
-                    ({bait.platform})
-                    {bait.yayinlandi || bait.status === "SUCCESS" ? (
-                      <span className="ml-1 text-emerald-400">• Yayınlandı</span>
-                    ) : bait.status === "FAILED" ? (
-                      <span className="ml-1 text-rose-400">• Başarısız</span>
-                    ) : (
-                      <span className="ml-1 text-amber-400">• Bekliyor</span>
-                    )}
-                  </span>
-                </summary>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
-                  {bait.icerik}
-                </p>
-                <CampaignPublishLinks
-                  slug={bait.slug}
-                  externalLiveUrl={resolveExternalUrl(
-                    bait.externalLiveUrl,
-                    bait.liveUrl,
-                  )}
+          {sortedBaits.length > 0 ? (
+            <div className="space-y-3">
+              {sortedBaits.map((bait, index) => (
+                <BaitArticleCard
+                  key={bait.id}
+                  bait={bait}
+                  index={index}
+                  total={sortedBaits.length}
                 />
-              </details>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90">
+              Bu operasyon için {publicationCount} içerik üretildi; yayın
+              kayıtları henüz senkronize edilmedi. Sayfayı yenileyin veya birkaç
+              dakika sonra tekrar deneyin.
+            </p>
+          )}
         </div>
       )}
     </article>
