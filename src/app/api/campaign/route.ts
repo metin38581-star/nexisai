@@ -25,6 +25,8 @@ import { generateMicroIntents } from "@/lib/geo-engine";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
 import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
+import { attachCampaignIntents } from "@/lib/campaign-intent-store";
+import { recordPayment } from "@/lib/payment-store";
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -293,15 +295,28 @@ export async function POST(request: Request) {
       }));
       persistedCampaignId = yeniKampanya.id;
 
+      await attachCampaignIntents(
+        yeniKampanya.id,
+        questionPairsForBaits,
+        persistedBaits,
+      );
+
       console.log(
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk`,
       );
 
       await decrementWalletBalance(wallet.id, toplamMaliyet);
 
-      console.log(
-        `[CÜZDAN TASARRUFU]: $${toplamMaliyet} bakiyeden düşüldü. Yeni bakiye: $${wallet.balance - toplamMaliyet}`,
-      );
+      await recordPayment({
+        userId: activeUserId,
+        amount: toplamMaliyet,
+        currency: "USD",
+        status: "success",
+        provider: "internal",
+        providerStatusCode: "WALLET_DEBIT",
+        description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
+        campaignId: yeniKampanya.id,
+      });
     } catch (dbError) {
       console.error(
         "[KRİTİK VERİTABANI HATASI]: Veri tabanına yazılırken bir hata oluştu:",

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { handleApiRouteError, assertDataAccessEnv } from "@/lib/api-error";
+import { getActiveUserId } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
+import { recordPayment } from "@/lib/payment-store";
 import {
   decrementWalletBalance,
   getOrCreateWallet,
@@ -27,6 +29,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertDataAccessEnv();
+    const activeUserId = await getActiveUserId(request);
+    if (!activeUserId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Bakiye işlemi için oturum açmanız gerekiyor.",
+        },
+        { status: 401 },
+      );
+    }
+
     const body = (await request.json()) as {
       amount?: number;
       operation?: "topup" | "deduct";
@@ -53,6 +66,16 @@ export async function POST(request: Request) {
 
       const balance = await decrementWalletBalance(wallet.id, amount);
 
+      await recordPayment({
+        userId: activeUserId,
+        amount,
+        currency: "USD",
+        status: "success",
+        provider: "internal",
+        providerStatusCode: "WALLET_DEDUCT",
+        description: "Manuel cüzdan kesintisi",
+      });
+
       return NextResponse.json({
         success: true,
         balance,
@@ -60,6 +83,16 @@ export async function POST(request: Request) {
     }
 
     const balance = await incrementWalletBalance(wallet.id, amount);
+
+    await recordPayment({
+      userId: activeUserId,
+      amount,
+      currency: "USD",
+      status: "success",
+      provider: "internal",
+      providerStatusCode: "WALLET_TOPUP",
+      description: "Cüzdan bakiye yüklemesi",
+    });
 
     console.log(`[CÜZDAN_YÜKLEME]: +$${amount} — yeni bakiye $${balance}`);
 

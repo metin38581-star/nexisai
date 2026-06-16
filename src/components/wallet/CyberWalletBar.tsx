@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { buildAuthFetchInit } from "@/lib/auth-headers";
 
 interface CyberWalletBarProps {
   refreshToken?: number;
@@ -14,6 +16,7 @@ function formatBalance(value: number): string {
 }
 
 export default function CyberWalletBar({ refreshToken = 0 }: CyberWalletBarProps) {
+  const { accessToken } = useAuth();
   const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,11 +49,13 @@ export default function CyberWalletBar({ refreshToken = 0 }: CyberWalletBarProps
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: Number(topUpAmount) }),
-      });
+      const response = await fetch(
+        "/api/wallet",
+        buildAuthFetchInit(accessToken, {
+          method: "POST",
+          body: JSON.stringify({ amount: Number(topUpAmount) }),
+        }),
+      );
 
       const result = await response.json();
 

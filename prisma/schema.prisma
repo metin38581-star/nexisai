@@ -36,6 +36,8 @@ model Campaign {
   externalLiveUrl   String?   @map("external_live_url")
   createdAt     DateTime  @default(now())
   baits         Bait[]
+  intents       CampaignIntent[]
+  payments      Payment[]
   radarLogs     CampaignRadarLog[]
 }
 
@@ -74,4 +76,35 @@ model Bait {
   externalLiveUrl  String?  @map("external_live_url")
   createdAt        DateTime @default(now())
   campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  intent           CampaignIntent?
+}
+
+model CampaignIntent {
+  id              String   @id @default(uuid())
+  campaignId      String   @map("campaignId")
+  question        String
+  simulatedAnswer String
+  sortOrder       Int      @default(0)
+  baitId          String?  @unique @map("baitId")
+  createdAt       DateTime @default(now())
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  bait            Bait?    @relation(fields: [baitId], references: [id], onDelete: SetNull)
+
+  @@map("CampaignIntent")
+}
+
+model Payment {
+  id                 String    @id @default(uuid())
+  userId             String    @map("userId")
+  amount             Float
+  currency           String    @default("USD")
+  status             String    @default("success")
+  provider           String    @default("internal")
+  providerStatusCode String?   @map("provider_status_code")
+  description        String?
+  campaignId         String?   @map("campaignId")
+  createdAt          DateTime  @default(now())
+  campaign           Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@map("Payment")
 }
