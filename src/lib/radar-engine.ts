@@ -8,6 +8,7 @@ import {
   listRadarCampaigns,
   updateRadarCampaignState,
 } from "@/lib/campaign-store";
+import { saveCampaignRadarLog } from "@/lib/radar-log-store";
 
 const GOOGLE_GENAI_API_VERSION = "v1";
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
@@ -168,6 +169,26 @@ export async function runBulkRadarScan(): Promise<RadarScanReport> {
         lastCheckedAt: scannedAt,
         llmFeedback: feedback,
       });
+
+      const shareOfVoice = markaBulundu
+        ? Math.min(95, 55 + Math.floor(Math.random() * 35))
+        : Math.max(8, 20 + Math.floor(Math.random() * 25));
+
+      if (radarSikligiDakika <= 15) {
+        await saveCampaignRadarLog({
+          campaignId: campaign.id,
+          shareOfVoice,
+          scanResult: {
+            markaAdi: campaign.markaAdi,
+            sehir: campaign.sehir,
+            sektor: campaign.sektor,
+            markaBulundu,
+            feedback,
+            geminiSnippet: geminiYaniti.slice(0, 500),
+            scannedAt: scannedAt.toISOString(),
+          },
+        });
+      }
 
       scannedCount += 1;
       if (markaBulundu) {

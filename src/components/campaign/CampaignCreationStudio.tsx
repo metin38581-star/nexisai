@@ -25,6 +25,7 @@ import {
   INTENT_UNLOCK_BUDGET_COST,
   resolveIntentSoftCap,
 } from "@/lib/intent-soft-cap";
+import { resolveContentVolumePlan } from "@/lib/content-volume";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 import IntentQuestionGrid from "@/components/campaign/IntentQuestionGrid";
@@ -68,6 +69,9 @@ export default function CampaignCreationStudio({
   const [walletBalance, setWalletBalance] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [analysisSource, setAnalysisSource] = useState<"cache" | "gemini" | null>(
+    null,
+  );
   const [softCapModalOpen, setSoftCapModalOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<GeoMicroIntent | null>(
@@ -83,6 +87,11 @@ export default function CampaignCreationStudio({
   const sehirLabel =
     TURKEY_CITY_OPTIONS.find((option) => option.value === form.city)?.label ??
     form.city;
+
+  const contentVolumePlan = useMemo(
+    () => resolveContentVolumePlan(form.dailyBudget),
+    [form.dailyBudget],
+  );
 
   const softCapResult = useMemo(
     () =>
@@ -130,7 +139,7 @@ export default function CampaignCreationStudio({
 
     try {
       const response = await fetch(
-        "/api/campaign/intents",
+        "/api/campaign/analyze",
         buildAuthFetchInit(accessToken, {
           method: "POST",
           body: JSON.stringify({
@@ -144,11 +153,12 @@ export default function CampaignCreationStudio({
       const result = await response.json();
 
       if (!response.ok) {
-        setScanError(result.error ?? "Niyet motoru yanıt vermedi.");
+        setScanError(result.error ?? "Pazar istihbarat motoru yanıt vermedi.");
         return;
       }
 
       const nextIntents = (result.intents ?? []) as GeoMicroIntent[];
+      setAnalysisSource(result.cached ? "cache" : "gemini");
       setIntents(nextIntents);
       setSelectedIds(new Set());
       setPreviewIntent(nextIntents[0] ?? null);
@@ -179,6 +189,8 @@ export default function CampaignCreationStudio({
   };
 
   const toggleIntent = (intent: GeoMicroIntent) => {
+    setPreviewIntent(intent);
+
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(intent.id)) {
@@ -278,23 +290,41 @@ export default function CampaignCreationStudio({
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
               <Sparkles className="h-3.5 w-3.5" />
-              Bütçeye Göre Akıllı Niyet Motoru
+              Canlı Pazar İstihbarat Motoru
             </div>
             <h2 className="text-xl font-semibold text-white">
               GEO Kampanya Oluşturma Odası
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-              LLM&apos;lerin tarayacağı popüler kullanıcı sorgularını seçin; sağ
-              panelde canlı yapay zeka cevap simülasyonunu izleyin.
+              Popüler kullanıcı sorgularını seçin; sağ panelde canlı LLM
+              simülasyonu anında başlasın.
             </p>
+            {analysisSource === "cache" ? (
+              <p className="mt-2 text-xs font-medium text-emerald-400">
+                ⚡ Önbellekten yüklendi — sıfır Gemini maliyeti
+              </p>
+            ) : null}
           </div>
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-right">
-            <p className="text-[10px] uppercase tracking-wider text-emerald-400">
-              {softCapResult.tierLabel}
-            </p>
-            <p className="text-sm font-semibold text-white">
-              Soft Cap: {softCapResult.softCap} arama hedefi
-            </p>
+          <div className="flex flex-col items-end gap-2">
+            <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 px-3 py-2 text-right">
+              <p className="text-[10px] uppercase tracking-wider text-cyan-400">
+                İçerik Hacmi
+              </p>
+              <p className="text-sm font-semibold text-white">
+                {contentVolumePlan.publishCount} varyasyon
+              </p>
+              <p className="mt-1 max-w-[220px] text-[10px] leading-relaxed text-zinc-500">
+                {contentVolumePlan.description}
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-right">
+              <p className="text-[10px] uppercase tracking-wider text-emerald-400">
+                {softCapResult.tierLabel}
+              </p>
+              <p className="text-sm font-semibold text-white">
+                Soft Cap: {softCapResult.softCap} arama hedefi
+              </p>
+            </div>
           </div>
         </div>
 
@@ -402,7 +432,7 @@ export default function CampaignCreationStudio({
                   <div className="text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-violet-400" />
                     <p className="mt-3 text-sm text-zinc-500">
-                      Gemini arama hedeflerini tarıyor...
+                      Canlı pazar istihbaratı taranıyor...
                     </p>
                   </div>
                 </div>

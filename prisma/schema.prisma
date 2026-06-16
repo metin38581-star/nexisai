@@ -36,6 +36,29 @@ model Campaign {
   externalLiveUrl   String?   @map("external_live_url")
   createdAt     DateTime  @default(now())
   baits         Bait[]
+  radarLogs     CampaignRadarLog[]
+}
+
+model MarketIntelligence {
+  id        String   @id @default(uuid())
+  sector    String
+  city      String
+  questions Json
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([sector, city])
+  @@map("MarketIntelligence")
+}
+
+model CampaignRadarLog {
+  id           String   @id @default(uuid())
+  campaignId   String
+  scanResult   Json
+  shareOfVoice Int
+  createdAt    DateTime @default(now())
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("CampaignRadarLog")
 }
 
 model Bait {

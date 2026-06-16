@@ -2,8 +2,6 @@
 
 import { Lock, Zap } from "lucide-react";
 
-import { INTENT_UNLOCK_BUDGET_COST } from "@/lib/intent-soft-cap";
-
 interface IntentSoftCapModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,9 +35,8 @@ export default function IntentSoftCapModal({
             Anahtar Kelime Sınırına Ulaştınız!
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-zinc-400">
-            Kampanya bütçenizi sadece ${INTENT_UNLOCK_BUDGET_COST} artırarak bu
-            kritik LLM sorusunun da kilidini açıp dominasyon gücünüzü
-            artırabilirsiniz.
+            Kampanya bütçenizi sadece 50 TL artırarak bu kritik LLM hedefini de
+            kapatabilir ve bölgenizdeki görünürlük gücünüzü artırabilirsiniz.
           </p>
         </div>
 
