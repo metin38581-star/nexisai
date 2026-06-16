@@ -16,6 +16,7 @@ interface AuthModalProps {
   onClose: () => void;
   onSuccess: (payload: {
     userName: string;
+    userEmail: string | null;
     userId: string;
     accessToken: string;
   }) => void;
@@ -116,6 +117,7 @@ export default function AuthModal({
 
       onSuccess({
         userName: displayName,
+        userEmail: user.email?.trim() || email.trim() || null,
         userId: user.id,
         accessToken: activeSession.access_token,
       });

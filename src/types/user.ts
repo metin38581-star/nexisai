@@ -13,6 +13,7 @@ export interface UserSession {
   isLoggedIn: boolean;
   hasActiveSubscription: boolean;
   userName: string | null;
+  userEmail: string | null;
   userId: string | null;
   accessToken: string | null;
   activePlan: SubscriptionPlanId | null;

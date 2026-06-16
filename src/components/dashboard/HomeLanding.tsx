@@ -254,6 +254,7 @@ export default function HomeLanding() {
 
   const handleAuthSuccess = (payload: {
     userName: string;
+    userEmail: string | null;
     userId: string;
     accessToken: string;
   }) => {

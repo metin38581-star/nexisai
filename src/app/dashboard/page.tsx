@@ -9,12 +9,16 @@ import AuthModal, { type AuthViewMode } from "@/components/auth/AuthModal";
 import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardPage() {
-  const { isLoggedIn, login } = useAuth();
+  const { isLoggedIn, isAuthReady, login } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showApp, setShowApp] = useState(false);
   const [authMode, setAuthMode] = useState<AuthViewMode>("register");
 
   useEffect(() => {
+    if (!isAuthReady) {
+      return;
+    }
+
     if (isLoggedIn) {
       setShowApp(true);
       setShowAuthModal(false);
@@ -22,10 +26,11 @@ export default function DashboardPage() {
       setShowApp(false);
       setShowAuthModal(true);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, isAuthReady]);
 
   const handleAuthSuccess = (payload: {
     userName: string;
+    userEmail: string | null;
     userId: string;
     accessToken: string;
   }) => {

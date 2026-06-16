@@ -8,11 +8,13 @@ import {
   useMemo,
   useState,
 } from "react";
+import type { User } from "@supabase/supabase-js";
 import type { SubscriptionPlanId, UserSession } from "@/types/user";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 interface AuthLoginPayload {
   userName: string;
+  userEmail: string | null;
   userId: string;
   accessToken: string;
 }
@@ -27,6 +29,7 @@ const defaultSession: UserSession = {
   isLoggedIn: false,
   hasActiveSubscription: false,
   userName: null,
+  userEmail: null,
   userId: null,
   accessToken: null,
   activePlan: null,
@@ -53,6 +56,27 @@ function resolveUserName(
   return emailPrefix || "İşletme Hesabı";
 }
 
+function resolveUserEmail(email: string | undefined): string | null {
+  const normalized = email?.trim();
+  return normalized ? normalized : null;
+}
+
+function buildSessionFromUser(
+  user: User,
+  accessToken: string,
+  previous: UserSession,
+): UserSession {
+  return {
+    ...previous,
+    isLoggedIn: true,
+    userId: user.id,
+    accessToken,
+    userName: resolveUserName(user.user_metadata, user.email),
+    userEmail: resolveUserEmail(user.email),
+    isAuthReady: true,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<UserSession>(defaultSession);
 
@@ -60,35 +84,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     let unsubscribe: (() => void) | undefined;
 
-    try {
-      const supabase = getSupabaseBrowser();
+    const syncSession = async () => {
+      try {
+        const supabase = getSupabaseBrowser();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      void supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
         if (!isMounted) {
           return;
         }
 
-        if (!activeSession?.user) {
-          setSession((prev) => ({ ...prev, isAuthReady: true }));
+        if (userError || !user) {
+          setSession({ ...defaultSession, isAuthReady: true });
           return;
         }
 
-        setSession((prev) => ({
-          ...prev,
-          isLoggedIn: true,
-          userId: activeSession.user.id,
-          accessToken: activeSession.access_token,
-          userName: resolveUserName(
-            activeSession.user.user_metadata,
-            activeSession.user.email,
-          ),
-          isAuthReady: true,
-        }));
-      });
+        const {
+          data: { session: activeSession },
+        } = await supabase.auth.getSession();
+
+        if (!activeSession?.access_token) {
+          setSession({ ...defaultSession, isAuthReady: true });
+          return;
+        }
+
+        setSession((prev) =>
+          buildSessionFromUser(user, activeSession.access_token, prev),
+        );
+      } catch {
+        if (isMounted) {
+          setSession({ ...defaultSession, isAuthReady: true });
+        }
+      }
+    };
+
+    try {
+      const supabase = getSupabaseBrowser();
+      void syncSession();
 
       const {
         data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, activeSession) => {
+      } = supabase.auth.onAuthStateChange(async (_event, activeSession) => {
         if (!isMounted) {
           return;
         }
@@ -98,25 +136,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        setSession((prev) => ({
-          ...prev,
-          isLoggedIn: true,
-          userId: activeSession.user.id,
-          accessToken: activeSession.access_token,
-          userName: resolveUserName(
-            activeSession.user.user_metadata,
-            activeSession.user.email,
-          ),
-          hasActiveSubscription: prev.hasActiveSubscription,
-          activePlan: prev.activePlan,
-          isAuthReady: true,
-        }));
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error || !user) {
+          setSession({ ...defaultSession, isAuthReady: true });
+          return;
+        }
+
+        setSession((prev) =>
+          buildSessionFromUser(user, activeSession.access_token, {
+            ...prev,
+            hasActiveSubscription: prev.hasActiveSubscription,
+            activePlan: prev.activePlan,
+          }),
+        );
       });
 
       unsubscribe = () => subscription.unsubscribe();
     } catch {
       if (isMounted) {
-        setSession((prev) => ({ ...prev, isAuthReady: true }));
+        setSession({ ...defaultSession, isAuthReady: true });
       }
     }
 
@@ -131,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       isLoggedIn: true,
       userName: payload.userName,
+      userEmail: payload.userEmail,
       userId: payload.userId,
       accessToken: payload.accessToken,
       isAuthReady: true,
@@ -145,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Supabase yapılandırması yoksa yalnızca yerel oturumu kapat.
     }
 
-    setSession(defaultSession);
+    setSession({ ...defaultSession, isAuthReady: true });
   }, []);
 
   const activateSubscription = useCallback((plan: SubscriptionPlanId) => {
