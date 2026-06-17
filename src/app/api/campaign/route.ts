@@ -23,6 +23,7 @@ import {
 } from "@/lib/selected-questions";
 import { generateMicroIntents } from "@/lib/geo-engine";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
+import { applyDistributionPlatforms } from "@/lib/distribution-platform";
 import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
@@ -215,6 +216,7 @@ export async function POST(request: Request) {
       baslik: string;
       icerik: string;
       slug: string;
+      platform?: string;
     }> = [];
 
     let persistedCampaignId: string | null = reservedCampaignId;
@@ -257,21 +259,23 @@ export async function POST(request: Request) {
                 targetBrand,
               },
             )
-          : buildFallbackMakaleler(makaleSayisi).map((makale, index) => {
-              const baslik = buildIntentPostTitle(
-                targetCity,
-                targetNiche,
-                index,
-              );
-              const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
+          : applyDistributionPlatforms(
+              buildFallbackMakaleler(makaleSayisi).map((makale, index) => {
+                const baslik = buildIntentPostTitle(
+                  targetCity,
+                  targetNiche,
+                  index,
+                );
+                const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
 
-              return {
-                baslik,
-                icerik: makale,
-                slug,
-                platform: "NexisAI Hub",
-              };
-            });
+                return {
+                  baslik,
+                  icerik: makale,
+                  slug,
+                  platform: "WORDPRESS",
+                };
+              }),
+            );
 
       const yeniKampanya = await completeCampaignWithBaits(reservedCampaignId, {
         sehir: targetCity,
@@ -287,11 +291,12 @@ export async function POST(request: Request) {
         baits: baitRecords,
       });
 
-      persistedBaits = yeniKampanya.baits.map((bait) => ({
+      persistedBaits = yeniKampanya.baits.map((bait, index) => ({
         id: bait.id,
         baslik: bait.baslik,
-        icerik: bait.icerik,
+        icerik: baitRecords[index]?.icerik ?? bait.icerik,
         slug: bait.slug,
+        platform: baitRecords[index]?.platform ?? "WORDPRESS",
       }));
       persistedCampaignId = yeniKampanya.id;
 

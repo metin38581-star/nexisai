@@ -5,6 +5,7 @@ import {
   buildIntentPostTitle,
   buildSemanticAnchorSlug,
 } from "@/lib/geo-prompt";
+import { applyDistributionPlatforms } from "@/lib/distribution-platform";
 
 export interface SelectedQuestionPair {
   question: string;
@@ -72,7 +73,8 @@ export function buildBaitRecordsFromSelectedQuestions(
 ): IntentBaitRecord[] {
   const usedSlugs = new Set<string>();
 
-  return pairs.map((pair, index) => {
+  return applyDistributionPlatforms(
+    pairs.map((pair, index) => {
     const generated = generatedArticles[index];
     const baslik =
       generated?.baslik ??
@@ -118,7 +120,8 @@ export function buildBaitRecordsFromSelectedQuestions(
       slug,
       platform: "NexisAI Hub",
     };
-  });
+  }),
+  );
 }
 
 export async function buildBaitRecordsFromSelectedQuestionsAsync(

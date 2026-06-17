@@ -2,7 +2,7 @@ import "server-only";
 
 /**
  * NexisAI Hub — hibrid dağıtım motoru.
- * İç yayın: /p/{slug} | Dış yayın: Make.com → external_live_url
+ * Medium: native API | WordPress: native REST API | Blogger: Make.com webhook
  */
 
 import {
@@ -11,6 +11,9 @@ import {
   type GeoDistributionContext,
 } from "@/lib/distribution-core";
 import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
+import { publishToMedium } from "@/lib/medium-publish";
+import { publishToWordPress } from "@/lib/wordpress-publish";
+import { updateBaitPublication } from "@/lib/bait-publication-update";
 import { prisma } from "@/lib/db";
 import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
@@ -19,6 +22,7 @@ export interface DistributionBait {
   baslik: string;
   icerik: string;
   slug: string;
+  platform?: string;
 }
 
 export interface DistributionResult {
@@ -26,19 +30,22 @@ export interface DistributionResult {
   slug: string;
   ok: boolean;
   externalLiveUrl?: string;
+  platform?: string;
+}
+
+function normalizePlatform(platform?: string): string {
+  return platform?.trim().toUpperCase() ?? "";
 }
 
 async function markBaitPublished(
   baitId: string,
+  liveUrl?: string,
   externalLiveUrl?: string,
 ): Promise<void> {
-  await prisma.bait.update({
-    where: { id: baitId },
-    data: {
-      yayinlandi: true,
-      status: "PUBLISHED",
-      ...(externalLiveUrl ? { externalLiveUrl } : {}),
-    },
+  await updateBaitPublication({
+    baitId,
+    liveUrl,
+    externalLiveUrl: externalLiveUrl ?? liveUrl,
   });
 }
 
@@ -57,6 +64,119 @@ async function saveCampaignExternalUrl(
   });
 }
 
+async function maybeSaveCampaignUrl(
+  campaignId: string,
+  url: string | undefined,
+  campaignExternalUrlSaved: { value: boolean },
+): Promise<void> {
+  if (!url || campaignExternalUrlSaved.value) {
+    return;
+  }
+
+  try {
+    await saveCampaignExternalUrl(campaignId, url);
+    campaignExternalUrlSaved.value = true;
+  } catch (error) {
+    console.error("[DAĞITIM]: Kampanya URL kaydı başarısız:", error);
+  }
+}
+
+async function publishBaitToMedium(
+  bait: DistributionBait,
+): Promise<DistributionResult> {
+  try {
+    const result = await publishToMedium({
+      title: bait.baslik,
+      html: bait.icerik,
+    });
+
+    if (!result.ok || !result.url) {
+      console.warn(
+        `[MEDIUM GÜVENLİ MOD]: /p/${bait.slug} — ${result.error ?? "yayınlanamadı"}; NexisAI Hub yayını korunuyor.`,
+      );
+      return {
+        baitId: bait.id,
+        slug: bait.slug,
+        ok: false,
+        platform: "MEDIUM",
+      };
+    }
+
+    await markBaitPublished(bait.id, result.url, result.url);
+
+    console.log(`[MEDIUM]: ${bait.baslik} → ${result.url} (Bait ${bait.id})`);
+
+    return {
+      baitId: bait.id,
+      slug: bait.slug,
+      ok: true,
+      externalLiveUrl: result.url,
+      platform: "MEDIUM",
+    };
+  } catch (error) {
+    console.error(
+      `[MEDIUM HATA]: Bait ${bait.id} yayınlanamadı — kampanya devam ediyor:`,
+      error,
+    );
+
+    return {
+      baitId: bait.id,
+      slug: bait.slug,
+      ok: false,
+      platform: "MEDIUM",
+    };
+  }
+}
+
+async function publishBaitToWordPress(
+  bait: DistributionBait,
+): Promise<DistributionResult> {
+  try {
+    const result = await publishToWordPress({
+      title: bait.baslik,
+      content: bait.icerik,
+    });
+
+    if (!result.ok || !result.url) {
+      console.warn(
+        `[WORDPRESS GÜVENLİ MOD]: /p/${bait.slug} — ${result.error ?? "yayınlanamadı"}; NexisAI Hub yayını korunuyor.`,
+      );
+      return {
+        baitId: bait.id,
+        slug: bait.slug,
+        ok: false,
+        platform: "WORDPRESS",
+      };
+    }
+
+    await markBaitPublished(bait.id, result.url, result.url);
+
+    console.log(
+      `[WORDPRESS]: ${bait.baslik} → ${result.url} (Bait ${bait.id})`,
+    );
+
+    return {
+      baitId: bait.id,
+      slug: bait.slug,
+      ok: true,
+      externalLiveUrl: result.url,
+      platform: "WORDPRESS",
+    };
+  } catch (error) {
+    console.error(
+      `[WORDPRESS HATA]: Bait ${bait.id} yayınlanamadı — kampanya devam ediyor:`,
+      error,
+    );
+
+    return {
+      baitId: bait.id,
+      slug: bait.slug,
+      ok: false,
+      platform: "WORDPRESS",
+    };
+  }
+}
+
 export async function distributeBaitsToNetwork(
   baits: DistributionBait[],
   context: GeoDistributionContext,
@@ -67,12 +187,47 @@ export async function distributeBaitsToNetwork(
   }
 
   const results: DistributionResult[] = [];
-  const articles = baits.map(({ baslik, icerik, slug }) => ({
+  const campaignExternalUrlSaved = { value: false };
+
+  const mediumBaits = baits.filter(
+    (bait) => normalizePlatform(bait.platform) === "MEDIUM",
+  );
+  const wordpressBaits = baits.filter(
+    (bait) => normalizePlatform(bait.platform) === "WORDPRESS",
+  );
+  const bloggerBaits = baits.filter(
+    (bait) => normalizePlatform(bait.platform) === "BLOGGER",
+  );
+
+  for (const bait of mediumBaits) {
+    const result = await publishBaitToMedium(bait);
+    results.push(result);
+    await maybeSaveCampaignUrl(
+      context.campaignId,
+      result.externalLiveUrl,
+      campaignExternalUrlSaved,
+    );
+  }
+
+  for (const bait of wordpressBaits) {
+    const result = await publishBaitToWordPress(bait);
+    results.push(result);
+    await maybeSaveCampaignUrl(
+      context.campaignId,
+      result.externalLiveUrl,
+      campaignExternalUrlSaved,
+    );
+  }
+
+  if (bloggerBaits.length === 0) {
+    return results;
+  }
+
+  const articles = bloggerBaits.map(({ baslik, icerik, slug }) => ({
     baslik,
     icerik,
     slug,
   }));
-  let campaignExternalUrlSaved = false;
 
   await runMultiDistributionPipeline(
     articles,
@@ -87,35 +242,38 @@ export async function distributeBaitsToNetwork(
     {
       latencyMs: 0,
       onArticleResult: async (index, result) => {
-        const bait = baits[index];
+        const bait = bloggerBaits[index];
         if (!bait) {
           return;
         }
 
         if (result.ok) {
           try {
-            await markBaitPublished(bait.id, result.externalLiveUrl);
+            await markBaitPublished(
+              bait.id,
+              result.externalLiveUrl,
+              result.externalLiveUrl,
+            );
 
-            if (result.externalLiveUrl && !campaignExternalUrlSaved) {
-              await saveCampaignExternalUrl(
-                context.campaignId,
-                result.externalLiveUrl,
-              );
-              campaignExternalUrlSaved = true;
-            }
+            await maybeSaveCampaignUrl(
+              context.campaignId,
+              result.externalLiveUrl,
+              campaignExternalUrlSaved,
+            );
 
             console.log(
-              `[NEXISAI HUB]: /p/${bait.slug} — Bait ${bait.id} SUCCESS${result.externalLiveUrl ? ` → ${result.externalLiveUrl}` : ""}.`,
+              `[BLOGGER WEBHOOK]: /p/${bait.slug} — Bait ${bait.id} SUCCESS${result.externalLiveUrl ? ` → ${result.externalLiveUrl}` : ""}.`,
             );
             results.push({
               baitId: bait.id,
               slug: bait.slug,
               ok: true,
               externalLiveUrl: result.externalLiveUrl,
+              platform: bait.platform,
             });
           } catch (dbError) {
             console.error(
-              `[NEXISAI HUB] Webhook başarılı ancak kayıt güncellenemedi (${bait.id}):`,
+              `[BLOGGER WEBHOOK] Başarılı ancak kayıt güncellenemedi (${bait.id}):`,
               dbError,
             );
             results.push({
@@ -123,15 +281,21 @@ export async function distributeBaitsToNetwork(
               slug: bait.slug,
               ok: true,
               externalLiveUrl: result.externalLiveUrl,
+              platform: bait.platform,
             });
           }
           return;
         }
 
         console.error(
-          `[NEXISAI HUB HATASI]: /p/${bait.slug} — Dış webhook reddetti; NexisAI Hub yayını korunuyor.`,
+          `[BLOGGER WEBHOOK HATASI]: /p/${bait.slug} — webhook reddetti; NexisAI Hub yayını korunuyor.`,
         );
-        results.push({ baitId: bait.id, slug: bait.slug, ok: false });
+        results.push({
+          baitId: bait.id,
+          slug: bait.slug,
+          ok: false,
+          platform: bait.platform,
+        });
       },
     },
   );
