@@ -167,7 +167,15 @@ export async function publishToWordPress(
     const message =
       error instanceof Error ? error.message : "WordPress API bağlantı hatası";
 
-    console.error("[WORDPRESS HATA]: İstek başarısız:", message);
+    console.error("[WORDPRESS HATA]: İstek başarısız:", {
+      endpoint,
+      title: input.title,
+      message,
+      error:
+        error instanceof Error
+          ? { name: error.name, stack: error.stack }
+          : error,
+    });
 
     return {
       ok: false,

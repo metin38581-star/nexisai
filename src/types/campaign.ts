@@ -128,6 +128,7 @@ export interface StoredCampaign {
   llmFeedback: string | null;
   liveUrl: string | null;
   externalLiveUrl: string | null;
+  wordpressUrl: string | null;
   createdAt: string;
   baits: StoredBait[];
 }

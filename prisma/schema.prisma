@@ -34,6 +34,7 @@ model Campaign {
   llmFeedback   String?   @default("Yapay zeka taraması bekleniyor...")
   liveUrl           String?   @map("live_url")
   externalLiveUrl   String?   @map("external_live_url")
+  wordpressUrl      String?   @map("wordpress_url")
   createdAt     DateTime  @default(now())
   baits         Bait[]
   intents       CampaignIntent[]

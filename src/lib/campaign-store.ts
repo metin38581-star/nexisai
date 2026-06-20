@@ -38,6 +38,7 @@ type SupabaseCampaignRow = {
   llmFeedback: string | null;
   live_url: string | null;
   external_live_url: string | null;
+  wordpress_url: string | null;
   createdAt: string;
   Bait?: SupabaseBaitRow[] | null;
 };
@@ -106,6 +107,7 @@ function mapCampaign(row: SupabaseCampaignRow): StoredCampaign {
     llmFeedback: row.llmFeedback,
     liveUrl: row.live_url,
     externalLiveUrl: row.external_live_url,
+    wordpressUrl: row.wordpress_url ?? null,
     createdAt: row.createdAt,
     baits: (row.Bait ?? []).map(mapBait),
   };
@@ -127,6 +129,7 @@ async function listCampaignsByUserViaPrisma(
       lastCheckedAt: campaign.lastCheckedAt?.toISOString() ?? null,
       liveUrl: campaign.liveUrl,
       externalLiveUrl: campaign.externalLiveUrl,
+      wordpressUrl: campaign.wordpressUrl,
       baits: campaign.baits.map((bait) => ({
         ...bait,
         createdAt: bait.createdAt.toISOString(),

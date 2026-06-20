@@ -14,6 +14,9 @@ import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
 import { publishToMedium } from "@/lib/medium-publish";
 import { publishToWordPress } from "@/lib/wordpress-publish";
 import { updateBaitPublication } from "@/lib/bait-publication-update";
+import { saveCampaignWordPressUrl } from "@/lib/wordpress-campaign-update";
+import { publishToAllChannels } from "@/lib/multi-channel-publish";
+import { buildHubArticleUrl } from "@/lib/hub-url";
 import { prisma } from "@/lib/db";
 import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
@@ -41,11 +44,13 @@ async function markBaitPublished(
   baitId: string,
   liveUrl?: string,
   externalLiveUrl?: string,
+  platform?: string,
 ): Promise<void> {
   await updateBaitPublication({
     baitId,
     liveUrl,
     externalLiveUrl: externalLiveUrl ?? liveUrl,
+    platform,
   });
 }
 
@@ -128,8 +133,34 @@ async function publishBaitToMedium(
   }
 }
 
+async function maybeSaveCampaignWordPressUrl(
+  campaignId: string,
+  url: string | undefined,
+  campaignWordPressUrlSaved: { value: boolean },
+): Promise<void> {
+  if (!url || campaignWordPressUrlSaved.value) {
+    return;
+  }
+
+  try {
+    await saveCampaignWordPressUrl(campaignId, url);
+    campaignWordPressUrlSaved.value = true;
+    console.log(
+      `[WORDPRESS]: Kampanya ${campaignId} wordpress_url kaydedildi → ${url}`,
+    );
+  } catch (error) {
+    console.error("[WORDPRESS]: Kampanya wordpress_url kaydı başarısız:", {
+      campaignId,
+      url,
+      error,
+    });
+  }
+}
+
 async function publishBaitToWordPress(
   bait: DistributionBait,
+  campaignId: string,
+  campaignWordPressUrlSaved: { value: boolean },
 ): Promise<DistributionResult> {
   try {
     const result = await publishToWordPress({
@@ -140,6 +171,11 @@ async function publishBaitToWordPress(
     if (!result.ok || !result.url) {
       console.warn(
         `[WORDPRESS GÜVENLİ MOD]: /p/${bait.slug} — ${result.error ?? "yayınlanamadı"}; NexisAI Hub yayını korunuyor.`,
+        {
+          baitId: bait.id,
+          statusCode: result.statusCode,
+          response: result.response,
+        },
       );
       return {
         baitId: bait.id,
@@ -149,7 +185,12 @@ async function publishBaitToWordPress(
       };
     }
 
-    await markBaitPublished(bait.id, result.url, result.url);
+    await markBaitPublished(bait.id, result.url, result.url, "WORDPRESS");
+    await maybeSaveCampaignWordPressUrl(
+      campaignId,
+      result.url,
+      campaignWordPressUrlSaved,
+    );
 
     console.log(
       `[WORDPRESS]: ${bait.baslik} → ${result.url} (Bait ${bait.id})`,
@@ -165,7 +206,15 @@ async function publishBaitToWordPress(
   } catch (error) {
     console.error(
       `[WORDPRESS HATA]: Bait ${bait.id} yayınlanamadı — kampanya devam ediyor:`,
-      error,
+      {
+        baitId: bait.id,
+        slug: bait.slug,
+        title: bait.baslik,
+        error:
+          error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : error,
+      },
     );
 
     return {
@@ -174,6 +223,43 @@ async function publishBaitToWordPress(
       ok: false,
       platform: "WORDPRESS",
     };
+  }
+}
+
+async function publishAutonomousChannelsForBaits(
+  baits: DistributionBait[],
+  results: DistributionResult[],
+): Promise<void> {
+  for (const bait of baits) {
+    const wordpressUrl = results.find(
+      (result) =>
+        result.baitId === bait.id &&
+        result.platform === "WORDPRESS" &&
+        result.ok &&
+        result.externalLiveUrl,
+    )?.externalLiveUrl;
+
+    try {
+      await publishToAllChannels({
+        title: bait.baslik,
+        htmlContent: bait.icerik,
+        slug: bait.slug,
+        hubUrl: buildHubArticleUrl(bait.slug),
+        wordpressUrl,
+      });
+    } catch (error) {
+      console.error(
+        `[OTONOM KANALLAR]: Bait ${bait.id} için yayın hatası — kampanya devam ediyor:`,
+        {
+          baitId: bait.id,
+          slug: bait.slug,
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message, stack: error.stack }
+              : error,
+        },
+      );
+    }
   }
 }
 
@@ -188,6 +274,7 @@ export async function distributeBaitsToNetwork(
 
   const results: DistributionResult[] = [];
   const campaignExternalUrlSaved = { value: false };
+  const campaignWordPressUrlSaved = { value: false };
 
   const mediumBaits = baits.filter(
     (bait) => normalizePlatform(bait.platform) === "MEDIUM",
@@ -210,7 +297,11 @@ export async function distributeBaitsToNetwork(
   }
 
   for (const bait of wordpressBaits) {
-    const result = await publishBaitToWordPress(bait);
+    const result = await publishBaitToWordPress(
+      bait,
+      context.campaignId,
+      campaignWordPressUrlSaved,
+    );
     results.push(result);
     await maybeSaveCampaignUrl(
       context.campaignId,
@@ -220,6 +311,7 @@ export async function distributeBaitsToNetwork(
   }
 
   if (bloggerBaits.length === 0) {
+    await publishAutonomousChannelsForBaits(baits, results);
     return results;
   }
 
@@ -300,6 +392,7 @@ export async function distributeBaitsToNetwork(
     },
   );
 
+  await publishAutonomousChannelsForBaits(baits, results);
   return results;
 }
 
