@@ -19,6 +19,7 @@
     "@supabase/supabase-js": "^2.108.1",
     "better-sqlite3": "^12.10.0",
     "btoa": "^1.2.1",
+    "framer-motion": "^12.40.0",
     "google-auth-library": "^9.15.1",
     "lucide-react": "^1.18.0",
     "next": "^15.1.0",
