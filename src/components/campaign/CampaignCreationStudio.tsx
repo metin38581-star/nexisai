@@ -12,6 +12,10 @@ import type { TurkishCitySlug } from "@/lib/turkey-cities";
 import {
   CAMPAIGN_SELECT_PLACEHOLDER,
   CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
+  MIN_CAMPAIGN_DAILY_BUDGET,
+  MIN_CAMPAIGN_DAYS,
+  clampCampaignDailyBudget,
+  clampCampaignDays,
 } from "@/lib/campaign-form-utils";
 import {
   resolveAutonomousCampaignButtonLabel,
@@ -29,7 +33,7 @@ const initialForm: CampaignFormData = {
   businessName: "",
   sector: "",
   city: "",
-  dailyBudget: 0,
+  dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
   campaignDays: 7,
 };
 
@@ -65,10 +69,7 @@ export default function CampaignCreationStudio({
   );
 
   const submitButtonLabel = useMemo(
-    () =>
-      form.dailyBudget >= 10
-        ? resolveAutonomousCampaignButtonLabel(form.dailyBudget)
-        : "Otonom Kampanyayı Başlat",
+    () => resolveAutonomousCampaignButtonLabel(form.dailyBudget),
     [form.dailyBudget],
   );
 
@@ -83,8 +84,8 @@ export default function CampaignCreationStudio({
     form.businessName.trim().length > 0 &&
     form.sector.length > 0 &&
     form.city.length > 0 &&
-    form.dailyBudget >= 10 &&
-    form.campaignDays >= 1;
+    form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
+    form.campaignDays >= MIN_CAMPAIGN_DAYS;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -107,8 +108,8 @@ export default function CampaignCreationStudio({
       businessName: form.businessName.trim(),
       sector: form.sector,
       city: form.city,
-      dailyBudget: form.dailyBudget,
-      campaignDays: form.campaignDays,
+      dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
+      campaignDays: clampCampaignDays(form.campaignDays),
     });
   };
 
@@ -184,27 +185,28 @@ export default function CampaignCreationStudio({
           <CyberBudgetField
             label="Günlük Operasyon Bütçesi ($)"
             value={form.dailyBudget}
-            min={10}
+            min={MIN_CAMPAIGN_DAILY_BUDGET}
             max={350}
             step={5}
-            allowUnset
+            clampMode="blur"
             onChange={(value) => updateField("dailyBudget", value)}
             showAgresiflik
           />
           <CyberBudgetField
             label="Operasyon Süresi (Gün)"
             value={form.campaignDays}
-            min={1}
+            min={MIN_CAMPAIGN_DAYS}
             max={90}
             step={1}
             prefix=""
             suffix="gün"
-            onChange={(value) => updateField("campaignDays", value)}
+            onChange={(value) =>
+              updateField("campaignDays", clampCampaignDays(value))
+            }
           />
         </div>
 
         <AutonomousAnalysisInfoCard
-          dailyBudget={form.dailyBudget}
           tierLabel={softCapResult.tierLabel}
           targetCount={softCapResult.maxQuestions}
           analysisDescription={softCapResult.analysisDescription}
@@ -245,13 +247,11 @@ export default function CampaignCreationStudio({
 }
 
 function AutonomousAnalysisInfoCard({
-  dailyBudget,
   tierLabel,
   targetCount,
   analysisDescription,
   contentDescription,
 }: {
-  dailyBudget: number;
   tierLabel: string;
   targetCount: number;
   analysisDescription: string;
@@ -268,23 +268,19 @@ function AutonomousAnalysisInfoCard({
             Otonom Yapay Zeka Pazar Analizi
           </p>
           <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-            {dailyBudget >= 10
-              ? analysisDescription
-              : "Günlük bütçe girildiğinde analiz derinliği otomatik belirlenir."}
+            {analysisDescription}
           </p>
-          {dailyBudget >= 10 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
-                {tierLabel}
-              </span>
-              <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[11px] font-semibold text-violet-200">
-                {targetCount} otonom hedef
-              </span>
-              <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-3 py-1 text-[11px] text-zinc-400">
-                {contentDescription}
-              </span>
-            </div>
-          ) : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
+              {tierLabel}
+            </span>
+            <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[11px] font-semibold text-violet-200">
+              {targetCount} otonom hedef
+            </span>
+            <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-3 py-1 text-[11px] text-zinc-400">
+              {contentDescription}
+            </span>
+          </div>
           <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
             Hedef sorular arka planda belirlenir; liste veya seçim ekranı
             gösterilmez. Kampanya başladığında sistem sektörünüzdeki en kritik

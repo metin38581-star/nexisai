@@ -19,15 +19,57 @@ export interface TelegraphCreatePageResponse {
 const TELEGRAPH_API = "https://api.telegra.ph";
 const DEFAULT_AUTHOR = "NexisAI Radar";
 
-function resolveTelegraphAccessToken(): string {
-  return (
-    process.env.TELEGRAPH_ACCESS_TOKEN?.trim() ||
-    "d3b294eceeb67ff623dd282357d6c656"
-  );
+let cachedAnonymousToken: string | null = null;
+
+function resolveTelegraphAccessToken(): string | null {
+  const envToken = process.env.TELEGRAPH_ACCESS_TOKEN?.trim();
+  return envToken || cachedAnonymousToken;
+}
+
+async function createAnonymousTelegraphAccount(): Promise<string | null> {
+  try {
+    const shortName = `nexisai${Date.now().toString(36)}`;
+    const response = await fetch(`${TELEGRAPH_API}/createAccount`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        short_name: shortName,
+        author_name: DEFAULT_AUTHOR,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      result?: { access_token?: string };
+    };
+
+    if (!response.ok || payload.ok === false || !payload.result?.access_token) {
+      console.error("[TELEGRAPH]: Anonim hesap oluşturulamadı:", payload);
+      return null;
+    }
+
+    cachedAnonymousToken = payload.result.access_token;
+    return cachedAnonymousToken;
+  } catch (error) {
+    console.error("[TELEGRAPH]: createAccount hatası:", error);
+    return null;
+  }
+}
+
+async function ensureTelegraphAccessToken(): Promise<string | null> {
+  const existing = resolveTelegraphAccessToken();
+  if (existing) {
+    return existing;
+  }
+  return createAnonymousTelegraphAccount();
 }
 
 export function isTelegraphPublishConfigured(): boolean {
-  return Boolean(resolveTelegraphAccessToken());
+  return true;
 }
 
 /**
@@ -40,10 +82,14 @@ export async function publishToTelegraph(input: {
   authorName?: string;
   accessToken?: string;
 }): Promise<TelegraphCreatePageResponse> {
-  const accessToken = input.accessToken?.trim() || resolveTelegraphAccessToken();
+  const accessToken =
+    input.accessToken?.trim() || (await ensureTelegraphAccessToken());
   const authorName = input.authorName?.trim() || DEFAULT_AUTHOR;
   const content = htmlToTelegraphNodes(input.htmlContent);
 
+  if (!accessToken) {
+    return { ok: false, error: "TELEGRAPH_NO_ACCESS_TOKEN" };
+  }
   try {
     const response = await fetch(`${TELEGRAPH_API}/createPage`, {
       method: "POST",
@@ -100,4 +146,11 @@ export async function publishToTelegraph(input: {
 
     return { ok: false, error: message };
   }
+}
+
+export async function distributeToTelegraph(
+  title: string,
+  content: string,
+): Promise<TelegraphCreatePageResponse> {
+  return publishToTelegraph({ title, htmlContent: content });
 }

@@ -40,6 +40,93 @@ function ensureNodeWebSocket(): void {
   }
 }
 
+function parseNostrPrivateKey(privateKey: string): Uint8Array {
+  const trimmed = privateKey.trim();
+  if (!trimmed) {
+    return generateSecretKey();
+  }
+
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return Uint8Array.from(trimmed.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)));
+  }
+
+  return generateSecretKey();
+}
+
+/**
+ * Nostr — kind:1 notu, özel anahtar ile imzalanır ve relay'lere gönderilir.
+ */
+export async function distributeToNostr(
+  privateKey: string,
+  content: string,
+  relays?: string[],
+): Promise<NostrPublishResult> {
+  const relayList = relays?.length ? relays : resolveNostrRelays();
+
+  if (relayList.length === 0) {
+    return { ok: false, error: "NOSTR_NO_RELAYS" };
+  }
+
+  try {
+    ensureNodeWebSocket();
+
+    const secretKey = parseNostrPrivateKey(privateKey);
+    const publicKey = getPublicKey(secretKey);
+
+    const event = finalizeEvent(
+      {
+        kind: 1,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [["t", "nexisai"], ["t", "llm-radar"]],
+        content,
+      },
+      secretKey,
+    );
+
+    const pool = new SimplePool();
+    const publishResults = await pool.publish(relayList, event);
+    pool.close(relayList);
+
+    const accepted = publishResults.some(Boolean);
+
+    if (!accepted) {
+      console.warn("[NOSTR UYARI]: Relay olayı reddetti.", {
+        eventId: event.id,
+        relays: relayList,
+      });
+      return {
+        ok: false,
+        eventId: event.id,
+        publicKey,
+        relays: relayList,
+        error: "NOSTR_RELAY_REJECTED",
+      };
+    }
+
+    console.log("[NOSTR BAŞARILI]:", { eventId: event.id, publicKey });
+
+    return {
+      ok: true,
+      eventId: event.id,
+      publicKey,
+      relays: relayList,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Nostr yayın hatası";
+
+    console.error("[NOSTR HATA]:", {
+      message,
+      error:
+        error instanceof Error
+          ? { name: error.name, stack: error.stack }
+          : error,
+    });
+
+    return { ok: false, error: message };
+  }
+}
+
 /**
  * Nostr protokolü — kind:1 metin notu, rastgele anahtar çifti ile imzalanır.
  */

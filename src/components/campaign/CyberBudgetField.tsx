@@ -14,6 +14,8 @@ interface CyberBudgetFieldProps {
   showAgresiflik?: boolean;
   /** true iken 0 değeri boş input olarak gösterilir (tarama öncesi bütçe zorunluluğu). */
   allowUnset?: boolean;
+  /** immediate: her değişimde min/max kilitle | blur: min yalnızca odak kaybında uygulanır */
+  clampMode?: "immediate" | "blur";
 }
 
 export default function CyberBudgetField({
@@ -27,16 +29,37 @@ export default function CyberBudgetField({
   onChange,
   showAgresiflik = false,
   allowUnset = false,
+  clampMode = "immediate",
 }: CyberBudgetFieldProps) {
   const profile =
     showAgresiflik && value > 0 ? resolveAgresiflikProfile(value) : null;
+
+  const clampValue = (next: number): number =>
+    Math.min(max, Math.max(min, next));
 
   const handleChange = (next: number) => {
     if (allowUnset && next <= 0) {
       onChange(0);
       return;
     }
-    onChange(Math.min(max, Math.max(min, next)));
+    if (clampMode === "blur") {
+      onChange(Math.min(max, next));
+      return;
+    }
+    onChange(clampValue(next));
+  };
+
+  const handleBlur = () => {
+    if (allowUnset && value === 0) {
+      return;
+    }
+    if (value < min || !Number.isFinite(value)) {
+      onChange(min);
+      return;
+    }
+    if (value > max) {
+      onChange(max);
+    }
   };
 
   return (
@@ -64,6 +87,7 @@ export default function CyberBudgetField({
               }
               handleChange(Number(raw));
             }}
+            onBlur={handleBlur}
             className="w-16 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600"
           />
           {suffix && <span className="ml-1 text-xs text-zinc-500">{suffix}</span>}
@@ -76,7 +100,7 @@ export default function CyberBudgetField({
         max={max}
         step={step}
         value={value > 0 ? value : min}
-        onChange={(e) => handleChange(Number(e.target.value))}
+        onChange={(e) => onChange(clampValue(Number(e.target.value)))}
         className="cyber-range w-full"
       />
 

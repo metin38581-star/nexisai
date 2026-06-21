@@ -32,6 +32,114 @@ export function isGitHubRadarPublishConfigured(): boolean {
   return resolveGitHubRadarConfig() !== null;
 }
 
+function buildGitHubPagesUrl(
+  username: string,
+  repo: string,
+  filePath: string,
+): string {
+  const normalizedPath = filePath.replace(/^\//, "");
+  return `https://${username}.github.io/${repo}/${normalizedPath}`;
+}
+
+/**
+ * GitHub Pages — Markdown dosyasını bait deposuna commit eder.
+ * Sıfır OAuth: sunucu tarafı GITHUB_TOKEN ile REST API kullanılır.
+ */
+export async function distributeToGitHubPages(
+  username: string,
+  repo: string,
+  filePath: string,
+  content: string,
+): Promise<GitHubRadarPublishResult> {
+  const token = process.env.GITHUB_TOKEN?.trim() || "";
+  const branch = process.env.GITHUB_RADAR_BRANCH?.trim() || "main";
+
+  if (!token) {
+    console.warn("[GITHUB PAGES]: GITHUB_TOKEN tanımlı değil.");
+    return { ok: false, error: "GITHUB_TOKEN_NOT_CONFIGURED" };
+  }
+
+  const normalizedPath = filePath.replace(/^\//, "");
+  const apiBase = `https://api.github.com/repos/${username}/${repo}/contents/${encodeURIComponent(normalizedPath)}`;
+
+  try {
+    let existingSha: string | undefined;
+
+    const existingResponse = await fetch(`${apiBase}?ref=${branch}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+
+    if (existingResponse.ok) {
+      const existing = (await existingResponse.json()) as { sha?: string };
+      existingSha = existing.sha;
+    }
+
+    const response = await fetch(apiBase, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({
+        message: "New LLM Radar Feed",
+        content: Buffer.from(content, "utf8").toString("base64"),
+        branch,
+        ...(existingSha ? { sha: existingSha } : {}),
+      }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      content?: { html_url?: string; sha?: string; path?: string };
+      message?: string;
+    };
+
+    if (!response.ok) {
+      const message = payload.message ?? `GitHub API HTTP ${response.status}`;
+      console.error("[GITHUB PAGES HATA]:", {
+        status: response.status,
+        message,
+        username,
+        repo,
+        filePath: normalizedPath,
+        response: payload,
+      });
+      return { ok: false, error: message };
+    }
+
+    const pagesUrl = buildGitHubPagesUrl(username, repo, normalizedPath);
+    console.log(`[GITHUB PAGES BAŞARILI]: ${pagesUrl}`);
+
+    return {
+      ok: true,
+      url: pagesUrl,
+      sha: payload.content?.sha,
+      path: payload.content?.path ?? normalizedPath,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "GitHub Pages commit hatası";
+
+    console.error("[GITHUB PAGES HATA]:", {
+      username,
+      repo,
+      filePath,
+      message,
+      error:
+        error instanceof Error
+          ? { name: error.name, stack: error.stack }
+          : error,
+    });
+
+    return { ok: false, error: message };
+  }
+}
+
 /**
  * GitHub Pages / Markdown Launcher — Contents API ile .md dosyası push eder.
  * Vercel serverless ortamında git CLI yerine REST API kullanılır (aynı sonuç).

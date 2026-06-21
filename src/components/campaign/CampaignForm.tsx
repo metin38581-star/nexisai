@@ -12,6 +12,10 @@ import type { TurkishCitySlug } from "@/lib/turkey-cities";
 import {
   CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
   CAMPAIGN_SELECT_PLACEHOLDER,
+  MIN_CAMPAIGN_DAILY_BUDGET,
+  MIN_CAMPAIGN_DAYS,
+  clampCampaignDailyBudget,
+  clampCampaignDays,
 } from "@/lib/campaign-form-utils";
 import {
   resolveAutonomousCampaignButtonLabel,
@@ -29,7 +33,7 @@ const initialForm: CampaignFormData = {
   businessName: "",
   sector: "",
   city: "",
-  dailyBudget: 20,
+  dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
   campaignDays: 7,
 };
 
@@ -81,8 +85,8 @@ export default function CampaignForm({
       businessName: form.businessName.trim(),
       sector: form.sector,
       city: form.city,
-      dailyBudget: form.dailyBudget,
-      campaignDays: form.campaignDays,
+      dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
+      campaignDays: clampCampaignDays(form.campaignDays),
     });
   };
 
@@ -158,9 +162,10 @@ export default function CampaignForm({
         <CyberBudgetField
           label="Günlük Operasyon Bütçesi ($)"
           value={form.dailyBudget}
-          min={10}
+          min={MIN_CAMPAIGN_DAILY_BUDGET}
           max={350}
           step={5}
+          clampMode="blur"
           onChange={(value) => updateField("dailyBudget", value)}
           showAgresiflik
         />
@@ -168,12 +173,14 @@ export default function CampaignForm({
         <CyberBudgetField
           label="Operasyon Süresi (Gün)"
           value={form.campaignDays}
-          min={1}
+          min={MIN_CAMPAIGN_DAYS}
           max={90}
           step={1}
           prefix=""
           suffix="gün"
-          onChange={(value) => updateField("campaignDays", value)}
+          onChange={(value) =>
+            updateField("campaignDays", clampCampaignDays(value))
+          }
         />
 
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">

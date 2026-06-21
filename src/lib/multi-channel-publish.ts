@@ -1,8 +1,6 @@
 import "server-only";
 
-import { publishToTelegraph } from "@/lib/telegraph-publish";
-import { publishToGitHubRadar } from "@/lib/github-radar-publish";
-import { publishToNostr } from "@/lib/nostr-publish";
+import { distributionEngine } from "@/lib/distribution-engine";
 import { buildRadarMarkdownDocument } from "@/lib/html-content-utils";
 
 export type AutonomousChannel = "telegraph" | "github" | "nostr";
@@ -32,27 +30,8 @@ export interface PublishToAllChannelsResult {
   nostr?: ChannelPublishResult;
 }
 
-function toChannelResult(
-  channel: AutonomousChannel,
-  result: {
-    ok: boolean;
-    url?: string;
-    eventId?: string;
-    error?: string;
-  },
-): ChannelPublishResult {
-  return {
-    channel,
-    ok: result.ok,
-    url: result.url,
-    id: result.eventId,
-    error: result.error,
-  };
-}
-
 /**
- * Her kampanya içeriğini izin gerektirmeyen 3 otonom kanala paralel fırlatır:
- * Telegra.ph · GitHub Radar (.md) · Nostr relay
+ * @deprecated distributionEngine.runDominanceNetworkForBait kullanın.
  */
 export async function publishToAllChannels(
   input: PublishToAllChannelsInput,
@@ -67,80 +46,45 @@ export async function publishToAllChannels(
       wordpressUrl: input.wordpressUrl,
     });
 
-  const channelResults: ChannelPublishResult[] = [];
+  const username = process.env.GITHUB_RADAR_OWNER?.trim() || "nexisai";
+  const repo = process.env.GITHUB_RADAR_REPO?.trim() || "nexisai-radar";
+  const privateKey = process.env.NOSTR_PRIVATE_KEY?.trim() || "";
 
-  try {
-    const [telegraphRaw, githubRaw, nostrRaw] = await Promise.all([
-      publishToTelegraph({
-        title: input.title,
-        htmlContent: input.htmlContent,
-      }).catch((error) => ({
-        ok: false as const,
-        error: error instanceof Error ? error.message : String(error),
-      })),
-      publishToGitHubRadar({
-        title: input.title,
-        htmlContent: input.htmlContent,
-        slug: input.slug,
-        hubUrl: input.hubUrl,
-        wordpressUrl: input.wordpressUrl,
-        markdownContent,
-      }).catch((error) => ({
-        ok: false as const,
-        error: error instanceof Error ? error.message : String(error),
-      })),
-      publishToNostr({
-        title: input.title,
-        htmlContent: input.htmlContent,
-        hubUrl: input.hubUrl,
-        wordpressUrl: input.wordpressUrl,
-      }).catch((error) => ({
-        ok: false as const,
-        error: error instanceof Error ? error.message : String(error),
-      })),
-    ]);
+  const [telegraphUrl, githubUrl, nostrEventId] = await Promise.all([
+    distributionEngine.distributeToTelegraph(input.title, input.htmlContent),
+    distributionEngine.distributeToGitHubPages(
+      username,
+      repo,
+      `${input.slug}.md`,
+      markdownContent,
+    ),
+    distributionEngine.distributeToNostr(
+      privateKey,
+      `${input.title}\n\n${markdownContent.slice(0, 500)}`,
+    ),
+  ]);
 
-    const telegraph = toChannelResult("telegraph", telegraphRaw);
-    const github = toChannelResult("github", githubRaw);
-    const nostr = toChannelResult("nostr", {
-      ok: nostrRaw.ok,
-      eventId: "eventId" in nostrRaw ? nostrRaw.eventId : undefined,
-      error: nostrRaw.error,
-    });
+  const telegraph: ChannelPublishResult = {
+    channel: "telegraph",
+    ok: Boolean(telegraphUrl),
+    url: telegraphUrl ?? undefined,
+  };
+  const github: ChannelPublishResult = {
+    channel: "github",
+    ok: Boolean(githubUrl),
+    url: githubUrl ?? undefined,
+  };
+  const nostr: ChannelPublishResult = {
+    channel: "nostr",
+    ok: Boolean(nostrEventId),
+    id: nostrEventId ?? undefined,
+  };
 
-    channelResults.push(telegraph, github, nostr);
-
-    const successCount = channelResults.filter((item) => item.ok).length;
-
-    console.log("[OTONOM KANALLAR]: Özet", {
-      title: input.title,
-      slug: input.slug,
-      successCount,
-      telegraph: telegraph.ok ? telegraph.url : telegraph.error,
-      github: github.ok ? github.url : github.error,
-      nostr: nostr.ok ? nostr.id : nostr.error,
-    });
-
-    return {
-      ok: successCount > 0,
-      results: channelResults,
-      telegraph,
-      github,
-      nostr,
-    };
-  } catch (error) {
-    console.error("[OTONOM KANALLAR HATA]: publishToAllChannels başarısız:", {
-      title: input.title,
-      slug: input.slug,
-      error:
-        error instanceof Error
-          ? { name: error.name, message: error.message, stack: error.stack }
-          : error,
-    });
-
-    return {
-      ok: false,
-      results: channelResults,
-    };
-  }
+  return {
+    ok: [telegraph, github, nostr].some((item) => item.ok),
+    results: [telegraph, github, nostr],
+    telegraph,
+    github,
+    nostr,
+  };
 }
