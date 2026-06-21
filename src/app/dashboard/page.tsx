@@ -1,32 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
 import Navbar from "@/components/layout/Navbar";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import CorporateFooter from "@/components/layout/CorporateFooter";
 import AuthModal, { type AuthViewMode } from "@/components/auth/AuthModal";
 import { useAuth } from "@/context/AuthContext";
+import type { CampaignFormData } from "@/types/campaign";
 
 export default function DashboardPage() {
-  const { isLoggedIn, isAuthReady, login } = useAuth();
+  const { login } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showApp, setShowApp] = useState(false);
   const [authMode, setAuthMode] = useState<AuthViewMode>("register");
+  const [pendingCampaign, setPendingCampaign] =
+    useState<CampaignFormData | null>(null);
 
-  useEffect(() => {
-    if (!isAuthReady) {
-      return;
+  const handleRequireAuth = (data?: CampaignFormData) => {
+    if (data) {
+      setPendingCampaign(data);
     }
-
-    if (isLoggedIn) {
-      setShowApp(true);
-      setShowAuthModal(false);
-    } else {
-      setShowApp(false);
-      setShowAuthModal(true);
-    }
-  }, [isLoggedIn, isAuthReady]);
+    setAuthMode("register");
+    setShowAuthModal(true);
+  };
 
   const handleAuthSuccess = (payload: {
     userName: string;
@@ -36,7 +32,6 @@ export default function DashboardPage() {
   }) => {
     login(payload);
     setShowAuthModal(false);
-    setShowApp(true);
   };
 
   return (
@@ -44,12 +39,19 @@ export default function DashboardPage() {
       <BackgroundGlow />
       <Navbar />
       <main className="relative z-10 flex-1">
-        {showApp && <DashboardShell />}
+        <DashboardShell
+          pendingCampaign={pendingCampaign}
+          onPendingCampaignHandled={() => setPendingCampaign(null)}
+          onRequireAuth={handleRequireAuth}
+        />
       </main>
       <CorporateFooter />
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
+        onClose={() => {
+          setShowAuthModal(false);
+          setPendingCampaign(null);
+        }}
         onSuccess={handleAuthSuccess}
         authMode={authMode}
         onAuthModeChange={setAuthMode}

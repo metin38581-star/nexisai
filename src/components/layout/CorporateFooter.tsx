@@ -12,10 +12,6 @@ export default function CorporateFooter() {
             Yapay Zeka Motoru Optimizasyonu (GEO) ve dijital görünürlük
             yönetim platformu. Tüm hakları saklıdır. © 2026
           </p>
-          <div className="mt-2 w-fit rounded border border-slate-800/60 bg-slate-900/50 px-3 py-1.5 font-mono text-[11px] text-slate-500">
-            🏢 Vergi Dairesi: Kocasinan V.D.{" "}
-            <span className="font-bold text-purple-400">|</span> V.N: 8370941679
-          </div>
         </div>
 
         <div className="flex flex-wrap gap-x-8 gap-y-4 text-xs font-medium text-slate-400">

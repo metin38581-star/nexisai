@@ -13,6 +13,8 @@ import {
   CAMPAIGN_SELECT_PLACEHOLDER,
   CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
   MIN_CAMPAIGN_DAILY_BUDGET,
+  MAX_CAMPAIGN_DAILY_BUDGET,
+  CAMPAIGN_BUDGET_STEP,
   MIN_CAMPAIGN_DAYS,
   clampCampaignDailyBudget,
   clampCampaignDays,
@@ -85,6 +87,7 @@ export default function CampaignCreationStudio({
     form.sector.length > 0 &&
     form.city.length > 0 &&
     form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
+    form.dailyBudget <= MAX_CAMPAIGN_DAILY_BUDGET &&
     form.campaignDays >= MIN_CAMPAIGN_DAYS;
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -183,11 +186,12 @@ export default function CampaignCreationStudio({
 
         <div className="grid gap-4 md:grid-cols-2">
           <CyberBudgetField
-            label="Günlük Operasyon Bütçesi ($)"
+            label="Günlük Operasyon Bütçesi (TL)"
             value={form.dailyBudget}
             min={MIN_CAMPAIGN_DAILY_BUDGET}
-            max={350}
-            step={5}
+            max={MAX_CAMPAIGN_DAILY_BUDGET}
+            step={CAMPAIGN_BUDGET_STEP}
+            suffix="₺"
             clampMode="blur"
             onChange={(value) => updateField("dailyBudget", value)}
             showAgresiflik

@@ -6,6 +6,7 @@ import { buildAuthFetchInit } from "@/lib/auth-headers";
 
 interface CyberWalletBarProps {
   refreshToken?: number;
+  onRequireAuth?: () => void;
 }
 
 function formatBalance(value: number): string {
@@ -15,8 +16,11 @@ function formatBalance(value: number): string {
   });
 }
 
-export default function CyberWalletBar({ refreshToken = 0 }: CyberWalletBarProps) {
-  const { accessToken } = useAuth();
+export default function CyberWalletBar({
+  refreshToken = 0,
+  onRequireAuth,
+}: CyberWalletBarProps) {
+  const { accessToken, isLoggedIn, userEmail } = useAuth();
   const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -96,6 +100,10 @@ export default function CyberWalletBar({ refreshToken = 0 }: CyberWalletBarProps
         <button
           type="button"
           onClick={() => {
+            if (!isLoggedIn || !userEmail) {
+              onRequireAuth?.();
+              return;
+            }
             setModalError(null);
             setIsModalOpen(true);
           }}

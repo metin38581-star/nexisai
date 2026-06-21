@@ -33,15 +33,24 @@ function formatLogTimestamp(): string {
 export default function AnalysisDashboard({
   walletRefreshToken = 0,
   onWalletRefresh,
+  pendingCampaign = null,
+  onPendingCampaignHandled,
+  onRequireAuth,
 }: {
   walletRefreshToken?: number;
   onWalletRefresh?: () => void;
+  pendingCampaign?: CampaignFormData | null;
+  onPendingCampaignHandled?: () => void;
+  onRequireAuth?: (data?: CampaignFormData) => void;
 } = {}) {
   return (
     <DistributionProvider>
       <AnalysisDashboardContent
         walletRefreshToken={walletRefreshToken}
         onWalletRefresh={onWalletRefresh}
+        pendingCampaign={pendingCampaign}
+        onPendingCampaignHandled={onPendingCampaignHandled}
+        onRequireAuth={onRequireAuth}
       />
     </DistributionProvider>
   );
@@ -50,16 +59,22 @@ export default function AnalysisDashboard({
 function AnalysisDashboardContent({
   walletRefreshToken,
   onWalletRefresh,
+  pendingCampaign,
+  onPendingCampaignHandled,
+  onRequireAuth,
 }: {
   walletRefreshToken: number;
   onWalletRefresh?: () => void;
+  pendingCampaign?: CampaignFormData | null;
+  onPendingCampaignHandled?: () => void;
+  onRequireAuth?: (data?: CampaignFormData) => void;
 }) {
   const {
     startDistribution,
     resetDistribution,
     status: distributionStatus,
   } = useDistribution();
-  const { accessToken, isAuthReady } = useAuth();
+  const { accessToken, isAuthReady, isLoggedIn, userEmail } = useAuth();
 
   const [session, setSession] = useState<CampaignSessionPayload | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -79,6 +94,14 @@ function AnalysisDashboardContent({
   const distributionRunningRef = useRef(false);
 
   const fetchCampaigns = useCallback(async (options?: { silent?: boolean }) => {
+    if (!accessToken) {
+      setCampaigns([]);
+      if (!options?.silent) {
+        setCampaignsLoading(false);
+      }
+      return;
+    }
+
     if (!options?.silent) {
       setCampaignsLoading(true);
     }
@@ -327,14 +350,36 @@ function AnalysisDashboardContent({
         return;
       }
 
+      if (!isLoggedIn || !userEmail) {
+        onRequireAuth?.(data);
+        return;
+      }
+
       clearCampaignSession();
 
       const payload = buildCampaignSession(data);
       setSession(payload);
       void runAnalysis(payload);
     },
-    [runAnalysis, isLoading],
+    [runAnalysis, isLoading, isLoggedIn, userEmail, onRequireAuth],
   );
+
+  useEffect(() => {
+    if (!pendingCampaign || !isLoggedIn || !userEmail || !accessToken) {
+      return;
+    }
+
+    const data = pendingCampaign;
+    onPendingCampaignHandled?.();
+    handleFormSubmit(data);
+  }, [
+    pendingCampaign,
+    isLoggedIn,
+    userEmail,
+    accessToken,
+    onPendingCampaignHandled,
+    handleFormSubmit,
+  ]);
 
   const handleFlowComplete = useCallback(() => {
     if (pendingDistributionRef.current) {
@@ -374,8 +419,8 @@ function AnalysisDashboardContent({
               <span className="text-gradient">GEO Tarama Merkezi</span>
             </h1>
             <p className="mt-3 text-sm text-zinc-400">
-              {session.sehir} · {session.sektor} · Günlük bütçe $
-              {session.gunlukButce.toLocaleString("en-US")} · {session.gunSayisi}{" "}
+              {session.sehir} · {session.sektor} · Günlük bütçe{" "}
+              {session.gunlukButce.toLocaleString("tr-TR")} ₺ · {session.gunSayisi}{" "}
               gün
             </p>
             {activeMeta && (
@@ -401,14 +446,17 @@ function AnalysisDashboardContent({
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
               Günlük bütçenizi ve operasyon sürenizi belirleyin; agresiflik
-              seviyeniz otomatik ölçeklensin — $150/gün ile Kritik Domination
+              seviyeniz otomatik ölçeklensin — 3.000 ₺/gün ile Kritik Domination
               moduna geçin.
             </p>
           </>
         )}
           </div>
 
-          <CyberWalletBar refreshToken={walletRefreshToken} />
+          <CyberWalletBar
+            refreshToken={walletRefreshToken}
+            onRequireAuth={() => onRequireAuth?.()}
+          />
         </div>
       </section>
 

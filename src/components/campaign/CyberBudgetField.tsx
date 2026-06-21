@@ -24,7 +24,7 @@ export default function CyberBudgetField({
   min,
   max,
   step = 1,
-  prefix = "$",
+  prefix = "",
   suffix,
   onChange,
   showAgresiflik = false,
@@ -37,6 +37,25 @@ export default function CyberBudgetField({
   const clampValue = (next: number): number =>
     Math.min(max, Math.max(min, next));
 
+  const snapToStep = (next: number): number => {
+    if (step <= 1) {
+      return clampValue(next);
+    }
+    const snapped = Math.round(next / step) * step;
+    return clampValue(snapped);
+  };
+
+  const formatAmount = (amount: number): string => {
+    const formatted = amount.toLocaleString("tr-TR");
+    if (suffix) {
+      return `${formatted} ${suffix}`;
+    }
+    if (prefix) {
+      return `${prefix}${formatted}`;
+    }
+    return formatted;
+  };
+
   const handleChange = (next: number) => {
     if (allowUnset && next <= 0) {
       onChange(0);
@@ -46,19 +65,25 @@ export default function CyberBudgetField({
       onChange(Math.min(max, next));
       return;
     }
-    onChange(clampValue(next));
+    onChange(snapToStep(next));
   };
 
   const handleBlur = () => {
     if (allowUnset && value === 0) {
       return;
     }
-    if (value < min || !Number.isFinite(value)) {
-      onChange(min);
-      return;
+
+    let next = value;
+    if (!Number.isFinite(next) || next < min) {
+      next = min;
     }
-    if (value > max) {
-      onChange(max);
+    if (next > max) {
+      next = max;
+    }
+    next = snapToStep(next);
+
+    if (next !== value) {
+      onChange(next);
     }
   };
 
@@ -88,9 +113,13 @@ export default function CyberBudgetField({
               handleChange(Number(raw));
             }}
             onBlur={handleBlur}
-            className="w-16 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600"
+            className="w-24 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600"
           />
-          {suffix && <span className="ml-1 text-xs text-zinc-500">{suffix}</span>}
+          {suffix ? (
+            <span className="ml-1 text-xs font-medium text-cyan-400/90">
+              {suffix}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -100,19 +129,13 @@ export default function CyberBudgetField({
         max={max}
         step={step}
         value={value > 0 ? value : min}
-        onChange={(e) => onChange(clampValue(Number(e.target.value)))}
+        onChange={(e) => onChange(snapToStep(Number(e.target.value)))}
         className="cyber-range w-full"
       />
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
-        <span>
-          {prefix}
-          {min}
-        </span>
-        <span>
-          {prefix}
-          {max}
-        </span>
+        <span>{formatAmount(min)}</span>
+        <span>{formatAmount(max)}</span>
       </div>
 
       {profile && (

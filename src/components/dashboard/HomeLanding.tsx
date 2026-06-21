@@ -2,10 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import AuthModal, { type AuthViewMode } from "@/components/auth/AuthModal";
 import AiRecommendationSimulator from "@/components/landing/AiRecommendationSimulator";
 import RoiBudgetCalculator from "@/components/landing/RoiBudgetCalculator";
-import { useAuth } from "@/context/AuthContext";
 
 const FEATURES = [
   {
@@ -243,23 +241,8 @@ function FaqAccordion() {
 
 export default function HomeLanding() {
   const router = useRouter();
-  const { login } = useAuth();
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthViewMode>("register");
 
-  const openAuthModal = (mode: AuthViewMode = "register") => {
-    setAuthMode(mode);
-    setShowAuthModal(true);
-  };
-
-  const handleAuthSuccess = (payload: {
-    userName: string;
-    userEmail: string | null;
-    userId: string;
-    accessToken: string;
-  }) => {
-    login(payload);
-    setShowAuthModal(false);
+  const openDashboard = () => {
     router.push("/dashboard");
   };
 
@@ -303,7 +286,7 @@ export default function HomeLanding() {
           <div className="mt-10 flex flex-col items-center gap-3">
             <button
               type="button"
-              onClick={() => openAuthModal("register")}
+              onClick={openDashboard}
               className={ctaButtonClassName}
             >
               <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity group-hover:opacity-100" />
@@ -537,21 +520,13 @@ export default function HomeLanding() {
         <div className="mt-14 text-center">
           <button
             type="button"
-            onClick={() => openAuthModal("register")}
+            onClick={openDashboard}
             className="inline-flex rounded-xl border border-violet-500/30 bg-violet-500/10 px-8 py-3.5 text-sm font-semibold text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/15 hover:shadow-[0_0_24px_rgba(139,92,246,0.15)]"
           >
             Paneli Aç ve İlk Kampanyanı Başlat 📈
           </button>
         </div>
       </section>
-
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={handleAuthSuccess}
-        authMode={authMode}
-        onAuthModeChange={setAuthMode}
-      />
     </main>
   );
 }

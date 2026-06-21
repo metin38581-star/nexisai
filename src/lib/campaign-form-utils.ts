@@ -5,13 +5,23 @@ export const CAMPAIGN_BUSINESS_NAME_PLACEHOLDER =
   "Lütfen işletme adını yazınız";
 
 export const MIN_CAMPAIGN_DAILY_BUDGET = 300;
+export const MAX_CAMPAIGN_DAILY_BUDGET = 3000;
+export const CAMPAIGN_BUDGET_STEP = 100;
 export const MIN_CAMPAIGN_DAYS = 3;
 
 export function clampCampaignDailyBudget(value: number): number {
   if (!Number.isFinite(value)) {
     return MIN_CAMPAIGN_DAILY_BUDGET;
   }
-  return value < MIN_CAMPAIGN_DAILY_BUDGET ? MIN_CAMPAIGN_DAILY_BUDGET : value;
+
+  const clamped = Math.min(
+    MAX_CAMPAIGN_DAILY_BUDGET,
+    Math.max(MIN_CAMPAIGN_DAILY_BUDGET, value),
+  );
+
+  return (
+    Math.round(clamped / CAMPAIGN_BUDGET_STEP) * CAMPAIGN_BUDGET_STEP
+  );
 }
 
 export function clampCampaignDays(value: number): number {
@@ -32,6 +42,7 @@ export function isCampaignFormReadyForScan(
     form.sector !== "" &&
     form.city !== "" &&
     Number.isFinite(form.dailyBudget) &&
-    form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET
+    form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
+    form.dailyBudget <= MAX_CAMPAIGN_DAILY_BUDGET
   );
 }
