@@ -68,6 +68,8 @@ export interface CampaignResponse {
   currentBalance?: number;
   campaignDraft?: CampaignApiRequest;
   message?: string;
+  /** Yinelenen istek — kampanya arka planda işleniyor. */
+  inProgress?: boolean;
   metrics: CampaignMetrics;
   terminalLogs: TerminalLogEntry[];
   llmResult?: LlmInquiryResult;

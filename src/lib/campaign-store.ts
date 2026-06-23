@@ -173,6 +173,8 @@ const DUPLICATE_CAMPAIGN_WINDOW_MS = 60_000;
 /** Eşzamanlı çift POST koruması — tamamlanmış kampanyalar için kısa pencere. */
 const CONCURRENT_CAMPAIGN_WINDOW_MS = 5_000;
 const INCOMPLETE_SHELL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const CAMPAIGN_PROCESSING_MARKER = "__NEXIS_PROCESSING__";
+const CAMPAIGN_PROCESSING_STALE_MS = 10 * 60 * 1000;
 
 /** Son 1 dakikada aynı marka + şehir için kampanya var mı? */
 export async function hasRecentDuplicateCampaign(
@@ -273,12 +275,13 @@ async function deleteCampaignById(campaignId: string): Promise<void> {
   await supabase.from("Campaign").delete().eq("id", campaignId);
 }
 
-async function findIncompleteCampaignShell(
+async function findCampaignWithoutBaits(
   userId: string,
   markaAdi: string,
   sehir: string,
+  maxAgeMs = INCOMPLETE_SHELL_MAX_AGE_MS,
 ): Promise<string | null> {
-  const since = new Date(Date.now() - INCOMPLETE_SHELL_MAX_AGE_MS);
+  const since = new Date(Date.now() - maxAgeMs);
   const normalizedBrand = markaAdi.trim().toLowerCase();
   const normalizedCity = sehir.trim().toLowerCase();
 
@@ -287,18 +290,23 @@ async function findIncompleteCampaignShell(
       const rows = await prisma.campaign.findMany({
         where: {
           userId,
-          makaleSayisi: 0,
           createdAt: { gte: since },
         },
-        select: { id: true, markaAdi: true, sehir: true, createdAt: true },
+        select: {
+          id: true,
+          markaAdi: true,
+          sehir: true,
+          _count: { select: { baits: true } },
+        },
         orderBy: { createdAt: "desc" },
-        take: 5,
+        take: 10,
       });
 
       const match = rows.find(
         (row) =>
           row.markaAdi.trim().toLowerCase() === normalizedBrand &&
-          row.sehir.trim().toLowerCase() === normalizedCity,
+          row.sehir.trim().toLowerCase() === normalizedCity &&
+          row._count.baits === 0,
       );
       return match?.id ?? null;
     } catch (error) {
@@ -309,25 +317,47 @@ async function findIncompleteCampaignShell(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("Campaign")
-    .select("id, markaAdi, sehir, makaleSayisi, createdAt")
+    .select("id, markaAdi, sehir, createdAt")
     .eq("userId", userId)
-    .eq("makaleSayisi", 0)
     .gte("createdAt", since.toISOString())
     .order("createdAt", { ascending: false })
-    .limit(5);
+    .limit(10);
 
   if (error) {
     console.error("[CAMPAIGN_SHELL]: Supabase sorgusu başarısız:", error);
     return null;
   }
 
-  const match = (data ?? []).find(
-    (row) =>
-      row.markaAdi?.trim().toLowerCase() === normalizedBrand &&
-      row.sehir?.trim().toLowerCase() === normalizedCity,
-  );
+  for (const row of data ?? []) {
+    if (
+      row.markaAdi?.trim().toLowerCase() !== normalizedBrand ||
+      row.sehir?.trim().toLowerCase() !== normalizedCity
+    ) {
+      continue;
+    }
 
-  return (match?.id as string | undefined) ?? null;
+    const baitCount = await getCampaignBaitCount(row.id as string);
+    if (baitCount === 0) {
+      return row.id as string;
+    }
+  }
+
+  return null;
+}
+
+async function findLatestMatchingCampaignId(
+  userId: string,
+  markaAdi: string,
+  sehir: string,
+  windowMs = DUPLICATE_CAMPAIGN_WINDOW_MS,
+): Promise<string | null> {
+  const recent = await findRecentMatchingCampaigns(
+    userId,
+    markaAdi,
+    sehir,
+    windowMs,
+  );
+  return recent.length > 0 ? recent[recent.length - 1].id : null;
 }
 
 async function refreshCampaignShell(
@@ -425,15 +455,15 @@ async function findRecentMatchingCampaigns(
 export async function claimAutonomousCampaignSlot(
   input: CampaignShellInput,
 ): Promise<string | null> {
-  const reusableShellId = await findIncompleteCampaignShell(
+  const resumableCampaignId = await findCampaignWithoutBaits(
     input.userId,
     input.markaAdi,
     input.sehir,
   );
 
-  if (reusableShellId) {
-    await refreshCampaignShell(reusableShellId, input);
-    return reusableShellId;
+  if (resumableCampaignId) {
+    await refreshCampaignShell(resumableCampaignId, input);
+    return resumableCampaignId;
   }
 
   const campaignId = crypto.randomUUID();
@@ -458,7 +488,21 @@ export async function claimAutonomousCampaignSlot(
       });
     } catch (error) {
       console.error("[CAMPAIGN_CLAIM]: Prisma shell oluşturulamadı:", error);
-      return null;
+      const retryId = await findCampaignWithoutBaits(
+        input.userId,
+        input.markaAdi,
+        input.sehir,
+      );
+      if (retryId) {
+        await refreshCampaignShell(retryId, input);
+        return retryId;
+      }
+      return findLatestMatchingCampaignId(
+        input.userId,
+        input.markaAdi,
+        input.sehir,
+        CONCURRENT_CAMPAIGN_WINDOW_MS,
+      );
     }
   } else {
     const supabase = getSupabaseAdmin();
@@ -468,7 +512,21 @@ export async function claimAutonomousCampaignSlot(
     });
     if (error) {
       console.error("[CAMPAIGN_CLAIM]: Supabase shell oluşturulamadı:", error);
-      return null;
+      const retryId = await findCampaignWithoutBaits(
+        input.userId,
+        input.markaAdi,
+        input.sehir,
+      );
+      if (retryId) {
+        await refreshCampaignShell(retryId, input);
+        return retryId;
+      }
+      return findLatestMatchingCampaignId(
+        input.userId,
+        input.markaAdi,
+        input.sehir,
+        CONCURRENT_CAMPAIGN_WINDOW_MS,
+      );
     }
   }
 
@@ -524,13 +582,73 @@ export async function resolveRecentDuplicateCampaignId(
   markaAdi: string,
   sehir: string,
 ): Promise<string | null> {
-  const recent = await findRecentMatchingCampaigns(
+  const withoutBaits = await findCampaignWithoutBaits(userId, markaAdi, sehir);
+  if (withoutBaits) {
+    return withoutBaits;
+  }
+
+  return findLatestMatchingCampaignId(
     userId,
     markaAdi,
     sehir,
-    CONCURRENT_CAMPAIGN_WINDOW_MS,
+    DUPLICATE_CAMPAIGN_WINDOW_MS,
   );
-  return recent[0]?.id ?? null;
+}
+
+export type CampaignExecutionState = "acquired" | "complete" | "in_progress";
+
+export async function tryAcquireCampaignExecution(
+  campaignId: string,
+): Promise<CampaignExecutionState> {
+  const baitCount = await getCampaignBaitCount(campaignId);
+  if (baitCount > 0) {
+    return "complete";
+  }
+
+  if (hasDatabaseUrl()) {
+    try {
+      const row = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { llmFeedback: true },
+      });
+
+      const feedback = row?.llmFeedback ?? null;
+      if (
+        typeof feedback === "string" &&
+        feedback.startsWith(CAMPAIGN_PROCESSING_MARKER)
+      ) {
+        const startedAt = Number(
+          feedback.slice(CAMPAIGN_PROCESSING_MARKER.length + 1),
+        );
+        if (
+          Number.isFinite(startedAt) &&
+          Date.now() - startedAt < CAMPAIGN_PROCESSING_STALE_MS
+        ) {
+          return "in_progress";
+        }
+      }
+
+      const updated = await prisma.campaign.updateMany({
+        where: {
+          id: campaignId,
+          llmFeedback: feedback,
+        },
+        data: { llmFeedback: `${CAMPAIGN_PROCESSING_MARKER}:${Date.now()}` },
+      });
+
+      if (updated.count === 1) {
+        return "acquired";
+      }
+
+      const baitCountAfter = await getCampaignBaitCount(campaignId);
+      return baitCountAfter > 0 ? "complete" : "in_progress";
+    } catch (error) {
+      console.error("[CAMPAIGN_LOCK]: Prisma kilidi alınamadı:", error);
+      return "acquired";
+    }
+  }
+
+  return "acquired";
 }
 
 export async function completeCampaignWithBaits(

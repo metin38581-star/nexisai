@@ -78,10 +78,7 @@ async function recoverDuplicateCampaignResult(
           return false;
         }
 
-        const hasContent =
-          campaign.makaleSayisi > 0 || (campaign.baits?.length ?? 0) > 0;
-
-        return hasContent || attempt >= 1;
+        return true;
       });
 
       if (!match) {
@@ -94,6 +91,7 @@ async function recoverDuplicateCampaignResult(
       return {
         success: true,
         campaignId: match.id,
+        inProgress: inProgress,
         baitsGenerated: baitCount,
         metrics: {
           visibilityRate: match.skor,
@@ -164,6 +162,79 @@ function applyCampaignSuccess(
   handlers.onWalletRefresh?.();
   void handlers.runRadarScan();
   void handlers.fetchCampaigns({ silent: true });
+}
+
+async function pollCampaignCompletion(
+  token: string,
+  payload: CampaignSessionPayload,
+  campaignId: string,
+  handlers: {
+    setActiveCampaignId: (id: string) => void;
+    setLlmResult: (value: LlmInquiryResult | null) => void;
+    setTerminalLogs: (logs: TerminalLogEntry[]) => void;
+    setPendingDistribution: (value: {
+      count: number;
+      sehir: string;
+      sektor: string;
+    } | null) => void;
+    onWalletRefresh?: () => void;
+    runRadarScan: () => Promise<void>;
+    fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
+  },
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 2000);
+    });
+
+    try {
+      const response = await fetch(
+        "/api/campaigns",
+        buildAuthFetchInit(token),
+      );
+      if (!response.ok) {
+        continue;
+      }
+
+      const campaigns = (await response.json()) as StoredCampaign[];
+      const match = campaigns.find((campaign) => campaign.id === campaignId);
+      if (!match) {
+        continue;
+      }
+
+      const baitCount = match.makaleSayisi || match.baits?.length || 0;
+      if (baitCount <= 0) {
+        continue;
+      }
+
+      applyCampaignSuccess(
+        payload,
+        {
+          success: true,
+          campaignId: match.id,
+          baitsGenerated: baitCount,
+          metrics: {
+            visibilityRate: match.skor,
+            estimatedTraffic: 0,
+            spentBudget: match.gunlukButce * match.gunSayisi,
+            totalBudget: match.gunlukButce * match.gunSayisi,
+          },
+          terminalLogs: [
+            {
+              id: `poll-ready-${Date.now()}`,
+              timestamp: formatLogTimestamp(),
+              category: "SİSTEM",
+              message: `✓ [OTURUM]: ${payload.markaAdi} kampanyası hazır — operasyon devam ediyor.`,
+            },
+          ],
+        },
+        handlers,
+      );
+      return;
+    } catch {
+      // Sonraki denemeye geç.
+    }
+  }
 }
 
 /** Strict Mode remount — bootstrap tekrar istek engeli. */
@@ -473,18 +544,36 @@ function AnalysisDashboardContent({
                 payload,
               );
               if (recovered?.success) {
-                applyCampaignSuccess(payload, recovered, {
+                const recoveryHandlers = {
                   setActiveCampaignId,
                   setLlmResult,
                   setTerminalLogs,
-                  setPendingDistribution: (value) => {
+                  setPendingDistribution: (value: {
+                    count: number;
+                    sehir: string;
+                    sektor: string;
+                  } | null) => {
                     pendingDistributionRef.current = value;
                   },
                   onWalletRefresh,
                   runRadarScan: () => runRadarScanRef.current(),
-                  fetchCampaigns: (options) =>
+                  fetchCampaigns: (options?: { silent?: boolean }) =>
                     fetchCampaignsRef.current(options),
-                });
+                };
+
+                applyCampaignSuccess(payload, recovered, recoveryHandlers);
+
+                if (
+                  recovered.campaignId &&
+                  ((recovered.baitsGenerated ?? 0) === 0 || recovered.inProgress)
+                ) {
+                  void pollCampaignCompletion(
+                    token,
+                    payload,
+                    recovered.campaignId,
+                    recoveryHandlers,
+                  );
+                }
                 return;
               }
             }
@@ -560,17 +649,33 @@ function AnalysisDashboardContent({
           }
 
           if (result.success) {
-            applyCampaignSuccess(payload, result, {
+            const successHandlers = {
               setActiveCampaignId,
               setLlmResult,
               setTerminalLogs,
-              setPendingDistribution: (value) => {
+              setPendingDistribution: (value: {
+                count: number;
+                sehir: string;
+                sektor: string;
+              } | null) => {
                 pendingDistributionRef.current = value;
               },
               onWalletRefresh,
               runRadarScan: () => runRadarScanRef.current(),
-              fetchCampaigns: (options) => fetchCampaignsRef.current(options),
-            });
+              fetchCampaigns: (options?: { silent?: boolean }) =>
+                fetchCampaignsRef.current(options),
+            };
+
+            applyCampaignSuccess(payload, result, successHandlers);
+
+            if (result.inProgress && result.campaignId) {
+              void pollCampaignCompletion(
+                token,
+                payload,
+                result.campaignId,
+                successHandlers,
+              );
+            }
             return;
           }
 

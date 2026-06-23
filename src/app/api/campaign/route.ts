@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
-import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, resolveRecentDuplicateCampaignId } from "@/lib/campaign-store";
+import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, resolveRecentDuplicateCampaignId, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
@@ -58,6 +58,37 @@ function buildAlreadyProcessedResponse(
       },
     ],
     message: "Kampanya zaten başlatılmış.",
+    metrics: {
+      visibilityRate: 0,
+      estimatedTraffic: 0,
+      spentBudget: 0,
+      totalBudget: 0,
+    },
+  };
+}
+
+function buildInProgressResponse(
+  campaignId: string,
+  markaAdi: string,
+): CampaignResponse {
+  return {
+    success: true,
+    campaignId,
+    inProgress: true,
+    baitsGenerated: 0,
+    terminalLogs: [
+      {
+        id: `progress-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString("tr-TR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        category: "SİSTEM",
+        message: `✓ [OTURUM]: ${markaAdi} kampanyası işleniyor — operasyon devam ediyor.`,
+      },
+    ],
+    message: "Kampanya işleniyor.",
     metrics: {
       visibilityRate: 0,
       estimatedTraffic: 0,
@@ -233,27 +264,36 @@ export async function POST(request: Request) {
 
     if (!reservedCampaignId) {
       console.warn(
-        "[OTONOM GEO]: Yinelenen istek reddedildi —",
+        "[OTONOM GEO]: Kampanya slotu alınamadı —",
         trimmedMarka,
         trimmedSehir,
       );
       return NextResponse.json(
         {
           success: false,
-          error: "Duplicate request",
+          error:
+            "Kampanya slotu şu anda alınamadı. Lütfen birkaç saniye bekleyip tekrar deneyin.",
         },
-        { status: 429 },
+        { status: 503 },
       );
     }
 
-    const existingBaitCount = await getCampaignBaitCount(reservedCampaignId);
-    if (existingBaitCount > 0) {
+    const executionState = await tryAcquireCampaignExecution(reservedCampaignId);
+
+    if (executionState === "complete") {
+      const existingBaitCount = await getCampaignBaitCount(reservedCampaignId);
       return NextResponse.json(
         buildAlreadyProcessedResponse(
           reservedCampaignId,
           existingBaitCount,
           trimmedMarka,
         ),
+      );
+    }
+
+    if (executionState === "in_progress") {
+      return NextResponse.json(
+        buildInProgressResponse(reservedCampaignId, trimmedMarka),
       );
     }
 
