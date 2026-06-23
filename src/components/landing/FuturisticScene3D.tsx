@@ -3,6 +3,12 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
+import {
+  buildRegisterPanel3D,
+  updateRegisterPanel3D,
+} from "@/components/landing/build-register-panel-3d";
+import { setLandingParallax } from "@/lib/landing-parallax";
+
 export default function FuturisticScene3D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -136,6 +142,9 @@ export default function FuturisticScene3D() {
     ring2.rotation.y = Math.PI / 4;
     brainGroup.add(ring2);
 
+    const registerPanel = buildRegisterPanel3D();
+    scene.add(registerPanel.panelGroup);
+
     scene.add(new THREE.AmbientLight(0x111122, 0.5));
     const pLight = new THREE.PointLight(0x8b5cf6, 1.2, 30);
     pLight.position.set(5, 3, 5);
@@ -144,23 +153,37 @@ export default function FuturisticScene3D() {
     cLight.position.set(-5, -3, 3);
     scene.add(cLight);
 
-    brainGroup.position.set(window.innerWidth < 900 ? 0 : 3.5, 0, 0);
-
     let targetRX = 0;
     let targetRY = 0;
+    let panelParallaxX = 0;
+    let panelParallaxY = 0;
+
+    const syncPanelLayout = () => {
+      const isMobile = window.innerWidth < 900;
+      brainGroup.position.x = isMobile ? 0 : 3.5;
+      registerPanel.panelGroup.visible = !isMobile;
+      if (!isMobile) {
+        registerPanel.panelGroup.position.set(3.2, -0.15, 1.2);
+      }
+    };
+
+    syncPanelLayout();
 
     const onMouseMove = (e: MouseEvent) => {
       const mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
       const mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
       targetRY = mouseX * 0.4;
       targetRX = mouseY * 0.25;
+      panelParallaxX = mouseX;
+      panelParallaxY = mouseY;
+      setLandingParallax(mouseX, mouseY);
     };
 
     const onResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      brainGroup.position.x = window.innerWidth < 900 ? 0 : 3.5;
+      syncPanelLayout();
     };
 
     document.addEventListener("mousemove", onMouseMove);
@@ -185,6 +208,8 @@ export default function FuturisticScene3D() {
       brainGroup.rotation.x += (targetRX - brainGroup.rotation.x) * 0.04;
       brainGroup.position.y = Math.sin(t * 0.5) * 0.15;
 
+      updateRegisterPanel3D(registerPanel, t, panelParallaxX, panelParallaxY);
+
       pLight.intensity = 1.2 + Math.sin(t * 2) * 0.3;
       cLight.intensity = 1 + Math.cos(t * 1.7) * 0.25;
 
@@ -206,6 +231,7 @@ export default function FuturisticScene3D() {
       pMat.dispose();
       lineGeo.dispose();
       lineMat.dispose();
+      registerPanel.dispose();
     };
   }, []);
 
