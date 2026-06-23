@@ -60,10 +60,6 @@ export default function CampaignCreationStudio({
   const isSubmitLocked = submitting || isLoading;
 
   const debouncedBudget = useDebouncedValue(form.dailyBudget, SLIDER_DEBOUNCE_MS);
-  const debouncedCampaignDays = useDebouncedValue(
-    form.campaignDays,
-    SLIDER_DEBOUNCE_MS,
-  );
 
   useEffect(() => {
     if (!isLoading) {
@@ -135,12 +131,12 @@ export default function CampaignCreationStudio({
 
   return (
     <div className="overflow-hidden">
-      <div className="mb-6">
+        <div className="mb-6">
         <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
           <Sparkles className="h-3.5 w-3.5" />
           Otonom GEO Kampanya Motoru
         </div>
-        <h2 className="text-xl font-semibold text-white">
+        <h2 className="text-lg font-semibold text-white sm:text-xl">
           GEO Kampanya Oluşturma Odası
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
@@ -150,7 +146,7 @@ export default function CampaignCreationStudio({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <CyberScanField label="İşletme / Marka Adı">
             <input
               type="text"
@@ -201,7 +197,7 @@ export default function CampaignCreationStudio({
           </CyberScanField>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <CyberBudgetField
             label="Günlük Operasyon Bütçesi (TL)"
             value={form.dailyBudget}
@@ -246,7 +242,7 @@ export default function CampaignCreationStudio({
           type="submit"
           disabled={submitting || isLoading || !isFormReadyToSubmit}
           aria-busy={submitting || isLoading}
-          className="group relative w-full overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="group relative w-full min-h-[48px] overflow-hidden rounded-xl py-4 text-base font-semibold text-white transition-all duration-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity duration-500 group-hover:opacity-100" />
           <span className="absolute inset-[1px] rounded-[11px] bg-zinc-950/20 backdrop-blur-sm" />

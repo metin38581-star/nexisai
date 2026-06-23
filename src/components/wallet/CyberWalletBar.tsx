@@ -47,8 +47,8 @@ export default function CyberWalletBar({
 
   return (
     <>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-        <div className="relative overflow-hidden rounded-xl border border-emerald-400/40 bg-zinc-950/85 px-4 py-2.5 shadow-[0_0_28px_rgba(52,211,153,0.22)] backdrop-blur-md">
+      <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+        <div className="relative w-full overflow-hidden rounded-xl border border-emerald-400/40 bg-zinc-950/85 px-4 py-3 shadow-[0_0_28px_rgba(52,211,153,0.22)] backdrop-blur-md sm:w-auto sm:py-2.5">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-emerald-500/15 via-emerald-400/5 to-emerald-500/15" />
           <div className="pointer-events-none absolute -right-4 -top-4 h-16 w-16 rounded-full bg-emerald-400/25 blur-2xl" />
           <p className="relative text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
@@ -67,7 +67,7 @@ export default function CyberWalletBar({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="dc-wallet-pulse rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-xs font-semibold text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20"
+          className="dc-wallet-pulse min-h-[44px] w-full rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm font-semibold text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 sm:w-auto sm:px-3 sm:py-2.5 sm:text-xs"
         >
           Bakiye Yükle (+)
         </button>

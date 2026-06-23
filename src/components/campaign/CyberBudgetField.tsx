@@ -97,10 +97,10 @@ export default function CyberBudgetField({
   };
 
   return (
-    <div className="rounded-xl border border-violet-500/15 bg-zinc-950/50 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="rounded-xl border border-violet-500/15 bg-zinc-950/50 p-3 sm:p-4">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <label className="text-sm font-medium text-zinc-300">{label}</label>
-        <div className="flex items-center rounded-lg border border-cyan-500/20 bg-zinc-900/80 px-3 py-1.5">
+        <div className="flex w-full items-center rounded-lg border border-cyan-500/20 bg-zinc-900/80 px-3 py-2 sm:w-auto sm:py-1.5">
           {prefix && (
             <span className="mr-1 text-sm font-semibold text-cyan-400">
               {prefix}
@@ -122,7 +122,7 @@ export default function CyberBudgetField({
               handleChange(Number(raw));
             }}
             onBlur={handleBlur}
-            className="w-24 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600"
+            className="w-full min-w-0 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600 sm:w-24"
           />
           {suffix ? (
             <span className="ml-1 text-xs font-medium text-cyan-400/90">

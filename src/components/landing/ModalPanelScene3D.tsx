@@ -7,6 +7,7 @@ import {
   buildRegisterPanel3D,
   updateRegisterPanel3D,
 } from "@/components/landing/build-register-panel-3d";
+import { bindPointerParallax, getSceneMobileScale } from "@/lib/pointer-parallax";
 import { setLandingParallax } from "@/lib/landing-parallax";
 
 interface ModalPanelScene3DProps {
@@ -45,24 +46,28 @@ export default function ModalPanelScene3D({ active }: ModalPanelScene3DProps) {
     let panelParallaxX = 0;
     let panelParallaxY = 0;
 
-    const onMouseMove = (e: MouseEvent) => {
-      panelParallaxX = (e.clientX / window.innerWidth - 0.5) * 2;
-      panelParallaxY = (e.clientY / window.innerHeight - 0.5) * 2;
-      setLandingParallax(panelParallaxX, panelParallaxY);
-    };
-
-    const resize = () => {
+    const applyLayout = () => {
       const parent = canvas.parentElement;
       const w = parent?.clientWidth ?? window.innerWidth;
       const h = parent?.clientHeight ?? window.innerHeight;
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+
+      const scale = getSceneMobileScale(w);
+      registerPanel.panelGroup.scale.setScalar(scale);
+      camera.position.z = w < 480 ? 10 : w < 768 ? 9 : 8;
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("resize", resize);
-    resize();
+    const unbindParallax = bindPointerParallax((x, y) => {
+      const mobileFactor = window.innerWidth < 768 ? 0.5 : 1;
+      panelParallaxX = x * mobileFactor;
+      panelParallaxY = y * mobileFactor;
+      setLandingParallax(panelParallaxX, panelParallaxY);
+    });
+
+    window.addEventListener("resize", applyLayout);
+    applyLayout();
 
     const clock = new THREE.Clock();
     let frameId = 0;
@@ -80,8 +85,8 @@ export default function ModalPanelScene3D({ active }: ModalPanelScene3DProps) {
 
     return () => {
       cancelAnimationFrame(frameId);
-      document.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("resize", resize);
+      unbindParallax();
+      window.removeEventListener("resize", applyLayout);
       setLandingParallax(0, 0);
       renderer.dispose();
       registerPanel.dispose();

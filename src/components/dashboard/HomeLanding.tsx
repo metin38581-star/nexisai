@@ -42,44 +42,44 @@ const OPTIMIZE_CARDS = [
 
 export default function HomeLanding() {
   return (
-    <div className={`landing-futuristic min-h-screen bg-[#050505] ${orbitron.variable}`}>
+    <div className={`landing-futuristic min-h-screen overflow-x-hidden bg-[#050505] ${orbitron.variable}`}>
       <FuturisticScene3D />
       <div className="lf-grid-overlay" aria-hidden />
       <div className="lf-vignette" aria-hidden />
 
-      <div className="lf-page mx-auto max-w-7xl px-6 lg:px-8">
+      <div className="lf-page mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Nav */}
-        <nav className="lf-animate-in flex items-center justify-between py-6">
-          <div className="flex items-center gap-3">
+        <nav className="lf-animate-in flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:py-6">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Image
               src="/logo.png"
               alt="NexisAI"
               width={160}
               height={40}
-              className="h-10 w-auto drop-shadow-[0_0_12px_rgba(139,92,246,0.55)]"
+              className="h-8 w-auto shrink-0 sm:h-10 drop-shadow-[0_0_12px_rgba(139,92,246,0.55)]"
               priority
             />
-            <span className="lf-orbitron lf-logo-text text-lg font-bold tracking-[0.12em]">
+            <span className="lf-orbitron lf-logo-text truncate text-base font-bold tracking-[0.12em] sm:text-lg">
               NEXIS AI
             </span>
           </div>
           <Link
             href="/dashboard"
-            className="rounded-full border border-violet-500/40 bg-violet-500/10 px-5 py-2.5 text-sm font-semibold text-[#e2e8f0] shadow-[0_0_20px_rgba(139,92,246,0.15)] transition hover:border-violet-500 hover:shadow-[0_0_30px_rgba(139,92,246,0.55)]"
+            className="touch-target inline-flex min-h-[44px] items-center justify-center rounded-full border border-violet-500/40 bg-violet-500/10 px-5 py-2.5 text-sm font-semibold text-[#e2e8f0] shadow-[0_0_20px_rgba(139,92,246,0.15)] transition hover:border-violet-500 hover:shadow-[0_0_30px_rgba(139,92,246,0.55)] sm:shrink-0"
           >
             Panele Git →
           </Link>
         </nav>
 
         {/* Hero */}
-        <section className="grid min-h-[calc(100vh-100px)] items-center gap-12 pb-16 pt-4 lg:grid-cols-2">
-          <div className="max-w-xl">
+        <section className="grid min-h-0 items-center gap-10 pb-12 pt-2 sm:gap-12 sm:pb-16 sm:pt-4 lg:min-h-[calc(100vh-100px)] lg:grid-cols-2">
+          <div className="min-w-0 max-w-xl">
             <div className="lf-animate-in lf-animate-in-1 mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-cyan-400 shadow-[0_0_24px_rgba(6,182,212,0.12)]">
               <span className="lf-badge-dot h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]" />
               GEO · Semantik Optimizasyon
             </div>
 
-            <h1 className="lf-animate-in lf-animate-in-2 lf-orbitron text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl lg:text-[2.75rem]">
+            <h1 className="lf-animate-in lf-animate-in-2 lf-orbitron text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl lg:text-4xl xl:text-[2.75rem]">
               <span className="lf-title-gradient">
                 Semantik İçerik Teknolojisi
               </span>{" "}
@@ -93,25 +93,25 @@ export default function HomeLanding() {
               hepsi tek panelde.
             </p>
 
-            <div className="lf-animate-in lf-animate-in-4 mt-8 flex flex-wrap gap-4">
+            <div className="lf-animate-in lf-animate-in-4 mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
               <Link
                 href="/dashboard"
-                className="lf-btn-primary relative inline-flex items-center gap-2 overflow-hidden rounded-xl px-8 py-4 text-base font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_0_40px_rgba(139,92,246,0.55),0_0_80px_rgba(6,182,212,0.2)]"
+                className="lf-btn-primary relative inline-flex min-h-[48px] items-center justify-center gap-2 overflow-hidden rounded-xl px-8 py-3.5 text-base font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_0_40px_rgba(139,92,246,0.55),0_0_80px_rgba(6,182,212,0.2)] sm:py-4"
               >
                 <span className="relative z-10">Hemen Başla</span>
                 <ArrowRight className="relative z-10 h-4 w-4" />
               </Link>
               <a
                 href="#optimize"
-                className="rounded-xl border border-slate-700/40 bg-white/[0.03] px-7 py-4 text-sm font-semibold text-[#94a3b8] transition hover:border-cyan-500/40 hover:text-[#e2e8f0] hover:shadow-[0_0_24px_rgba(6,182,212,0.1)]"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-slate-700/40 bg-white/[0.03] px-7 py-3.5 text-sm font-semibold text-[#94a3b8] transition hover:border-cyan-500/40 hover:text-[#e2e8f0] hover:shadow-[0_0_24px_rgba(6,182,212,0.1)] sm:py-4"
               >
                 Nasıl Çalışır?
               </a>
             </div>
 
-            <div className="lf-animate-in lf-animate-in-5 mt-10 flex flex-wrap gap-8">
+            <div className="lf-animate-in lf-animate-in-5 mt-8 grid grid-cols-3 gap-4 sm:mt-10 sm:flex sm:flex-wrap sm:gap-8">
               <div>
-                <p className="lf-orbitron lf-stat-value text-2xl font-bold text-cyan-400">
+                <p className="lf-orbitron lf-stat-value text-xl font-bold text-cyan-400 sm:text-2xl">
                   {formatWelcomeBalanceStat()}
                 </p>
                 <p className="mt-1 text-xs tracking-wide text-[#94a3b8]">
@@ -119,7 +119,7 @@ export default function HomeLanding() {
                 </p>
               </div>
               <div>
-                <p className="lf-orbitron lf-stat-value text-2xl font-bold text-cyan-400">
+                <p className="lf-orbitron lf-stat-value text-xl font-bold text-cyan-400 sm:text-2xl">
                   3+
                 </p>
                 <p className="mt-1 text-xs tracking-wide text-[#94a3b8]">
@@ -127,7 +127,7 @@ export default function HomeLanding() {
                 </p>
               </div>
               <div>
-                <p className="lf-orbitron lf-stat-value text-2xl font-bold text-cyan-400">
+                <p className="lf-orbitron lf-stat-value text-xl font-bold text-cyan-400 sm:text-2xl">
                   7/24
                 </p>
                 <p className="mt-1 text-xs tracking-wide text-[#94a3b8]">
@@ -208,7 +208,7 @@ export default function HomeLanding() {
           </p>
           <Link
             href="/dashboard"
-            className="lf-btn-primary relative mt-6 inline-flex items-center gap-2 overflow-hidden rounded-xl px-8 py-4 text-base font-bold text-white transition hover:-translate-y-0.5"
+            className="lf-btn-primary relative mt-6 inline-flex min-h-[48px] items-center justify-center gap-2 overflow-hidden rounded-xl px-8 py-3.5 text-base font-bold text-white transition hover:-translate-y-0.5 sm:py-4"
           >
             <span className="relative z-10">Kampanyayı Başlat</span>
             <ArrowRight className="relative z-10 h-4 w-4" />

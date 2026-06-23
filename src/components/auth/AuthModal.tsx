@@ -31,7 +31,7 @@ const AUTH_TIMEOUT_MS = 30_000;
 const AUTH_TIMEOUT_ERROR = "AUTH_TIMEOUT";
 
 const inputClassName =
-  "w-full rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 backdrop-blur-sm transition-colors focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/25";
+  "w-full min-h-[44px] rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-3 text-base text-white placeholder:text-zinc-600 backdrop-blur-sm transition-colors focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/25 sm:text-sm";
 
 interface AuthSessionResponse {
   success?: boolean;
@@ -332,15 +332,15 @@ export default function AuthModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-4">
       <div
-        className="absolute inset-0 bg-black/75 backdrop-blur-md"
+        className="fixed inset-0 bg-black/75 backdrop-blur-md"
         onClick={onClose}
         aria-hidden
       />
 
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950/80 p-8 shadow-[0_0_60px_rgba(139,92,246,0.15)] backdrop-blur-xl"
+        className="relative my-auto w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-800/80 bg-slate-950/80 p-5 shadow-[0_0_60px_rgba(139,92,246,0.15)] backdrop-blur-xl sm:max-h-none sm:rounded-2xl sm:p-8"
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-modal-title"
@@ -353,7 +353,7 @@ export default function AuthModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 text-sm text-zinc-500 transition-colors hover:border-slate-700 hover:text-white"
+          className="touch-target absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 text-sm text-zinc-500 transition-colors hover:border-slate-700 hover:text-white sm:right-4 sm:top-4 sm:h-8 sm:w-8"
           aria-label="Kapat"
         >
           ✕
@@ -366,7 +366,7 @@ export default function AuthModal({
 
           <h2
             id="auth-modal-title"
-            className="bg-gradient-to-r from-white via-slate-200 to-purple-400 bg-clip-text pr-8 text-2xl font-bold text-transparent"
+            className="bg-gradient-to-r from-white via-slate-200 to-purple-400 bg-clip-text pr-10 text-xl font-bold text-transparent sm:pr-8 sm:text-2xl"
           >
             {isRegister
               ? "NexisAI Operasyon Merkezine Katılın"
@@ -468,7 +468,7 @@ export default function AuthModal({
               type="submit"
               disabled={isSubmitting}
               aria-busy={isSubmitting}
-              className="group relative mt-2 w-full overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
+              className="group relative mt-2 w-full min-h-[48px] overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="absolute inset-0 bg-neon-gradient opacity-90 transition-opacity group-hover:opacity-100 group-disabled:opacity-70" />
               <span className="absolute inset-[1px] rounded-[11px] bg-slate-950/10" />

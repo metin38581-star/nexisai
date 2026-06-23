@@ -11,6 +11,7 @@ import {
   formatWelcomeBalanceMessage,
 } from "@/lib/wallet-constants";
 import { getLandingParallax } from "@/lib/landing-parallax";
+import { isMobileViewport } from "@/lib/pointer-parallax";
 import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
@@ -21,7 +22,7 @@ import {
 import "@/components/landing/landing-futuristic.css";
 
 const inputClassName =
-  "w-full rounded-xl border border-violet-500/25 bg-slate-950/50 px-4 py-3 text-sm text-white placeholder:text-zinc-600 backdrop-blur-md transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 focus:shadow-[0_0_20px_rgba(6,182,212,0.15)]";
+  "w-full min-h-[44px] rounded-xl border border-violet-500/25 bg-slate-950/50 px-4 py-3 text-base text-white placeholder:text-zinc-600 backdrop-blur-md transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 focus:shadow-[0_0_20px_rgba(6,182,212,0.15)] sm:text-sm";
 
 interface RegisterWalletPanelContentProps {
   mode: "register" | "wallet";
@@ -55,10 +56,13 @@ export default function RegisterWalletPanelContent({
     const tick = () => {
       const { x, y } = getLandingParallax();
       if (panelRef.current) {
+        const mobile = isMobileViewport();
+        const yDeg = mobile ? x * 4.5 : x * 10;
+        const xDeg = mobile ? -y * 3 : -y * 7;
         panelRef.current.style.transform = [
           "perspective(900px)",
-          `rotateY(${x * 10}deg)`,
-          `rotateX(${-y * 7}deg)`,
+          `rotateY(${yDeg}deg)`,
+          `rotateX(${xDeg}deg)`,
           "translateZ(0)",
         ].join(" ");
       }
@@ -241,19 +245,19 @@ export default function RegisterWalletPanelContent({
   return (
     <div
       ref={panelRef}
-      className="lf-register-panel-3d relative z-10 w-full max-w-md will-change-transform"
+      className="lf-register-panel-3d relative z-10 mx-auto w-full max-w-md px-3 pb-6 pt-4 will-change-transform sm:px-0 sm:pb-0 sm:pt-0"
       style={{ transformStyle: "preserve-3d" }}
     >
       <button
         type="button"
         onClick={onClose}
-        className="absolute -right-2 -top-2 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900/90 text-zinc-400 transition hover:text-white"
+        className="touch-target absolute right-1 top-1 z-20 flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900/90 text-zinc-400 transition hover:text-white sm:-right-2 sm:-top-2 sm:h-9 sm:w-9"
         aria-label="Kapat"
       >
         <X className="h-4 w-4" />
       </button>
 
-      <div className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-slate-950/55 p-8 shadow-[0_0_48px_rgba(139,92,246,0.22),0_0_80px_rgba(6,182,212,0.1)] backdrop-blur-xl">
+      <div className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-slate-950/55 p-5 shadow-[0_0_48px_rgba(139,92,246,0.22),0_0_80px_rgba(6,182,212,0.1)] backdrop-blur-xl sm:p-8">
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.14),transparent_55%)]"
           aria-hidden
@@ -348,7 +352,7 @@ export default function RegisterWalletPanelContent({
               <button
                 type="submit"
                 disabled={isSubmitting || isSendingOtp}
-                className="lf-register-btn relative w-full overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="lf-register-btn relative w-full min-h-[48px] overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 <span className="absolute inset-0 bg-neon-gradient opacity-90" />
                 <span className="absolute inset-[1px] rounded-[11px] bg-slate-950/15 backdrop-blur-sm" />
@@ -396,7 +400,7 @@ export default function RegisterWalletPanelContent({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="lf-register-btn relative w-full overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="lf-register-btn relative w-full min-h-[48px] overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 <span className="absolute inset-0 bg-neon-gradient opacity-90" />
                 <span className="absolute inset-[1px] rounded-[11px] bg-slate-950/15 backdrop-blur-sm" />

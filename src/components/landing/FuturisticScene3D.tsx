@@ -3,6 +3,12 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
+import {
+  bindPointerParallax,
+  getSceneCameraDistance,
+  getSceneMobileScale,
+} from "@/lib/pointer-parallax";
+
 export default function FuturisticScene3D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -12,16 +18,10 @@ export default function FuturisticScene3D() {
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(
-      55,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      200,
-    );
-    camera.position.set(0, 0, 14);
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+    camera.position.set(0, 0, getSceneCameraDistance());
 
     const brainGroup = new THREE.Group();
     scene.add(brainGroup);
@@ -147,24 +147,27 @@ export default function FuturisticScene3D() {
     let targetRX = 0;
     let targetRY = 0;
 
-    const onMouseMove = (e: MouseEvent) => {
-      const mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-      const mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-      targetRY = mouseX * 0.4;
-      targetRX = mouseY * 0.25;
-    };
-
-    const onResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+    const applyLayout = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.position.z = getSceneCameraDistance(w);
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      brainGroup.position.x = window.innerWidth < 900 ? 0 : 3.5;
+      renderer.setSize(w, h);
+
+      const scale = getSceneMobileScale(w);
+      brainGroup.scale.setScalar(scale);
+      brainGroup.position.x = w < 900 ? 0 : 3.5;
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("resize", onResize);
+    const unbindParallax = bindPointerParallax((x, y) => {
+      const mobileFactor = window.innerWidth < 768 ? 0.55 : 1;
+      targetRY = x * 0.4 * mobileFactor;
+      targetRX = y * 0.25 * mobileFactor;
+    });
 
-    brainGroup.position.set(window.innerWidth < 900 ? 0 : 3.5, 0, 0);
+    window.addEventListener("resize", applyLayout);
+    applyLayout();
 
     const clock = new THREE.Clock();
     let frameId = 0;
@@ -195,8 +198,8 @@ export default function FuturisticScene3D() {
 
     return () => {
       cancelAnimationFrame(frameId);
-      document.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("resize", onResize);
+      unbindParallax();
+      window.removeEventListener("resize", applyLayout);
       renderer.dispose();
       coreGeo.dispose();
       coreMat.dispose();

@@ -3,6 +3,12 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
+import {
+  bindPointerParallax,
+  getSceneCameraDistance,
+  getSceneMobileScale,
+} from "@/lib/pointer-parallax";
+
 /** Dashboard arka planı — landing FuturisticScene3D'ye dokunulmaz. */
 export default function DashboardCyberScene3D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,7 +22,7 @@ export default function DashboardCyberScene3D() {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-    camera.position.set(0, 0, 14);
+    camera.position.set(0, 0, getSceneCameraDistance());
 
     const group = new THREE.Group();
     scene.add(group);
@@ -67,28 +73,30 @@ export default function DashboardCyberScene3D() {
     );
     group.add(particles);
 
-    group.position.set(4, 0, 0);
-
     let targetRX = 0;
     let targetRY = 0;
 
-    const onMouseMove = (e: MouseEvent) => {
-      targetRY = (e.clientX / window.innerWidth - 0.5) * 0.25;
-      targetRX = (e.clientY / window.innerHeight - 0.5) * 0.15;
-    };
-
-    const resize = () => {
+    const applyLayout = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
       renderer.setSize(w, h);
       camera.aspect = w / h;
+      camera.position.z = getSceneCameraDistance(w);
       camera.updateProjectionMatrix();
+
+      const scale = getSceneMobileScale(w);
+      group.scale.setScalar(scale);
       group.position.x = w < 900 ? 0 : 4;
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("resize", resize);
-    resize();
+    const unbindParallax = bindPointerParallax((x, y) => {
+      const mobileFactor = window.innerWidth < 768 ? 0.55 : 1;
+      targetRY = x * 0.25 * mobileFactor;
+      targetRX = y * 0.15 * mobileFactor;
+    });
+
+    window.addEventListener("resize", applyLayout);
+    applyLayout();
 
     const clock = new THREE.Clock();
     let frameId = 0;
@@ -107,8 +115,8 @@ export default function DashboardCyberScene3D() {
 
     return () => {
       cancelAnimationFrame(frameId);
-      document.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("resize", resize);
+      unbindParallax();
+      window.removeEventListener("resize", applyLayout);
       renderer.dispose();
       pGeo.dispose();
       core.geometry.dispose();

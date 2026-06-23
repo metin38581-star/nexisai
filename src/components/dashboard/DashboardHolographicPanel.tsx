@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { bindPointerParallax, isMobileViewport } from "@/lib/pointer-parallax";
+
 interface DashboardHolographicPanelProps {
   children: ReactNode;
 }
@@ -12,20 +14,20 @@ export default function DashboardHolographicPanel({
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 2;
-      const y = (e.clientY / window.innerHeight - 0.5) * 2;
+    return bindPointerParallax((x, y) => {
       if (!panelRef.current) return;
+
+      const mobile = isMobileViewport();
+      const yFactor = mobile ? 2.2 : 5;
+      const xFactor = mobile ? 1.8 : 4;
+
       panelRef.current.style.transform = [
         "perspective(1200px)",
-        `rotateY(${x * 5}deg)`,
-        `rotateX(${-y * 4}deg)`,
+        `rotateY(${x * yFactor}deg)`,
+        `rotateX(${-y * xFactor}deg)`,
         "translateZ(0)",
       ].join(" ");
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    return () => window.removeEventListener("mousemove", onMouseMove);
+    });
   }, []);
 
   return (

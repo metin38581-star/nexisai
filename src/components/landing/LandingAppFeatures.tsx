@@ -58,7 +58,7 @@ export default function LandingAppFeatures() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {APP_FEATURES.map((feature, index) => {
           const isExpanded = expandedId === feature.id;
           const delayClass =
@@ -99,7 +99,7 @@ export default function LandingAppFeatures() {
                     type="button"
                     onClick={() => toggleExpand(feature.id)}
                     aria-expanded={isExpanded}
-                    className="lf-feature-btn flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-violet-200 transition"
+                    className="lf-feature-btn flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-violet-200 transition"
                   >
                     Nasıl Optimize Edilir?
                     <ChevronDown

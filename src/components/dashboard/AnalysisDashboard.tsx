@@ -549,16 +549,16 @@ function AnalysisDashboardContent({
   }
 
   return (
-    <main className="relative z-10 mx-auto max-w-7xl px-6 py-8 lg:px-8 lg:py-10">
-      <section className="mb-8">
+    <main className="relative z-10 mx-auto max-w-7xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+      <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium uppercase tracking-[0.25em] text-violet-400">
+        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-violet-400 sm:text-xs sm:tracking-[0.25em]">
           Canlı Analiz Paneli
         </p>
         {session ? (
           <>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
               {session.markaAdi}{" "}
               <span className="text-gradient">GEO Tarama Merkezi</span>
             </h1>
@@ -584,7 +584,7 @@ function AnalysisDashboardContent({
           </>
         ) : (
           <>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
               GEO Operasyon{" "}
               <span className="text-gradient">Komuta Merkezi</span>
             </h1>
@@ -604,7 +604,7 @@ function AnalysisDashboardContent({
         </div>
       </section>
 
-      <section className="mb-10">
+      <section className="mb-8 sm:mb-10">
         <DashboardHolographicPanel>
           <CampaignCreationStudio
             onSubmit={handleFormSubmit}
@@ -614,7 +614,7 @@ function AnalysisDashboardContent({
       </section>
 
       {session && (
-        <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
           <CyberTerminal
             key={terminalSessionKey}
             logs={terminalLogs}

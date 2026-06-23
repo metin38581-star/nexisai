@@ -9,6 +9,8 @@
   font-family: var(--font-geist-sans), "Inter", system-ui, sans-serif;
   color: var(--lf-text);
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .landing-futuristic .lf-grid-overlay {
@@ -20,7 +22,15 @@
     linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(6, 182, 212, 0.04) 1px, transparent 1px);
   background-size: 60px 60px;
+  background-attachment: fixed;
   mask-image: radial-gradient(ellipse 80% 70% at 70% 50%, black 20%, transparent 70%);
+}
+
+@media (max-width: 767px) {
+  .landing-futuristic .lf-grid-overlay {
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 100% 80% at 50% 40%, black 25%, transparent 75%);
+  }
 }
 
 .landing-futuristic .lf-vignette {
@@ -218,6 +228,13 @@
 .lf-feat-1 { animation-delay: 0.1s; }
 .lf-feat-2 { animation-delay: 0.22s; }
 .lf-feat-3 { animation-delay: 0.34s; }
+
+@media (max-width: 639px) {
+  .landing-futuristic .lf-btn-primary,
+  .landing-futuristic .lf-page a.rounded-xl {
+    min-height: 44px;
+  }
+}
 
 .lf-register-panel-3d {
   transform-style: preserve-3d;

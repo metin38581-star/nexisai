@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function CorporateFooter() {
   return (
-    <footer className="relative z-10 mt-24 border-t border-slate-900 bg-slate-950/80 px-6 py-12 backdrop-blur-md">
+    <footer className="relative z-10 mt-16 border-t border-slate-900 bg-slate-950/80 px-4 py-10 backdrop-blur-md sm:mt-24 sm:px-6 sm:py-12">
       <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 md:flex-row md:items-center">
         <div className="flex max-w-sm flex-col gap-2">
           <div className="text-sm font-semibold text-slate-200">
