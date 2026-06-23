@@ -186,11 +186,27 @@ export async function POST(request: Request) {
     }
 
     if (action === "register") {
+      let welcomeBalance: number | undefined;
       try {
-        await grantWelcomeBalance(user.id);
+        welcomeBalance = await grantWelcomeBalance(user.id);
       } catch (walletError) {
         console.error("[AUTH_SESSION]: Hoş geldin bakiyesi tanımlanamadı:", walletError);
       }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email ?? email,
+          userName: resolveDisplayName(
+            companyName,
+            email,
+            user.user_metadata as Record<string, unknown> | undefined,
+          ),
+        },
+        accessToken: session.access_token,
+        ...(welcomeBalance !== undefined ? { welcomeBalance } : {}),
+      });
     }
 
     return NextResponse.json({

@@ -6,6 +6,7 @@ import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import BrandLogo from "@/components/brand/BrandLogo";
+import { formatWelcomeBalanceMessage } from "@/lib/wallet-constants";
 import { getLandingParallax } from "@/lib/landing-parallax";
 import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { useAuth } from "@/context/AuthContext";
@@ -160,7 +161,7 @@ export default function RegisterWalletPanelContent({
         accessToken: result.accessToken,
       });
 
-      toast.success("Hesabınız doğrulandı! 100 ₺ hediye bakiyeniz tanımlandı. 🎁");
+      toast.success(`Hesabınız doğrulandı! ${formatWelcomeBalanceMessage()} hediye bakiyeniz tanımlandı. 🎁`);
       onClose();
       router.push("/dashboard");
     } catch {
@@ -354,7 +355,7 @@ export default function RegisterWalletPanelContent({
                           : "Gönderiliyor..."}
                     </>
                   ) : !OTP_BYPASS_ENABLED && registerStep === "otp" ? (
-                    "Doğrula ve 100 ₺ Hediye Bakiyeni Al 🎁"
+                    `Doğrula ve ${formatWelcomeBalanceMessage()} Hediye Bakiyeni Al 🎁`
                   ) : (
                     "Doğrulama Kodu Gönder 📧"
                   )}

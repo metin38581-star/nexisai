@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
 import { Orbitron } from "next/font/google";
 import { ArrowRight } from "lucide-react";
 
@@ -199,7 +200,7 @@ export default function HomeLanding() {
             aria-hidden
           />
           <h2 className="lf-orbitron relative text-xl font-bold text-white sm:text-2xl">
-            100 ₺ Hediye Bakiye ile Hemen Deneyin
+            {WELCOME_BALANCE_TL.toLocaleString("tr-TR")} ₺ Hediye Bakiye ile Hemen Deneyin
           </h2>
           <p className="relative mx-auto mt-3 max-w-md text-sm text-[#94a3b8]">
             Kayıt olun, OTP ile doğrulayın ve ilk GEO kampanyanızı dakikalar

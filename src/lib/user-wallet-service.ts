@@ -1,9 +1,11 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
+import { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
 import { listPaymentsByUserId, recordPayment } from "@/lib/payment-store";
 
-export const WELCOME_BALANCE_TL = 100;
+export { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
+
 const WELCOME_PROVIDER_CODE = "WELCOME_BALANCE";
 const TOPUP_PROVIDER_CODES = new Set(["WALLET_TOPUP", "IYZICO_CHECKOUT"]);
 
@@ -82,19 +84,34 @@ export async function getOrCreateUserWallet(
   return enrichWallet(created, userId);
 }
 
+/**
+ * Yeni kayıt: Wallet satırını auth user id ile oluşturur ve 300 TL hoş geldin bakiyesi tanımlar.
+ */
 export async function grantWelcomeBalance(userId: string): Promise<number> {
-  const wallet = await getOrCreateUserWallet(userId);
-
-  if (wallet.welcomeGranted) {
-    return wallet.balance;
+  if (!userId.trim()) {
+    throw new Error("Geçersiz kullanıcı kimliği.");
   }
 
-  const updated = await prisma.wallet.update({
+  if (await resolveWelcomeGranted(userId)) {
+    const existing = await prisma.wallet.findUnique({ where: { id: userId } });
+    return existing?.balance ?? 0;
+  }
+
+  const existingWallet = await prisma.wallet.findUnique({
     where: { id: userId },
-    data: {
-      balance: { increment: WELCOME_BALANCE_TL },
-    },
   });
+
+  const wallet = existingWallet
+    ? await prisma.wallet.update({
+        where: { id: userId },
+        data: { balance: { increment: WELCOME_BALANCE_TL } },
+      })
+    : await prisma.wallet.create({
+        data: {
+          id: userId,
+          balance: WELCOME_BALANCE_TL,
+        },
+      });
 
   await recordPayment({
     userId,
@@ -106,7 +123,7 @@ export async function grantWelcomeBalance(userId: string): Promise<number> {
     description: "Kayıt hoş geldin bakiyesi",
   });
 
-  return updated.balance;
+  return wallet.balance;
 }
 
 export async function decrementUserWalletBalance(

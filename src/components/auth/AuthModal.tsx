@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
+import { formatWelcomeBalanceMessage } from "@/lib/wallet-constants";
 import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import {
   isSupabaseConfigured,
@@ -277,7 +278,7 @@ export default function AuthModal({
 
       if (isRegister) {
         toast.success(
-          "Hesabınız doğrulandı! 100 ₺ hediye bakiyeniz tanımlandı. 🎁",
+          `Hesabınız doğrulandı! ${formatWelcomeBalanceMessage()} hediye bakiyeniz tanımlandı. 🎁`,
         );
         if (OTP_BYPASS_ENABLED) {
           router.push("/dashboard");
@@ -480,7 +481,7 @@ export default function AuthModal({
                   </>
                 ) : isRegister ? (
                   !OTP_BYPASS_ENABLED && registerStep === "otp" ? (
-                    "Doğrula ve 100 ₺ Hediye Bakiyeni Al 🎁"
+                    `Doğrula ve ${formatWelcomeBalanceMessage()} Hediye Bakiyeni Al 🎁`
                   ) : (
                     "Doğrulama Kodu Gönder 📧"
                   )
