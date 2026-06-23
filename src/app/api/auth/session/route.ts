@@ -186,7 +186,11 @@ export async function POST(request: Request) {
     }
 
     if (action === "register") {
-      await grantWelcomeBalance(user.id);
+      try {
+        await grantWelcomeBalance(user.id);
+      } catch (walletError) {
+        console.error("[AUTH_SESSION]: Hoş geldin bakiyesi tanımlanamadı:", walletError);
+      }
     }
 
     return NextResponse.json({

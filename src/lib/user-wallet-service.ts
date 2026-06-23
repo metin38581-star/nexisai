@@ -36,18 +36,29 @@ async function enrichWallet(
   wallet: { id: string; balance: number; updatedAt: Date },
   userId: string,
 ): Promise<UserWalletRecord> {
-  const [welcomeGranted, hasPaidTopUp] = await Promise.all([
-    resolveWelcomeGranted(userId),
-    resolveHasPaidTopUp(userId),
-  ]);
+  try {
+    const [welcomeGranted, hasPaidTopUp] = await Promise.all([
+      resolveWelcomeGranted(userId),
+      resolveHasPaidTopUp(userId),
+    ]);
 
-  return {
-    id: wallet.id,
-    balance: wallet.balance,
-    updatedAt: wallet.updatedAt,
-    welcomeGranted,
-    hasPaidTopUp,
-  };
+    return {
+      id: wallet.id,
+      balance: wallet.balance,
+      updatedAt: wallet.updatedAt,
+      welcomeGranted,
+      hasPaidTopUp,
+    };
+  } catch (error) {
+    console.error("[USER_WALLET]: Ödeme bayrakları okunamadı:", error);
+    return {
+      id: wallet.id,
+      balance: wallet.balance,
+      updatedAt: wallet.updatedAt,
+      welcomeGranted: false,
+      hasPaidTopUp: false,
+    };
+  }
 }
 
 export async function getOrCreateUserWallet(

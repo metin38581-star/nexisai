@@ -149,7 +149,12 @@ export async function listPaymentsByUserId(
     }
   }
 
-  return listPaymentsByUserViaSupabase(userId);
+  try {
+    return await listPaymentsByUserViaSupabase(userId);
+  } catch (error) {
+    console.error("[PAYMENT_STORE]: Supabase ödeme listesi hatası:", error);
+    return [];
+  }
 }
 
 async function sumSuccessfulPaymentsViaPrisma(
