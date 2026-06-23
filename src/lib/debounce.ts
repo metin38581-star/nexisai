@@ -1,12 +1,12 @@
-export interface DebouncedFunction<T extends (...args: never[]) => void> {
+export interface DebouncedFunction<T extends (...args: any[]) => void> {
   (...args: Parameters<T>): void;
   cancel: () => void;
   flush: () => void;
   pending: () => boolean;
 }
 
-export function debounce<T extends (...args: never[]) => void>(
-  fn: T,
+export function debounce<T extends (...args: any[]) => void>(
+  fn: (...args: Parameters<T>) => void,
   waitMs: number,
 ): DebouncedFunction<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;

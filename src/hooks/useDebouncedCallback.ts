@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { debounce, type DebouncedFunction } from "@/lib/debounce";
 
-export function useDebouncedCallback<T extends (...args: never[]) => void>(
+export function useDebouncedCallback<T extends (...args: any[]) => void>(
   callback: T,
   delayMs: number,
 ): DebouncedFunction<T> {
@@ -16,7 +16,7 @@ export function useDebouncedCallback<T extends (...args: never[]) => void>(
 
   const debounced = useMemo(
     () =>
-      debounce((...args: Parameters<T>) => {
+      debounce<T>((...args: Parameters<T>) => {
         callbackRef.current(...args);
       }, delayMs),
     [delayMs],
