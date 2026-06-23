@@ -146,6 +146,54 @@
   pointer-events: none;
 }
 
+.dashboard-cyber .dc-neon-range--violet .dc-neon-range-track::before {
+  background: linear-gradient(90deg, #8b5cf6, #06b6d4);
+  box-shadow:
+    0 0 16px rgba(139, 92, 246, 0.6),
+    0 0 28px rgba(6, 182, 212, 0.35);
+}
+
+.dashboard-cyber .dc-neon-range--amber .dc-neon-range-track::before {
+  background: linear-gradient(90deg, #fbbf24, #ef4444);
+  box-shadow:
+    0 0 18px rgba(251, 191, 36, 0.55),
+    0 0 30px rgba(239, 68, 68, 0.35);
+}
+
+.dashboard-cyber .dc-neon-range--quantum .dc-neon-range-track::before {
+  background: linear-gradient(90deg, #ef4444, #d946ef, #8b5cf6);
+  box-shadow:
+    0 0 22px rgba(239, 68, 68, 0.65),
+    0 0 40px rgba(217, 70, 239, 0.55);
+  animation: dc-quantum-range-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes dc-quantum-range-glow {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+.dashboard-cyber .dc-neon-range--quantum .cyber-range-neon::-webkit-slider-thumb {
+  border-color: #d946ef;
+  background: radial-gradient(circle at 30% 30%, #fff, #ef4444);
+  box-shadow:
+    0 0 20px rgba(239, 68, 68, 0.95),
+    0 0 36px rgba(217, 70, 239, 0.65);
+}
+
+.dashboard-cyber .dc-neon-range--quantum .cyber-range-neon::-moz-range-thumb {
+  border-color: #d946ef;
+  background: radial-gradient(circle at 30% 30%, #fff, #ef4444);
+  box-shadow:
+    0 0 20px rgba(239, 68, 68, 0.95),
+    0 0 36px rgba(217, 70, 239, 0.65);
+}
+
 .dashboard-cyber .cyber-range-neon {
   position: relative;
   height: 0.5rem;

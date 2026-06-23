@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 export const WELCOME_BALANCE_TL = 100;
 
 export async function getOrCreateUserWallet(userId: string) {
-  const existing = await prisma.userWallet.findUnique({
+  const existing = await prisma.wallet.findUnique({
     where: { userId },
   });
 
@@ -13,7 +13,7 @@ export async function getOrCreateUserWallet(userId: string) {
     return existing;
   }
 
-  return prisma.userWallet.create({
+  return prisma.wallet.create({
     data: {
       userId,
       balance: 0,
@@ -30,7 +30,7 @@ export async function grantWelcomeBalance(userId: string): Promise<number> {
     return wallet.balance;
   }
 
-  const updated = await prisma.userWallet.update({
+  const updated = await prisma.wallet.update({
     where: { userId },
     data: {
       balance: { increment: WELCOME_BALANCE_TL },
@@ -51,7 +51,7 @@ export async function decrementUserWalletBalance(
     throw new Error("INSUFFICIENT_BALANCE");
   }
 
-  const updated = await prisma.userWallet.update({
+  const updated = await prisma.wallet.update({
     where: { userId },
     data: { balance: { decrement: amount } },
   });
@@ -66,7 +66,7 @@ export async function creditUserWallet(
 ): Promise<number> {
   await getOrCreateUserWallet(userId);
 
-  const updated = await prisma.userWallet.update({
+  const updated = await prisma.wallet.update({
     where: { userId },
     data: {
       balance: { increment: amount },

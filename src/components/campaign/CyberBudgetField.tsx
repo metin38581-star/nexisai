@@ -1,7 +1,9 @@
 "use client";
 
-import { resolveAgresiflikProfile } from "@/lib/agresiflik";
 import NeonCyberRange from "@/components/campaign/NeonCyberRange";
+import BudgetOperationTierPanel from "@/components/campaign/BudgetOperationTierPanel";
+import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
+import "@/components/campaign/budget-operation-tier.css";
 
 interface CyberBudgetFieldProps {
   label: string;
@@ -32,8 +34,10 @@ export default function CyberBudgetField({
   allowUnset = false,
   clampMode = "immediate",
 }: CyberBudgetFieldProps) {
-  const profile =
-    showAgresiflik && value > 0 ? resolveAgresiflikProfile(value) : null;
+  const displayBudget = value > 0 ? value : min;
+  const tierNeon = showAgresiflik
+    ? resolveBudgetOperationTier(displayBudget).neonTheme
+    : "cyan";
 
   const clampValue = (next: number): number =>
     Math.min(max, Math.max(min, next));
@@ -129,6 +133,7 @@ export default function CyberBudgetField({
         max={max}
         step={step}
         value={value > 0 ? value : min}
+        neonTheme={tierNeon}
         onChange={(next) => onChange(snapToStep(next))}
       />
 
@@ -137,20 +142,9 @@ export default function CyberBudgetField({
         <span>{formatAmount(max)}</span>
       </div>
 
-      {profile && (
-        <div className="mt-3 rounded-lg border border-violet-500/10 bg-violet-500/5 px-3 py-2">
-          <p className="text-xs font-semibold text-violet-300">
-            Agresiflik:{" "}
-            <span className="text-white">{profile.seviye}</span>
-          </p>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-            {profile.aciklama}
-          </p>
-          <p className="mt-1 text-[11px] text-cyan-400/80">
-            Radar sıklığı: {profile.radarSikligi}
-          </p>
-        </div>
-      )}
+      {showAgresiflik ? (
+        <BudgetOperationTierPanel budget={displayBudget} />
+      ) : null}
     </div>
   );
 }

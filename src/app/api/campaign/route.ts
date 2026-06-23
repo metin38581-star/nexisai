@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
 import { claimAutonomousCampaignSlot, completeCampaignWithBaits } from "@/lib/campaign-store";
-import { formatRadarSikligi } from "@/lib/campaign-budget";
+import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
@@ -76,25 +76,10 @@ export async function POST(request: Request) {
     } = normalizeCampaignApiRequest(body);
     const toplamMaliyet = gunlukButce * gunSayisi;
 
-    let makaleSayisi = 2;
-    let agresiflikSeviyesi = "Düşük";
-    let radarSikligiDakika = 1440;
-
-    if (gunlukButce > 100) {
-      makaleSayisi = 15;
-      agresiflikSeviyesi = "Kritik Domination";
-      radarSikligiDakika = 15;
-    } else if (gunlukButce > 50) {
-      makaleSayisi = 8;
-      agresiflikSeviyesi = "Yüksek";
-      radarSikligiDakika = 60;
-    } else if (gunlukButce > 15) {
-      makaleSayisi = 4;
-      agresiflikSeviyesi = "Orta";
-      radarSikligiDakika = 360;
-    }
-
-    const radarSikligi = formatRadarSikligi(radarSikligiDakika);
+    const budgetParams = resolveCampaignBudgetParams(gunlukButce);
+    const agresiflikSeviyesi = budgetParams.agresiflikSeviyesi;
+    const radarSikligiDakika = budgetParams.radarSikligiDakika;
+    const radarSikligi = budgetParams.radarSikligi;
 
     if (!markaAdi || !sehir) {
       return NextResponse.json(
@@ -223,7 +208,7 @@ export async function POST(request: Request) {
     }
 
     const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
-    makaleSayisi = maxQuestions;
+    const makaleSayisi = maxQuestions;
 
     const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
 

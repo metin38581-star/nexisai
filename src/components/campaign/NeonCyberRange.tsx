@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { BudgetNeonTheme } from "@/lib/budget-operation-tiers";
+
 interface Particle {
   x: number;
   y: number;
@@ -15,14 +17,26 @@ interface NeonCyberRangeProps {
   max: number;
   step: number;
   value: number;
+  neonTheme?: BudgetNeonTheme;
   onChange: (value: number) => void;
 }
+
+const PARTICLE_COLORS: Record<
+  BudgetNeonTheme,
+  { primary: string; secondary: string }
+> = {
+  cyan: { primary: "6, 182, 212", secondary: "139, 92, 246" },
+  violet: { primary: "139, 92, 246", secondary: "6, 182, 212" },
+  amber: { primary: "251, 191, 36", secondary: "239, 68, 68" },
+  quantum: { primary: "239, 68, 68", secondary: "217, 70, 239" },
+};
 
 export default function NeonCyberRange({
   min,
   max,
   step,
   value,
+  neonTheme = "cyan",
   onChange,
 }: NeonCyberRangeProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -55,6 +69,8 @@ export default function NeonCyberRange({
     }
   }, [value, min, max, spawnParticles]);
 
+  const colors = PARTICLE_COLORS[neonTheme];
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
@@ -85,10 +101,9 @@ export default function NeonCyberRange({
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, 2 * p.life, 0, Math.PI * 2);
-        ctx.fillStyle =
-          p.life > 0.5
-            ? `rgba(6, 182, 212, ${p.life})`
-            : `rgba(139, 92, 246, ${p.life})`;
+        const rgb =
+          p.life > 0.5 ? colors.primary : colors.secondary;
+        ctx.fillStyle = `rgba(${rgb}, ${p.life})`;
         ctx.fill();
         return true;
       });
@@ -105,12 +120,15 @@ export default function NeonCyberRange({
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", resize);
     };
-  }, [isDragging, value, min, max, spawnParticles]);
+  }, [isDragging, value, min, max, spawnParticles, neonTheme]);
 
   const pct = ((value - min) / (max - min)) * 100;
 
   return (
-    <div ref={wrapRef} className="dc-neon-range-wrap relative pt-1">
+    <div
+      ref={wrapRef}
+      className={`dc-neon-range-wrap dc-neon-range--${neonTheme} relative pt-1`}
+    >
       <canvas
         ref={canvasRef}
         className="pointer-events-none absolute inset-0 h-full w-full"

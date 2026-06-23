@@ -1,3 +1,8 @@
+import {
+  resolveBudgetOperationTier,
+  resolveCampaignBudgetParamsFromTier,
+} from "@/lib/budget-operation-tiers";
+
 export interface CampaignBudgetParams {
   makaleSayisi: number;
   agresiflikSeviyesi: string;
@@ -8,23 +13,8 @@ export interface CampaignBudgetParams {
 export function resolveCampaignBudgetParams(
   gunlukButce: number,
 ): CampaignBudgetParams {
-  let makaleSayisi = 2;
-  let agresiflikSeviyesi = "Düşük";
-  let radarSikligiDakika = 1440;
-
-  if (gunlukButce > 100) {
-    makaleSayisi = 15;
-    agresiflikSeviyesi = "Kritik Domination";
-    radarSikligiDakika = 15;
-  } else if (gunlukButce > 50) {
-    makaleSayisi = 8;
-    agresiflikSeviyesi = "Yüksek";
-    radarSikligiDakika = 60;
-  } else if (gunlukButce > 15) {
-    makaleSayisi = 4;
-    agresiflikSeviyesi = "Orta";
-    radarSikligiDakika = 360;
-  }
+  const { makaleSayisi, agresiflikSeviyesi, radarSikligiDakika } =
+    resolveCampaignBudgetParamsFromTier(gunlukButce);
 
   return {
     makaleSayisi,
@@ -35,6 +25,10 @@ export function resolveCampaignBudgetParams(
 }
 
 export function formatRadarSikligi(dakika: number): string {
+  if (dakika <= 1) {
+    return "Canlı · 7/24";
+  }
+
   if (dakika < 60) {
     return `${dakika} Dakika`;
   }
@@ -48,6 +42,10 @@ export function formatRadarSikligi(dakika: number): string {
 }
 
 export function formatRadarLabel(dakika: number): string {
+  if (dakika <= 1) {
+    return "Canlı ve Kesintisiz (7/24)";
+  }
+
   if (dakika < 60) {
     return `${dakika} Dakikada Bir`;
   }
@@ -61,7 +59,7 @@ export function formatRadarLabel(dakika: number): string {
 }
 
 export function radarIntervalMs(radarSikligiDakika: number): number {
-  return radarSikligiDakika * 60 * 1000;
+  return Math.max(1, radarSikligiDakika) * 60 * 1000;
 }
 
 export function isCampaignDueForRadarScan(
@@ -81,4 +79,9 @@ export function computeNextRadarScanAt(
 ): Date {
   const anchorMs = (lastCheckedAt ?? createdAt).getTime();
   return new Date(anchorMs + radarSikligiDakika * 60 * 1000);
+}
+
+/** UI / meta için kademe adı */
+export function resolveBudgetTierModName(gunlukButce: number): string {
+  return resolveBudgetOperationTier(gunlukButce).modName;
 }

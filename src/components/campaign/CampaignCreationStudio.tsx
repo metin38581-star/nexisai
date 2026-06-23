@@ -27,6 +27,8 @@ import { resolveContentVolumePlan } from "@/lib/content-volume";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 import CyberScanField from "@/components/campaign/CyberScanField";
 import OrbitRingIcon from "@/components/campaign/OrbitRingIcon";
+import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
+import "@/components/campaign/budget-operation-tier.css";
 
 interface CampaignCreationStudioProps {
   onSubmit: (data: CampaignFormData) => void;
@@ -68,6 +70,11 @@ export default function CampaignCreationStudio({
 
   const contentVolumePlan = useMemo(
     () => resolveContentVolumePlan(form.dailyBudget),
+    [form.dailyBudget],
+  );
+
+  const budgetTier = useMemo(
+    () => resolveBudgetOperationTier(form.dailyBudget),
     [form.dailyBudget],
   );
 
@@ -212,6 +219,7 @@ export default function CampaignCreationStudio({
         </div>
 
         <AutonomousAnalysisInfoCard
+          tier={budgetTier}
           tierLabel={softCapResult.tierLabel}
           targetCount={softCapResult.maxQuestions}
           analysisDescription={softCapResult.analysisDescription}
@@ -252,18 +260,22 @@ export default function CampaignCreationStudio({
 }
 
 function AutonomousAnalysisInfoCard({
+  tier,
   tierLabel,
   targetCount,
   analysisDescription,
   contentDescription,
 }: {
+  tier: ReturnType<typeof resolveBudgetOperationTier>;
   tierLabel: string;
   targetCount: number;
   analysisDescription: string;
   contentDescription: string;
 }) {
+  const cardThemeClass = `bot-analysis-card bot-analysis-card--${tier.neonTheme}`;
+
   return (
-    <div className="rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/5 via-zinc-950/40 to-violet-500/5 p-5">
+    <div className={cardThemeClass}>
       <div className="flex items-start gap-4">
         <OrbitRingIcon className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-cyan-500/10">
           <Cpu className="h-5 w-5 text-cyan-300" />
@@ -284,6 +296,9 @@ function AutonomousAnalysisInfoCard({
             </span>
             <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-3 py-1 text-[11px] text-zinc-400">
               {contentDescription}
+            </span>
+            <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold text-cyan-200">
+              Radar: {tier.radarSikligi}
             </span>
           </div>
           <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">

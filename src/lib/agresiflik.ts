@@ -3,12 +3,14 @@ import {
   radarIntervalMs,
   resolveCampaignBudgetParams,
 } from "@/lib/campaign-budget";
+import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
 
 export type AgresiflikSeviyesi =
   | "Düşük"
   | "Orta"
   | "Yüksek"
-  | "Kritik Domination";
+  | "Kritik Domination"
+  | "Kuantum Alpha";
 
 export interface AgresiflikProfile {
   seviye: AgresiflikSeviyesi;
@@ -22,20 +24,14 @@ export function resolveAgresiflikProfile(
   gunlukButce: number,
 ): AgresiflikProfile {
   const params = resolveCampaignBudgetParams(gunlukButce);
-
-  const aciklamaMap: Record<string, string> = {
-    "Kritik Domination": `Kritik Domination — Günde ${params.makaleSayisi} GEO yemleme, radar ${params.radarSikligiDakika} dakikada bir.`,
-    Yüksek: `Yüksek Mod — Günde ${params.makaleSayisi} GEO yemleme, radar saatte bir.`,
-    Orta: `Orta Mod — Günde ${params.makaleSayisi} GEO yemleme, radar 6 saatte bir.`,
-    Düşük: `Sakin Mod — Günde ${params.makaleSayisi} GEO yemleme, radar günde bir.`,
-  };
+  const tier = resolveBudgetOperationTier(gunlukButce);
 
   return {
-    seviye: params.agresiflikSeviyesi as AgresiflikSeviyesi,
+    seviye: tier.agresiflikSeviyesi as AgresiflikSeviyesi,
     makaleSayisi: params.makaleSayisi,
-    radarSikligi: params.radarSikligi,
+    radarSikligi: tier.radarSikligi,
     radarSikligiDakika: params.radarSikligiDakika,
-    aciklama: aciklamaMap[params.agresiflikSeviyesi] ?? aciklamaMap.Düşük,
+    aciklama: tier.promoText,
   };
 }
 
@@ -56,6 +52,7 @@ export function getCampaignMetaFromDb(campaign: {
     resolveCampaignBudgetParams(campaign.gunlukButce).radarSikligiDakika;
 
   const renkMap: Record<string, string> = {
+    "Kuantum Alpha": "text-fuchsia-400 border-fuchsia-500/40",
     "Kritik Domination": "text-red-500 border-red-500/30",
     Kritik: "text-red-500 border-red-500/30",
     Yüksek: "text-purple-500 border-purple-500/30",
@@ -86,6 +83,10 @@ export function getCampaignMeta(butce: number): CampaignMeta {
 }
 
 export function resolveAgresiflikBadgeClass(seviye: string): string {
+  if (seviye === "Kuantum Alpha") {
+    return "border-fuchsia-500/60 bg-fuchsia-500/20 text-fuchsia-100 shadow-[0_0_24px_rgba(217,70,239,0.45)]";
+  }
+
   if (seviye === "Kritik" || seviye === "Kritik Domination") {
     return "border-fuchsia-500/50 bg-fuchsia-500/15 text-fuchsia-200 shadow-[0_0_16px_rgba(217,70,239,0.25)]";
   }

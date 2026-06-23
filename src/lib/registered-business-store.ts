@@ -41,7 +41,7 @@ export async function isTrialBlockedForBusiness(
     return false;
   }
 
-  const wallet = await prisma.userWallet.findUnique({
+  const wallet = await prisma.wallet.findUnique({
     where: { userId },
   });
 

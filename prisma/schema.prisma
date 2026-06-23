@@ -11,22 +11,18 @@ datasource db {
 }
 
 model Wallet {
-  id        String   @id @default(uuid())
-  balance   Float    @default(500.0)
-  updatedAt DateTime @default(now()) @updatedAt
-}
-
-model UserWallet {
   id             String   @id @default(uuid())
-  userId         String   @unique @map("userId")
+  userId         String?  @unique @map("userId")
   balance        Float    @default(0)
   welcomeGranted Boolean  @default(false) @map("welcome_granted")
   hasPaidTopUp   Boolean  @default(false) @map("has_paid_top_up")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now()) @updatedAt
 
-  @@map("UserWallet")
+  @@map("Wallet")
 }
+
+// Eski UserWallet modeli kaldırıldı — tüm sorgular prisma.wallet üzerinden çalışır.
 
 model RegisteredBusiness {
   id              String   @id @default(uuid())

@@ -14,23 +14,26 @@ export interface IntentSoftCapResult {
   softCap: number;
   maxQuestions: number;
   effectiveBudget: number;
-  tier: "low" | "medium" | "high" | "domination";
+  tier: "standard" | "advanced" | "domination" | "quantum";
   tierLabel: string;
   analysisDescription: string;
 }
 
 /** Günlük bütçeye göre LLM soru havuzu / seçim limiti. */
 export function resolveMaxQuestionsFromDailyBudget(dailyBudget: number): number {
-  if (dailyBudget <= 50) {
-    return 2;
+  if (dailyBudget >= 2000) {
+    return MAX_GEO_INTENTS;
   }
-  if (dailyBudget <= 150) {
-    return 5;
+  if (dailyBudget >= 1000) {
+    return 16;
   }
-  if (dailyBudget <= 300) {
-    return 10;
+  if (dailyBudget >= 400) {
+    return 12;
   }
-  return MAX_GEO_INTENTS;
+  if (dailyBudget >= 200) {
+    return 8;
+  }
+  return 5;
 }
 
 /** Slider yanında gösterilecek canlı pazar analizi açıklaması. */
@@ -39,32 +42,32 @@ export function resolveMarketAnalysisDepthDescription(
 ): string {
   const maxQuestions = resolveMaxQuestionsFromDailyBudget(dailyBudget);
 
-  if (dailyBudget <= 50) {
-    return `Düşük bütçe: En popüler ${maxQuestions} soru analiz edilecek`;
+  if (dailyBudget >= 2000) {
+    return `Kuantum Alpha: ${maxQuestions} kritik hedef otonom ajanlarla 7/24 domine edilir — mutlak görünürlük modu.`;
   }
-  if (dailyBudget <= 150) {
-    return `Orta bütçe: En popüler ${maxQuestions} soru analiz edilecek`;
+  if (dailyBudget >= 1000) {
+    return `Kritik Domination: ${maxQuestions} hedef saatlik radar ile yapay zeka motorlarında eşzamanlı baskınlık kurar.`;
   }
-  if (dailyBudget <= 300) {
-    return `Yüksek bütçe: En popüler ${maxQuestions} soru derinlemesine analiz edilecek`;
+  if (dailyBudget >= 400) {
+    return `Gelişmiş Operasyon: ${maxQuestions} hedef çift motorlu (ChatGPT + Gemini) semantik analizle taranır.`;
   }
-  return `Agresif bütçe: En popüler ${maxQuestions} soru analiz edilip domine edilecek`;
+  return `Standart Giriş: En popüler ${maxQuestions} soru analiz edilir — temel yapay zeka görünürlüğü başlatılır.`;
 }
 
-/** Otonom kampanya başlat butonu metni — bütçe tier'ına göre. */
+/** Otonom kampanya başlat butonu metni — bütçe kademesine göre. */
 export function resolveAutonomousCampaignButtonLabel(dailyBudget: number): string {
   const count = resolveMaxQuestionsFromDailyBudget(dailyBudget);
 
-  if (dailyBudget <= 50) {
-    return `${count} Kritik Hedefle Otonom Kampanyayı Başlat`;
+  if (dailyBudget >= 2000) {
+    return `🚀 Kuantum Alpha — ${count} Hedefle Otonom Domination Başlat`;
   }
-  if (dailyBudget <= 150) {
-    return `${count} Hedefle Otonom Kampanyayı Başlat`;
+  if (dailyBudget >= 1000) {
+    return `🔥 ${count} Hedefle Kritik Domination Başlat`;
   }
-  if (dailyBudget <= 300) {
-    return `${count} Derin Hedefle Otonom Kampanyayı Başlat`;
+  if (dailyBudget >= 400) {
+    return `${count} Hedefle Gelişmiş Operasyonu Başlat`;
   }
-  return `${count} Derin Hedefle Otonom Kampanyayı Başlat`;
+  return `${count} Kritik Hedefle Otonom Kampanyayı Başlat`;
 }
 
 export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapResult {
@@ -76,18 +79,18 @@ export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapRe
   let tier: IntentSoftCapResult["tier"];
   let tierLabel: string;
 
-  if (dailyBudget > 300) {
+  if (dailyBudget >= 2000) {
+    tier = "quantum";
+    tierLabel = "Kuantum Alpha Modu";
+  } else if (dailyBudget >= 1000) {
     tier = "domination";
-    tierLabel = "Dominasyon Modu";
-  } else if (dailyBudget > 150) {
-    tier = "high";
-    tierLabel = "Agresif Mod";
-  } else if (dailyBudget > 50) {
-    tier = "medium";
-    tierLabel = "Büyüme Modu";
+    tierLabel = "Kritik Domination Modu";
+  } else if (dailyBudget >= 400) {
+    tier = "advanced";
+    tierLabel = "Gelişmiş Operasyon Modu";
   } else {
-    tier = "low";
-    tierLabel = "Keşif Modu";
+    tier = "standard";
+    tierLabel = "Standart Giriş Modu";
   }
 
   return {
