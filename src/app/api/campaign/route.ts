@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
-import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, resolveRecentDuplicateCampaignId, tryAcquireCampaignExecution } from "@/lib/campaign-store";
+import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
@@ -242,39 +242,28 @@ export async function POST(request: Request) {
       );
     }
 
-    let reservedCampaignId = await claimAutonomousCampaignSlot({
-      userId: activeUserId,
-      sehir: trimmedSehir,
-      sektor: trimmedSektor,
-      markaAdi: trimmedMarka,
-      gunlukButce,
-      gunSayisi,
-      agresiflik: agresiflikSeviyesi,
-      radarSikligi,
-      radarSikligiDakika,
-    });
-
-    if (!reservedCampaignId) {
-      reservedCampaignId = await resolveRecentDuplicateCampaignId(
-        activeUserId,
-        trimmedMarka,
-        trimmedSehir,
-      );
-    }
-
-    if (!reservedCampaignId) {
-      console.warn(
-        "[OTONOM GEO]: Kampanya slotu alınamadı —",
-        trimmedMarka,
-        trimmedSehir,
-      );
+    let reservedCampaignId: string;
+    try {
+      reservedCampaignId = await claimAutonomousCampaignSlot({
+        userId: activeUserId,
+        sehir: trimmedSehir,
+        sektor: trimmedSektor,
+        markaAdi: trimmedMarka,
+        gunlukButce,
+        gunSayisi,
+        agresiflik: agresiflikSeviyesi,
+        radarSikligi,
+        radarSikligiDakika,
+      });
+    } catch (slotError) {
+      console.error("[OTONOM GEO]: Kampanya slotu alınamadı:", slotError);
       return NextResponse.json(
         {
           success: false,
           error:
-            "Kampanya slotu şu anda alınamadı. Lütfen birkaç saniye bekleyip tekrar deneyin.",
+            "Kampanya başlatılamadı. Lütfen birkaç saniye bekleyip tekrar deneyin.",
         },
-        { status: 503 },
+        { status: 500 },
       );
     }
 

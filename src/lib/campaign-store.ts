@@ -3,7 +3,7 @@ import "server-only";
 import type { StoredBait, StoredCampaign } from "@/types/campaign";
 import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { hasDatabaseUrl } from "@/lib/server-env";
+import { hasDatabaseUrl, hasSupabaseAdminEnv } from "@/lib/server-env";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 
 type SupabaseBaitRow = {
@@ -174,7 +174,128 @@ const DUPLICATE_CAMPAIGN_WINDOW_MS = 60_000;
 const CONCURRENT_CAMPAIGN_WINDOW_MS = 5_000;
 const INCOMPLETE_SHELL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CAMPAIGN_PROCESSING_MARKER = "__NEXIS_PROCESSING__";
-const CAMPAIGN_PROCESSING_STALE_MS = 10 * 60 * 1000;
+const CAMPAIGN_PROCESSING_STALE_MS = 30 * 1000;
+
+function normalizeCampaignText(value: string): string {
+  return value.trim().toLocaleLowerCase("tr-TR");
+}
+
+function campaignTextsMatch(stored: string, incoming: string): boolean {
+  return normalizeCampaignText(stored) === normalizeCampaignText(incoming);
+}
+
+function buildCampaignShellRecord(input: CampaignShellInput, campaignId: string) {
+  return {
+    id: campaignId,
+    userId: input.userId,
+    sehir: input.sehir.trim(),
+    sektor: input.sektor.trim(),
+    markaAdi: input.markaAdi.trim(),
+    skor: input.skor ?? 0,
+    gunlukButce: input.gunlukButce,
+    gunSayisi: input.gunSayisi,
+    agresiflik: input.agresiflik,
+    makaleSayisi: 0,
+    radarSikligi: input.radarSikligi,
+    radarSikligiDakika: input.radarSikligiDakika,
+  };
+}
+
+async function insertCampaignShellWithFallback(
+  input: CampaignShellInput,
+  campaignId: string,
+): Promise<boolean> {
+  const shell = buildCampaignShellRecord(input, campaignId);
+  const { id, ...data } = shell;
+
+  if (hasDatabaseUrl()) {
+    try {
+      await prisma.campaign.create({ data: { id, ...data } });
+      return true;
+    } catch (error) {
+      console.error("[CAMPAIGN_CLAIM]: Prisma shell oluşturulamadı:", error);
+    }
+  }
+
+  if (hasSupabaseAdminEnv()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase.from("Campaign").insert(shell);
+      if (!error) {
+        return true;
+      }
+      console.error("[CAMPAIGN_CLAIM]: Supabase shell oluşturulamadı:", error);
+    } catch (error) {
+      console.error("[CAMPAIGN_CLAIM]: Supabase insert hatası:", error);
+    }
+  }
+
+  return false;
+}
+
+async function resolveExistingCampaignSlot(
+  input: CampaignShellInput,
+): Promise<string | null> {
+  const withoutBaits = await findCampaignWithoutBaits(
+    input.userId,
+    input.markaAdi,
+    input.sehir,
+  );
+  if (withoutBaits) {
+    return withoutBaits;
+  }
+
+  return findLatestMatchingCampaignId(
+    input.userId,
+    input.markaAdi,
+    input.sehir,
+    INCOMPLETE_SHELL_MAX_AGE_MS,
+  );
+}
+
+async function clearStaleProcessingLock(campaignId: string): Promise<void> {
+  if (hasDatabaseUrl()) {
+    try {
+      await prisma.campaign.updateMany({
+        where: {
+          id: campaignId,
+          llmFeedback: { startsWith: CAMPAIGN_PROCESSING_MARKER },
+        },
+        data: { llmFeedback: "Yapay zeka taraması bekleniyor..." },
+      });
+    } catch (error) {
+      console.error("[CAMPAIGN_LOCK]: Stale kilit temizlenemedi:", error);
+    }
+  }
+}
+
+async function finalizeCampaignSlotClaim(
+  input: CampaignShellInput,
+  campaignId: string,
+): Promise<string> {
+  const recent = await findRecentMatchingCampaigns(
+    input.userId,
+    input.markaAdi,
+    input.sehir,
+    CONCURRENT_CAMPAIGN_WINDOW_MS,
+  );
+
+  if (recent.length === 0) {
+    return campaignId;
+  }
+
+  const winner = recent[0];
+  if (winner.id !== campaignId) {
+    await deleteCampaignById(campaignId);
+    return winner.id;
+  }
+
+  for (const duplicate of recent.slice(1)) {
+    await deleteCampaignById(duplicate.id);
+  }
+
+  return campaignId;
+}
 
 /** Son 1 dakikada aynı marka + şehir için kampanya var mı? */
 export async function hasRecentDuplicateCampaign(
@@ -282,8 +403,6 @@ async function findCampaignWithoutBaits(
   maxAgeMs = INCOMPLETE_SHELL_MAX_AGE_MS,
 ): Promise<string | null> {
   const since = new Date(Date.now() - maxAgeMs);
-  const normalizedBrand = markaAdi.trim().toLowerCase();
-  const normalizedCity = sehir.trim().toLowerCase();
 
   if (hasDatabaseUrl()) {
     try {
@@ -304,14 +423,20 @@ async function findCampaignWithoutBaits(
 
       const match = rows.find(
         (row) =>
-          row.markaAdi.trim().toLowerCase() === normalizedBrand &&
-          row.sehir.trim().toLowerCase() === normalizedCity &&
+          campaignTextsMatch(row.markaAdi, markaAdi) &&
+          campaignTextsMatch(row.sehir, sehir) &&
           row._count.baits === 0,
       );
-      return match?.id ?? null;
+      if (match) {
+        return match.id;
+      }
     } catch (error) {
       console.error("[CAMPAIGN_SHELL]: Prisma sorgusu başarısız:", error);
     }
+  }
+
+  if (!hasSupabaseAdminEnv()) {
+    return null;
   }
 
   const supabase = getSupabaseAdmin();
@@ -330,8 +455,8 @@ async function findCampaignWithoutBaits(
 
   for (const row of data ?? []) {
     if (
-      row.markaAdi?.trim().toLowerCase() !== normalizedBrand ||
-      row.sehir?.trim().toLowerCase() !== normalizedCity
+      !campaignTextsMatch(row.markaAdi ?? "", markaAdi) ||
+      !campaignTextsMatch(row.sehir ?? "", sehir)
     ) {
       continue;
     }
@@ -401,8 +526,6 @@ async function findRecentMatchingCampaigns(
   windowMs = DUPLICATE_CAMPAIGN_WINDOW_MS,
 ): Promise<Array<{ id: string; createdAt: Date }>> {
   const since = new Date(Date.now() - windowMs);
-  const normalizedBrand = markaAdi.trim().toLowerCase();
-  const normalizedCity = sehir.trim().toLowerCase();
 
   if (hasDatabaseUrl()) {
     try {
@@ -418,13 +541,17 @@ async function findRecentMatchingCampaigns(
       return rows
         .filter(
           (row) =>
-            row.markaAdi.trim().toLowerCase() === normalizedBrand &&
-            row.sehir.trim().toLowerCase() === normalizedCity,
+            campaignTextsMatch(row.markaAdi, markaAdi) &&
+            campaignTextsMatch(row.sehir, sehir),
         )
         .map((row) => ({ id: row.id, createdAt: row.createdAt }));
     } catch (error) {
       console.error("[CAMPAIGN_RACE]: Prisma sorgusu başarısız:", error);
     }
+  }
+
+  if (!hasSupabaseAdminEnv()) {
+    return [];
   }
 
   const supabase = getSupabaseAdmin();
@@ -436,14 +563,15 @@ async function findRecentMatchingCampaigns(
     .order("createdAt", { ascending: true });
 
   if (error) {
-    throw error;
+    console.error("[CAMPAIGN_RACE]: Supabase sorgusu başarısız:", error);
+    return [];
   }
 
   return (data ?? [])
     .filter(
       (row) =>
-        row.markaAdi?.trim().toLowerCase() === normalizedBrand &&
-        row.sehir?.trim().toLowerCase() === normalizedCity,
+        campaignTextsMatch(row.markaAdi ?? "", markaAdi) &&
+        campaignTextsMatch(row.sehir ?? "", sehir),
     )
     .map((row) => ({
       id: row.id as string,
@@ -454,104 +582,42 @@ async function findRecentMatchingCampaigns(
 /** Eşzamanlı isteklerde yarışı çözer; kazanan kampanya ID'sini döner. */
 export async function claimAutonomousCampaignSlot(
   input: CampaignShellInput,
-): Promise<string | null> {
-  const resumableCampaignId = await findCampaignWithoutBaits(
-    input.userId,
-    input.markaAdi,
-    input.sehir,
-  );
-
-  if (resumableCampaignId) {
-    await refreshCampaignShell(resumableCampaignId, input);
-    return resumableCampaignId;
+): Promise<string> {
+  const existingId = await resolveExistingCampaignSlot(input);
+  if (existingId) {
+    await refreshCampaignShell(existingId, input);
+    await clearStaleProcessingLock(existingId);
+    return existingId;
   }
 
   const campaignId = crypto.randomUUID();
-  const shell = {
-    userId: input.userId,
-    sehir: input.sehir.trim(),
-    sektor: input.sektor.trim(),
-    markaAdi: input.markaAdi.trim(),
-    skor: input.skor ?? 0,
-    gunlukButce: input.gunlukButce,
-    gunSayisi: input.gunSayisi,
-    agresiflik: input.agresiflik,
-    makaleSayisi: 0,
-    radarSikligi: input.radarSikligi,
-    radarSikligiDakika: input.radarSikligiDakika,
-  };
+  const inserted = await insertCampaignShellWithFallback(input, campaignId);
 
-  if (hasDatabaseUrl()) {
-    try {
-      await prisma.campaign.create({
-        data: { id: campaignId, ...shell },
-      });
-    } catch (error) {
-      console.error("[CAMPAIGN_CLAIM]: Prisma shell oluşturulamadı:", error);
-      const retryId = await findCampaignWithoutBaits(
-        input.userId,
-        input.markaAdi,
-        input.sehir,
-      );
-      if (retryId) {
-        await refreshCampaignShell(retryId, input);
-        return retryId;
-      }
-      return findLatestMatchingCampaignId(
-        input.userId,
-        input.markaAdi,
-        input.sehir,
-        CONCURRENT_CAMPAIGN_WINDOW_MS,
-      );
+  if (!inserted) {
+    const racedId = await resolveExistingCampaignSlot(input);
+    if (racedId) {
+      await refreshCampaignShell(racedId, input);
+      await clearStaleProcessingLock(racedId);
+      return racedId;
     }
-  } else {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("Campaign").insert({
-      id: campaignId,
-      ...shell,
-    });
-    if (error) {
-      console.error("[CAMPAIGN_CLAIM]: Supabase shell oluşturulamadı:", error);
-      const retryId = await findCampaignWithoutBaits(
-        input.userId,
-        input.markaAdi,
-        input.sehir,
-      );
-      if (retryId) {
-        await refreshCampaignShell(retryId, input);
-        return retryId;
+
+    const retryId = crypto.randomUUID();
+    const retryInserted = await insertCampaignShellWithFallback(input, retryId);
+    if (!retryInserted) {
+      const finalId = await resolveExistingCampaignSlot(input);
+      if (finalId) {
+        await refreshCampaignShell(finalId, input);
+        await clearStaleProcessingLock(finalId);
+        return finalId;
       }
-      return findLatestMatchingCampaignId(
-        input.userId,
-        input.markaAdi,
-        input.sehir,
-        CONCURRENT_CAMPAIGN_WINDOW_MS,
-      );
+
+      throw new Error("Kampanya kaydı oluşturulamadı.");
     }
+
+    return finalizeCampaignSlotClaim(input, retryId);
   }
 
-  const recent = await findRecentMatchingCampaigns(
-    input.userId,
-    input.markaAdi,
-    input.sehir,
-  );
-
-  if (recent.length === 0) {
-    return campaignId;
-  }
-
-  const winner = recent[0];
-
-  if (winner.id !== campaignId) {
-    await deleteCampaignById(campaignId);
-    return winner.id;
-  }
-
-  for (const duplicate of recent.slice(1)) {
-    await deleteCampaignById(duplicate.id);
-  }
-
-  return campaignId;
+  return finalizeCampaignSlotClaim(input, campaignId);
 }
 
 export async function getCampaignBaitCount(campaignId: string): Promise<number> {

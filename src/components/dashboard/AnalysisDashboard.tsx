@@ -37,7 +37,7 @@ function formatLogTimestamp(): string {
 const DUPLICATE_RECOVERY_WINDOW_MS = 120_000;
 
 function normalizeMatchText(value: string): string {
-  return value.trim().toLowerCase();
+  return value.trim().toLocaleLowerCase("tr-TR");
 }
 
 async function recoverDuplicateCampaignResult(
