@@ -18,7 +18,10 @@ interface NeonCyberRangeProps {
   step: number;
   value: number;
   neonTheme?: BudgetNeonTheme;
-  onChange: (value: number) => void;
+  /** Sürüklerken yalnızca yerel görsel güncelleme — API veya üst form state tetiklenmez. */
+  onLiveChange: (value: number) => void;
+  /** Parmak/fare bırakıldığında nihai değeri üst bileşene iletir. */
+  onCommit: (value: number) => void;
 }
 
 const PARTICLE_COLORS: Record<
@@ -37,13 +40,19 @@ export default function NeonCyberRange({
   step,
   value,
   neonTheme = "cyan",
-  onChange,
+  onLiveChange,
+  onCommit,
 }: NeonCyberRangeProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const prevValueRef = useRef(value);
+  const latestValueRef = useRef(value);
+
+  useEffect(() => {
+    latestValueRef.current = value;
+  }, [value]);
 
   const spawnParticles = useCallback((ratio: number) => {
     const wrap = wrapRef.current;
@@ -120,7 +129,12 @@ export default function NeonCyberRange({
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", resize);
     };
-  }, [isDragging, value, min, max, spawnParticles, neonTheme]);
+  }, [isDragging, value, min, max, spawnParticles, neonTheme, colors]);
+
+  const finishDrag = useCallback(() => {
+    setIsDragging(false);
+    onCommit(latestValueRef.current);
+  }, [onCommit]);
 
   const pct = ((value - min) / (max - min)) * 100;
 
@@ -148,10 +162,15 @@ export default function NeonCyberRange({
           max={max}
           step={step}
           value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            latestValueRef.current = next;
+            onLiveChange(next);
+          }}
           onPointerDown={() => setIsDragging(true)}
-          onPointerUp={() => setIsDragging(false)}
-          onPointerLeave={() => setIsDragging(false)}
+          onPointerUp={finishDrag}
+          onPointerCancel={finishDrag}
+          onLostPointerCapture={finishDrag}
           className="cyber-range-neon relative z-10 w-full"
         />
       </div>

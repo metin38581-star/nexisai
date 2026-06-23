@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CampaignFormData, CampaignResponse, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
-import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import {
   buildCampaignSession,
   clearCampaignSession,
@@ -34,7 +33,7 @@ function formatLogTimestamp(): string {
   });
 }
 
-const CAMPAIGN_REQUEST_DEBOUNCE_MS = 500;
+const CAMPAIGN_DUPLICATE_GUARD_MS = 3_000;
 
 function buildAnalysisRequestKey(payload: CampaignSessionPayload): string {
   return [
@@ -125,6 +124,14 @@ function AnalysisDashboardContent({
     sektor: string;
   } | null>(null);
   const distributionRunningRef = useRef(false);
+  const runAnalysisRef = useRef<
+    (payload: CampaignSessionPayload) => Promise<void>
+  >(async () => undefined);
+  const onPendingCampaignHandledRef = useRef(onPendingCampaignHandled);
+
+  useEffect(() => {
+    onPendingCampaignHandledRef.current = onPendingCampaignHandled;
+  }, [onPendingCampaignHandled]);
 
   const fetchCampaigns = useCallback(async (options?: { silent?: boolean }) => {
     if (!accessToken) {
@@ -278,7 +285,7 @@ function AnalysisDashboardContent({
       if (
         lastRequest &&
         lastRequest.key === requestKey &&
-        now - lastRequest.at < CAMPAIGN_REQUEST_DEBOUNCE_MS
+        now - lastRequest.at < CAMPAIGN_DUPLICATE_GUARD_MS
       ) {
         return;
       }
@@ -443,12 +450,9 @@ function AnalysisDashboardContent({
     [accessToken, resetDistribution, runRadarScan, onWalletRefresh, fetchCampaigns, userEmail],
   );
 
-  const debouncedRunAnalysis = useDebouncedCallback(
-    (payload: CampaignSessionPayload) => {
-      void runAnalysis(payload);
-    },
-    CAMPAIGN_REQUEST_DEBOUNCE_MS,
-  );
+  useEffect(() => {
+    runAnalysisRef.current = runAnalysis;
+  }, [runAnalysis]);
 
   useEffect(() => {
     if (!activeCampaignId) {
@@ -467,6 +471,23 @@ function AnalysisDashboardContent({
     setSessionReady(true);
   }, []);
 
+  const startCampaignAnalysis = useCallback((data: CampaignFormData) => {
+    if (analysisInFlightRef.current) {
+      return;
+    }
+
+    clearCampaignSession();
+    const payload = buildCampaignSession(data);
+    setSession(payload);
+    void runAnalysisRef.current(payload);
+  }, []);
+
+  const startCampaignAnalysisRef = useRef(startCampaignAnalysis);
+
+  useEffect(() => {
+    startCampaignAnalysisRef.current = startCampaignAnalysis;
+  }, [startCampaignAnalysis]);
+
   const handleFormSubmit = useCallback(
     (data: CampaignFormData) => {
       if (analysisInFlightRef.current || isLoading) {
@@ -478,22 +499,9 @@ function AnalysisDashboardContent({
         return;
       }
 
-      debouncedRunAnalysis.cancel();
-
-      clearCampaignSession();
-
-      const payload = buildCampaignSession(data);
-      setSession(payload);
-      void runAnalysis(payload);
+      startCampaignAnalysis(data);
     },
-    [
-      runAnalysis,
-      debouncedRunAnalysis,
-      isLoading,
-      isLoggedIn,
-      userEmail,
-      onRequireAuth,
-    ],
+    [startCampaignAnalysis, isLoading, isLoggedIn, userEmail, onRequireAuth],
   );
 
   useEffect(() => {
@@ -507,23 +515,11 @@ function AnalysisDashboardContent({
     }
 
     pendingCampaignHandledRef.current = pendingKey;
-    onPendingCampaignHandled?.();
+    onPendingCampaignHandledRef.current?.();
 
-    debouncedRunAnalysis.cancel();
-    clearCampaignSession();
-
-    const payload = buildCampaignSession(pendingCampaign);
-    setSession(payload);
-    void runAnalysis(payload);
-  }, [
-    pendingCampaign,
-    isLoggedIn,
-    userEmail,
-    accessToken,
-    onPendingCampaignHandled,
-    runAnalysis,
-    debouncedRunAnalysis,
-  ]);
+    const data = pendingCampaign;
+    startCampaignAnalysisRef.current(data);
+  }, [pendingCampaign, isLoggedIn, userEmail, accessToken]);
 
   const handleFlowComplete = useCallback(() => {
     if (pendingDistributionRef.current) {

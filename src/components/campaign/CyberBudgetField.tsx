@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import NeonCyberRange from "@/components/campaign/NeonCyberRange";
 import BudgetOperationTierPanel from "@/components/campaign/BudgetOperationTierPanel";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
 import "@/components/campaign/budget-operation-tier.css";
+
+const SLIDER_COMMIT_DEBOUNCE_MS = 500;
 
 interface CyberBudgetFieldProps {
   label: string;
@@ -37,7 +42,13 @@ export default function CyberBudgetField({
   clampMode = "immediate",
   tierBudget,
 }: CyberBudgetFieldProps) {
-  const displayBudget = value > 0 ? value : min;
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const displayBudget = localValue > 0 ? localValue : min;
   const tierSource = tierBudget ?? displayBudget;
   const tierNeon = showAgresiflik
     ? resolveBudgetOperationTier(tierSource).neonTheme
@@ -65,24 +76,42 @@ export default function CyberBudgetField({
     return formatted;
   };
 
-  const handleChange = (next: number) => {
-    if (allowUnset && next <= 0) {
+  const debouncedCommit = useDebouncedCallback((next: number) => {
+    onChange(next);
+  }, SLIDER_COMMIT_DEBOUNCE_MS);
+
+  const commitValue = (raw: number, options?: { immediate?: boolean }) => {
+    if (allowUnset && raw <= 0) {
+      setLocalValue(0);
+      debouncedCommit.cancel();
       onChange(0);
       return;
     }
-    if (clampMode === "blur") {
-      onChange(Math.min(max, next));
+
+    let next = raw;
+    if (clampMode !== "blur") {
+      next = snapToStep(raw);
+    } else {
+      next = Math.min(max, raw);
+    }
+
+    setLocalValue(next);
+
+    if (options?.immediate) {
+      debouncedCommit.cancel();
+      onChange(next);
       return;
     }
-    onChange(snapToStep(next));
+
+    debouncedCommit(next);
   };
 
   const handleBlur = () => {
-    if (allowUnset && value === 0) {
+    if (allowUnset && localValue === 0) {
       return;
     }
 
-    let next = value;
+    let next = localValue;
     if (!Number.isFinite(next) || next < min) {
       next = min;
     }
@@ -90,10 +119,7 @@ export default function CyberBudgetField({
       next = max;
     }
     next = snapToStep(next);
-
-    if (next !== value) {
-      onChange(next);
-    }
+    commitValue(next, { immediate: true });
   };
 
   return (
@@ -111,15 +137,15 @@ export default function CyberBudgetField({
             min={min}
             max={max}
             step={step}
-            value={allowUnset && value === 0 ? "" : value}
+            value={allowUnset && localValue === 0 ? "" : localValue}
             placeholder={allowUnset ? "Bütçe girin" : undefined}
             onChange={(e) => {
               const raw = e.target.value;
               if (allowUnset && raw === "") {
-                onChange(0);
+                commitValue(0, { immediate: true });
                 return;
               }
-              handleChange(Number(raw));
+              commitValue(Number(raw));
             }}
             onBlur={handleBlur}
             className="w-full min-w-0 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600 sm:w-24"
@@ -136,9 +162,16 @@ export default function CyberBudgetField({
         min={min}
         max={max}
         step={step}
-        value={value > 0 ? value : min}
+        value={localValue > 0 ? localValue : min}
         neonTheme={tierNeon}
-        onChange={(next) => onChange(snapToStep(next))}
+        onLiveChange={(next) => {
+          const snapped = snapToStep(next);
+          setLocalValue(snapped);
+          debouncedCommit(snapped);
+        }}
+        onCommit={(next) => {
+          commitValue(next, { immediate: true });
+        }}
       />
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
