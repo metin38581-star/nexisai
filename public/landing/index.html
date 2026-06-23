@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NexisAI — Semantik İçerik Teknolojisi</title>
+  <meta name="description" content="Yapay zeka motorlarında görünürlüğünüzü artırın. NexisAI ile semantik içerik optimizasyonu." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --void: #050505;
+      --purple: #8b5cf6;
+      --cyan: #06b6d4;
+      --purple-glow: rgba(139, 92, 246, 0.55);
+      --cyan-glow: rgba(6, 182, 212, 0.45);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: "Inter", system-ui, sans-serif;
+      background: var(--void);
+      color: var(--text);
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ── Three.js canvas ── */
+    #canvas-3d {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── Ambient grid overlay ── */
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(6, 182, 212, 0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 70% at 70% 50%, black 20%, transparent 70%);
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 30% 50%, transparent 0%, var(--void) 75%);
+    }
+
+    /* ── Layout ── */
+    .page {
+      position: relative;
+      z-index: 10;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.5rem 0;
+      opacity: 0;
+      animation: fadeSlideUp 0.8s ease forwards;
+    }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-wrap img {
+      height: 40px;
+      width: auto;
+      filter: drop-shadow(0 0 12px var(--purple-glow));
+    }
+
+    .logo-text {
+      font-family: "Orbitron", sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-cta {
+      padding: 0.6rem 1.4rem;
+      border-radius: 999px;
+      border: 1px solid rgba(139, 92, 246, 0.4);
+      background: rgba(139, 92, 246, 0.08);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: box-shadow 0.3s, border-color 0.3s, transform 0.2s;
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+    }
+
+    .nav-cta:hover {
+      border-color: var(--purple);
+      box-shadow: 0 0 30px var(--purple-glow), 0 0 60px rgba(6, 182, 212, 0.15);
+      transform: translateY(-1px);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: center;
+      min-height: calc(100vh - 100px);
+      padding: 2rem 0 4rem;
+    }
+
+    .hero-content { max-width: 580px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      background: rgba(6, 182, 212, 0.06);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 1.5rem;
+      opacity: 0;
+      animation: fadeSlideUp 0.8s ease 0.15s forwards;
+      box-shadow: 0 0 24px rgba(6, 182, 212, 0.12);
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    h1 {
+      font-family: "Orbitron", sans-serif;
+      font-size: clamp(1.8rem, 4vw, 2.75rem);
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.25rem;
+      opacity: 0;
+      animation: fadeSlideUp 0.9s ease 0.3s forwards;
+    }
+
+    h1 .gradient {
+      background: linear-gradient(135deg, #fff 0%, var(--cyan) 40%, var(--purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-desc {
+      font-size: 1.05rem;
+      line-height: 1.75;
+      color: var(--muted);
+      margin-bottom: 2rem;
+      opacity: 0;
+      animation: fadeSlideUp 0.9s ease 0.45s forwards;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      opacity: 0;
+      animation: fadeSlideUp 0.9s ease 0.6s forwards;
+    }
+
+    .btn-primary {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 1rem 2rem;
+      border-radius: 14px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      cursor: pointer;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--purple), #6366f1, var(--cyan));
+      background-size: 200% 200%;
+      animation: shimmer 4s ease infinite;
+      box-shadow:
+        0 0 30px var(--purple-glow),
+        0 0 60px rgba(6, 182, 212, 0.2),
+        inset 0 1px 0 rgba(255,255,255,0.15);
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px) scale(1.02);
+      box-shadow:
+        0 0 40px var(--purple-glow),
+        0 0 80px var(--cyan-glow),
+        inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+
+    .btn-primary::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
+      transform: translateX(-100%);
+      animation: sweep 3s ease infinite;
+    }
+
+    @keyframes shimmer {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    @keyframes sweep {
+      0% { transform: translateX(-100%); }
+      60%, 100% { transform: translateX(200%); }
+    }
+
+    .btn-secondary {
+      padding: 1rem 1.75rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: border-color 0.25s, color 0.25s, box-shadow 0.25s;
+    }
+
+    .btn-secondary:hover {
+      border-color: rgba(6, 182, 212, 0.4);
+      color: var(--text);
+      box-shadow: 0 0 24px rgba(6, 182, 212, 0.1);
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 2rem;
+      margin-top: 2.5rem;
+      opacity: 0;
+      animation: fadeSlideUp 0.9s ease 0.75s forwards;
+    }
+
+    .stat-value {
+      font-family: "Orbitron", sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan-glow);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+      letter-spacing: 0.04em;
+    }
+
+    .hero-visual-spacer {
+      opacity: 0;
+      animation: fadeIn 1.2s ease 0.5s forwards;
+    }
+
+    /* ── Optimize section ── */
+    .optimize-section {
+      padding: 5rem 0 6rem;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 3.5rem;
+      opacity: 0;
+      animation: fadeSlideUp 0.8s ease forwards;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+
+    .section-tag {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--purple);
+      margin-bottom: 0.75rem;
+      text-shadow: 0 0 16px var(--purple-glow);
+    }
+
+    .section-title {
+      font-family: "Orbitron", sans-serif;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-sub {
+      color: var(--muted);
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .futuristic-card {
+      position: relative;
+      padding: 2px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--purple), var(--cyan), var(--purple));
+      background-size: 200% 200%;
+      animation: borderFlow 6s ease infinite, fadeSlideUp 0.8s ease forwards;
+      opacity: 0;
+      transition: transform 0.35s, box-shadow 0.35s;
+    }
+
+    .futuristic-card:nth-child(1) { animation-delay: 0.1s, 0.1s; }
+    .futuristic-card:nth-child(2) { animation-delay: 0.25s, 0.25s; }
+    .futuristic-card:nth-child(3) { animation-delay: 0.4s, 0.4s; }
+
+    .futuristic-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 60px rgba(139, 92, 246, 0.25), 0 0 40px rgba(6, 182, 212, 0.15);
+    }
+
+    @keyframes borderFlow {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .card-inner {
+      background: rgba(8, 8, 12, 0.92);
+      border-radius: 18px;
+      padding: 2rem 1.75rem;
+      height: 100%;
+      backdrop-filter: blur(12px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-inner::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 70%);
+      pointer-events: none;
+    }
+
+    .card-step {
+      font-family: "Orbitron", sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      opacity: 0.35;
+      line-height: 1;
+      margin-bottom: 1rem;
+    }
+
+    .card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+      background: rgba(139, 92, 246, 0.12);
+      border: 1px solid rgba(139, 92, 246, 0.25);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+      font-size: 1.4rem;
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #fff;
+    }
+
+    .card-desc {
+      font-size: 0.9rem;
+      line-height: 1.65;
+      color: var(--muted);
+    }
+
+    .card-glow-line {
+      position: absolute;
+      bottom: 0;
+      left: 10%;
+      right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), transparent);
+      opacity: 0.6;
+    }
+
+    /* ── CTA band ── */
+    .cta-band {
+      margin-bottom: 4rem;
+      padding: 3rem;
+      border-radius: 24px;
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(6, 182, 212, 0.04));
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      opacity: 0;
+      animation: fadeSlideUp 0.9s ease 0.2s forwards;
+    }
+
+    .cta-band::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.08), transparent 70%);
+    }
+
+    .cta-band h2 {
+      font-family: "Orbitron", sans-serif;
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+      position: relative;
+    }
+
+    .cta-band p {
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      position: relative;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.05);
+      padding: 2rem 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      opacity: 0;
+      animation: fadeIn 1s ease 1s forwards;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(28px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        padding-top: 1rem;
+      }
+      .hero-visual-spacer { display: none; }
+      .cards-grid { grid-template-columns: 1fr; }
+      .hero-stats { gap: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="canvas-3d"></canvas>
+  <div class="grid-overlay"></div>
+  <div class="vignette"></div>
+
+  <div class="page">
+    <!-- Nav -->
+    <nav>
+      <div class="logo-wrap">
+        <img src="/logo.png" alt="NexisAI" onerror="this.style.display='none'" />
+        <span class="logo-text">NEXIS AI</span>
+      </div>
+      <a href="/dashboard" class="nav-cta">Panele Git →</a>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-content">
+        <div class="badge">
+          <span class="badge-dot"></span>
+          GEO · Semantik Optimizasyon
+        </div>
+
+        <h1>
+          <span class="gradient">Semantik İçerik Teknolojisi</span> ile Yapay Zekada Görünürlüğünüzü Artırın
+        </h1>
+
+        <p class="hero-desc">
+          NexisAI, işletmenizi ChatGPT, Gemini ve Perplexity gibi yapay zeka
+          motorlarında öne çıkarmak için semantik içerik ağları kurar.
+          Otonom dağıtım, hedef soru analizi ve canlı görünürlük skorları —
+          hepsi tek panelde.
+        </p>
+
+        <div class="hero-actions">
+          <a href="/dashboard" class="btn-primary">
+            Hemen Başla
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </a>
+          <a href="#optimize" class="btn-secondary">Nasıl Çalışır?</a>
+        </div>
+
+        <div class="hero-stats">
+          <div>
+            <div class="stat-value">100 ₺</div>
+            <div class="stat-label">Ücretsiz Deneme</div>
+          </div>
+          <div>
+            <div class="stat-value">3+</div>
+            <div class="stat-label">AI Motoru</div>
+          </div>
+          <div>
+            <div class="stat-value">7/24</div>
+            <div class="stat-label">Otonom Dağıtım</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-visual-spacer" aria-hidden="true"></div>
+    </section>
+
+    <!-- Optimize -->
+    <section class="optimize-section" id="optimize">
+      <div class="section-header">
+        <p class="section-tag">Optimizasyon Akışı</p>
+        <h2 class="section-title">Nasıl Optimize Edilir?</h2>
+        <p class="section-sub">
+          Üç adımda işletmeniz yapay zeka arama sonuçlarında semantik olarak
+          konumlandırılır ve görünürlük skorunuz gerçek zamanlı izlenir.
+        </p>
+      </div>
+
+      <div class="cards-grid">
+        <article class="futuristic-card">
+          <div class="card-inner">
+            <div class="card-step">01</div>
+            <div class="card-icon">🎯</div>
+            <h3 class="card-title">Hedef Soru Tespiti</h3>
+            <p class="card-desc">
+              Sektörünüze özel en kritik yapay zeka sorguları analiz edilir.
+              "İzmir'deki en iyi diş kliniği hangisi?" gibi sorular otomatik
+              belirlenir ve içerik stratejiniz buna göre şekillenir.
+            </p>
+            <div class="card-glow-line"></div>
+          </div>
+        </article>
+
+        <article class="futuristic-card">
+          <div class="card-inner">
+            <div class="card-step">02</div>
+            <div class="card-icon">⚡</div>
+            <h3 class="card-title">Semantik İçerik Yayını</h3>
+            <p class="card-desc">
+              Yapay zeka motorlarının okuduğu semantik içerikler otonom olarak
+              üretilir ve WordPress, Telegra.ph, GitHub Radar ve Nostr gibi
+              çoklu kanallara eş zamanlı dağıtılır.
+            </p>
+            <div class="card-glow-line"></div>
+          </div>
+        </article>
+
+        <article class="futuristic-card">
+          <div class="card-inner">
+            <div class="card-step">03</div>
+            <div class="card-icon">📈</div>
+            <h3 class="card-title">Görünürlük &amp; Skor Takibi</h3>
+            <p class="card-desc">
+              Her hedef soru için önerilme oranınız canlı panelde izlenir.
+              Canlı LLM simülasyonu ile markanızın yapay zeka yanıtlarında
+              nasıl geçtiğini anında görün.
+            </p>
+            <div class="card-glow-line"></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <div class="cta-band">
+      <h2>100 ₺ Hediye Bakiye ile Hemen Deneyin</h2>
+      <p>Kayıt olun, OTP ile doğrulayın ve ilk GEO kampanyanızı dakikalar içinde başlatın.</p>
+      <a href="/dashboard" class="btn-primary">Kampanyayı Başlat →</a>
+    </div>
+
+    <footer>
+      © 2026 NexisAI · Semantik İçerik Teknolojisi
+    </footer>
+  </div>
+
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    (function () {
+      const canvas = document.getElementById("canvas-3d");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+      camera.position.set(0, 0, 14);
+
+      const brainGroup = new THREE.Group();
+      scene.add(brainGroup);
+
+      /* ── Core glowing sphere ── */
+      const coreGeo = new THREE.IcosahedronGeometry(2.2, 2);
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: 0x8b5cf6,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      brainGroup.add(core);
+
+      const innerGeo = new THREE.IcosahedronGeometry(1.6, 1);
+      const innerMat = new THREE.MeshBasicMaterial({
+        color: 0x06b6d4,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.55,
+      });
+      const inner = new THREE.Mesh(innerGeo, innerMat);
+      brainGroup.add(inner);
+
+      /* ── Particle neural network ── */
+      const PARTICLE_COUNT = 180;
+      const positions = new Float32Array(PARTICLE_COUNT * 3);
+      const colors = new Float32Array(PARTICLE_COUNT * 3);
+      const purple = new THREE.Color(0x8b5cf6);
+      const cyan = new THREE.Color(0x06b6d4);
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const phi = Math.acos(2 * Math.random() - 1);
+        const theta = 2 * Math.PI * Math.random();
+        const r = 3 + Math.random() * 2.5;
+        positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = r * Math.cos(phi);
+        const mix = Math.random();
+        const c = purple.clone().lerp(cyan, mix);
+        colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      }
+
+      const pGeo = new THREE.BufferGeometry();
+      pGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      pGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const pMat = new THREE.PointsMaterial({
+        size: 0.06,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const particles = new THREE.Points(pGeo, pMat);
+      brainGroup.add(particles);
+
+      /* ── Connection lines ── */
+      const linePositions = [];
+      const threshold = 2.2;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        for (let j = i + 1; j < PARTICLE_COUNT; j++) {
+          const dx = positions[i*3] - positions[j*3];
+          const dy = positions[i*3+1] - positions[j*3+1];
+          const dz = positions[i*3+2] - positions[j*3+2];
+          if (dx*dx + dy*dy + dz*dz < threshold * threshold) {
+            linePositions.push(
+              positions[i*3], positions[i*3+1], positions[i*3+2],
+              positions[j*3], positions[j*3+1], positions[j*3+2]
+            );
+          }
+        }
+      }
+      const lineGeo = new THREE.BufferGeometry();
+      lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
+      const lineMat = new THREE.LineBasicMaterial({
+        color: 0x8b5cf6,
+        transparent: true,
+        opacity: 0.12,
+        blending: THREE.AdditiveBlending,
+      });
+      const lines = new THREE.LineSegments(lineGeo, lineMat);
+      brainGroup.add(lines);
+
+      /* ── Orbital ring ── */
+      const ringGeo = new THREE.TorusGeometry(4.5, 0.015, 8, 120);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.4 });
+      const ring1 = new THREE.Mesh(ringGeo, ringMat);
+      ring1.rotation.x = Math.PI / 2.5;
+      brainGroup.add(ring1);
+
+      const ring2 = new THREE.Mesh(
+        new THREE.TorusGeometry(5.2, 0.01, 8, 120),
+        new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.25 })
+      );
+      ring2.rotation.x = Math.PI / 3;
+      ring2.rotation.y = Math.PI / 4;
+      brainGroup.add(ring2);
+
+      /* ── Lights ── */
+      scene.add(new THREE.AmbientLight(0x111122, 0.5));
+      const pLight = new THREE.PointLight(0x8b5cf6, 1.2, 30);
+      pLight.position.set(5, 3, 5);
+      scene.add(pLight);
+      const cLight = new THREE.PointLight(0x06b6d4, 1, 30);
+      cLight.position.set(-5, -3, 3);
+      scene.add(cLight);
+
+      /* ── Position group to right side ── */
+      brainGroup.position.set(3.5, 0, 0);
+
+      /* ── Mouse parallax ── */
+      let mouseX = 0, mouseY = 0;
+      let targetRX = 0, targetRY = 0;
+
+      document.addEventListener("mousemove", (e) => {
+        mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+        mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+        targetRY = mouseX * 0.4;
+        targetRX = mouseY * 0.25;
+      });
+
+      /* ── Resize ── */
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        brainGroup.position.x = window.innerWidth < 900 ? 0 : 3.5;
+      });
+
+      if (window.innerWidth < 900) brainGroup.position.x = 0;
+
+      /* ── Animate ── */
+      const clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const t = clock.getElapsedTime();
+
+        core.rotation.y = t * 0.15;
+        core.rotation.x = t * 0.08;
+        inner.rotation.y = -t * 0.2;
+        inner.rotation.z = t * 0.1;
+        particles.rotation.y = t * 0.05;
+        ring1.rotation.z = t * 0.12;
+        ring2.rotation.z = -t * 0.08;
+
+        brainGroup.rotation.y += (targetRY - brainGroup.rotation.y) * 0.04;
+        brainGroup.rotation.x += (targetRX - brainGroup.rotation.x) * 0.04;
+        brainGroup.position.y = Math.sin(t * 0.5) * 0.15;
+
+        pLight.intensity = 1.2 + Math.sin(t * 2) * 0.3;
+        cLight.intensity = 1 + Math.cos(t * 1.7) * 0.25;
+
+        renderer.render(scene, camera);
+      }
+      animate();
+    })();
+  </script>
+</body>
+</html>
