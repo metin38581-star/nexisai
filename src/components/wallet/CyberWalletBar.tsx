@@ -10,8 +10,8 @@ interface CyberWalletBarProps {
 }
 
 function formatBalance(value: number): string {
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
+  return value.toLocaleString("tr-TR", {
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
 }
@@ -68,6 +68,11 @@ export default function CyberWalletBar({
         return;
       }
 
+      if (result.requiresPayment && result.paymentPageUrl) {
+        window.location.href = result.paymentPageUrl as string;
+        return;
+      }
+
       setBalance(result.balance);
       setIsModalOpen(false);
       setTopUpAmount("100");
@@ -91,8 +96,8 @@ export default function CyberWalletBar({
             <span className="text-zinc-300">Cüzdan Bakiyesi: </span>
             <span className="text-emerald-300 drop-shadow-[0_0_10px_rgba(52,211,153,0.85)]">
               {isLoading || balance === null
-                ? "$—.—"
-                : `$${formatBalance(balance)}`}
+                ? "— ₺"
+                : `${formatBalance(balance)} ₺`}
             </span>
           </p>
         </div>
@@ -137,7 +142,7 @@ export default function CyberWalletBar({
               </p>
               <h2 className="mt-2 text-xl font-bold text-white">Bakiye Yükle</h2>
               <p className="mt-2 text-sm text-zinc-400">
-                Operasyon maliyetinizi karşılamak için cüzdanınıza dolar
+                Operasyon maliyetinizi karşılamak için cüzdanınıza TL
                 yükleyin.
               </p>
             </div>
@@ -145,7 +150,7 @@ export default function CyberWalletBar({
             <form onSubmit={handleTopUp} className="relative space-y-4 p-6">
               <div>
                 <label className="mb-2 block text-sm font-medium text-zinc-300">
-                  Yüklenecek Miktar ($)
+                  Yüklenecek Miktar (₺)
                 </label>
                 <input
                   type="number"

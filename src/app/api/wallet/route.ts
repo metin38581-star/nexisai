@@ -5,21 +5,38 @@ import { getActiveUserId } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import { recordPayment } from "@/lib/payment-store";
 import {
-  decrementWalletBalance,
-  getOrCreateWallet,
-  incrementWalletBalance,
-} from "@/lib/wallet-service";
+  creditUserWallet,
+  decrementUserWalletBalance,
+  getOrCreateUserWallet,
+} from "@/lib/user-wallet-service";
+import {
+  buildPaymentCallbackUrl,
+  initializeIyzicoCheckout,
+  isIyzicoConfigured,
+} from "@/lib/iyzico-client";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     logServerEnvStatus("wallet-get");
     assertDataAccessEnv();
-    const wallet = await getOrCreateWallet();
+
+    const activeUserId = await getActiveUserId(request);
+    if (!activeUserId) {
+      return NextResponse.json({
+        success: true,
+        balance: 0,
+        isGuest: true,
+      });
+    }
+
+    const wallet = await getOrCreateUserWallet(activeUserId);
 
     return NextResponse.json({
       success: true,
       id: wallet.id,
       balance: wallet.balance,
+      welcomeGranted: wallet.welcomeGranted,
+      hasPaidTopUp: wallet.hasPaidTopUp,
     });
   } catch (error) {
     return handleApiRouteError(error, "Cüzdan bakiyesi alınamadı.");
@@ -43,9 +60,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       amount?: number;
       operation?: "topup" | "deduct";
+      useIyzico?: boolean;
     };
     const amount = Number(body.amount);
     const operation = body.operation ?? "topup";
+    const useIyzico = body.useIyzico ?? true;
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
@@ -54,9 +73,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const wallet = await getOrCreateWallet();
-
     if (operation === "deduct") {
+      const wallet = await getOrCreateUserWallet(activeUserId);
+
       if (wallet.balance < amount) {
         return NextResponse.json(
           { success: false, error: "Yetersiz cüzdan bakiyesi." },
@@ -64,12 +83,12 @@ export async function POST(request: Request) {
         );
       }
 
-      const balance = await decrementWalletBalance(wallet.id, amount);
+      const balance = await decrementUserWalletBalance(activeUserId, amount);
 
       await recordPayment({
         userId: activeUserId,
         amount,
-        currency: "USD",
+        currency: "TRY",
         status: "success",
         provider: "internal",
         providerStatusCode: "WALLET_DEDUCT",
@@ -82,19 +101,36 @@ export async function POST(request: Request) {
       });
     }
 
-    const balance = await incrementWalletBalance(wallet.id, amount);
+    if (useIyzico && isIyzicoConfigured()) {
+      const checkout = await initializeIyzicoCheckout({
+        userId: activeUserId,
+        amount,
+        buyerEmail: "user@nexisai.com",
+        buyerName: "NexisAI Kullanıcı",
+        callbackUrl: buildPaymentCallbackUrl(),
+      });
+
+      return NextResponse.json({
+        success: true,
+        requiresPayment: true,
+        paymentPageUrl: checkout.paymentPageUrl,
+        checkoutId: checkout.checkoutId,
+      });
+    }
+
+    const balance = await creditUserWallet(activeUserId, amount, {
+      markPaidTopUp: true,
+    });
 
     await recordPayment({
       userId: activeUserId,
       amount,
-      currency: "USD",
+      currency: "TRY",
       status: "success",
       provider: "internal",
       providerStatusCode: "WALLET_TOPUP",
       description: "Cüzdan bakiye yüklemesi",
     });
-
-    console.log(`[CÜZDAN_YÜKLEME]: +$${amount} — yeni bakiye $${balance}`);
 
     return NextResponse.json({
       success: true,

@@ -49,6 +49,7 @@ async function requestAuthSession(
     email: string;
     password: string;
     companyName?: string;
+    otpCode?: string;
   },
   signal: AbortSignal,
 ): Promise<AuthSessionResponse> {
@@ -87,7 +88,10 @@ export default function AuthModal({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [registerStep, setRegisterStep] = useState<"form" | "otp">("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
@@ -96,9 +100,12 @@ export default function AuthModal({
       setFullName("");
       setEmail("");
       setPassword("");
+      setOtpCode("");
+      setRegisterStep("form");
       setErrorMessage(null);
       submittingRef.current = false;
       setIsSubmitting(false);
+      setIsSendingOtp(false);
     }
   }, [isOpen]);
 
@@ -134,6 +141,33 @@ export default function AuthModal({
     return null;
   };
 
+  const sendOtp = async (): Promise<boolean> => {
+    setIsSendingOtp(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), purpose: "register" }),
+      });
+      const result = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || !result.success) {
+        setErrorMessage(result.error ?? "Doğrulama kodu gönderilemedi.");
+        return false;
+      }
+
+      toast.success("Doğrulama kodu e-posta adresinize gönderildi.");
+      return true;
+    } catch {
+      setErrorMessage("Doğrulama kodu gönderilemedi. Lütfen tekrar deneyin.");
+      return false;
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -160,6 +194,23 @@ export default function AuthModal({
       return;
     }
 
+    if (isRegister && registerStep === "form") {
+      const sent = await sendOtp();
+      submittingRef.current = false;
+      setIsSubmitting(false);
+      if (sent) {
+        setRegisterStep("otp");
+      }
+      return;
+    }
+
+    if (isRegister && registerStep === "otp" && !/^\d{6}$/.test(otpCode.trim())) {
+      setErrorMessage("6 haneli doğrulama kodunu girin.");
+      submittingRef.current = false;
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => {
@@ -174,7 +225,9 @@ export default function AuthModal({
             action: isRegister ? "register" : "login",
             email: email.trim(),
             password: password.trim(),
-            ...(isRegister ? { companyName: fullName.trim() } : {}),
+            ...(isRegister
+              ? { companyName: fullName.trim(), otpCode: otpCode.trim() }
+              : {}),
           },
           controller.signal,
         );
@@ -203,7 +256,6 @@ export default function AuthModal({
         );
         return;
       }
-
       const user = authResult.user;
       const accessToken = authResult.accessToken;
 
@@ -214,7 +266,7 @@ export default function AuthModal({
 
       if (isRegister) {
         toast.success(
-          "Hesabınız başarıyla oluşturuldu! Panele yönlendiriliyorsunuz... 🚀",
+          "Hesabınız doğrulandı! 100 ₺ hediye bakiyeniz tanımlandı. 🎁",
         );
       }
 
@@ -354,6 +406,33 @@ export default function AuthModal({
               />
             </div>
 
+            {isRegister && registerStep === "otp" && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-300">
+                  E-posta Doğrulama Kodu
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="6 haneli kod"
+                  disabled={isSubmitting}
+                  autoComplete="one-time-code"
+                  className={inputClassName}
+                />
+                <button
+                  type="button"
+                  disabled={isSendingOtp || isSubmitting}
+                  onClick={() => void sendOtp()}
+                  className="mt-2 text-xs font-medium text-violet-400 hover:text-violet-300 disabled:opacity-50"
+                >
+                  {isSendingOtp ? "Kod gönderiliyor..." : "Kodu tekrar gönder"}
+                </button>
+              </div>
+            )}
+
             {errorMessage ? (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                 {errorMessage}
@@ -376,10 +455,18 @@ export default function AuthModal({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {isRegister ? "Kayıt Yapılıyor..." : "Giriş Yapılıyor..."}
+                    {isRegister
+                      ? registerStep === "otp"
+                        ? "Doğrulanıyor..."
+                        : "Kod Gönderiliyor..."
+                      : "Giriş Yapılıyor..."}
                   </>
                 ) : isRegister ? (
-                  "Hesabımı Oluştur ve Paneli Aç 🚀"
+                  registerStep === "otp" ? (
+                    "Doğrula ve 100 ₺ Hediye Bakiyeni Al 🎁"
+                  ) : (
+                    "Doğrulama Kodu Gönder 📧"
+                  )
                 ) : (
                   "Giriş Yap ve Paneli Aç 🔐"
                 )}

@@ -4,7 +4,7 @@ export const CAMPAIGN_SELECT_PLACEHOLDER = "Lütfen Seçiniz";
 export const CAMPAIGN_BUSINESS_NAME_PLACEHOLDER =
   "Lütfen işletme adını yazınız";
 
-export const MIN_CAMPAIGN_DAILY_BUDGET = 300;
+export const MIN_CAMPAIGN_DAILY_BUDGET = 100;
 export const MAX_CAMPAIGN_DAILY_BUDGET = 3000;
 export const CAMPAIGN_BUDGET_STEP = 100;
 export const MIN_CAMPAIGN_DAYS = 3;

@@ -4,10 +4,10 @@ import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Clock, Radar, Target, Zap } from "lucide-react";
 
-const MIN_BUDGET = 300;
+const MIN_BUDGET = 100;
 const MAX_BUDGET = 3000;
 const BUDGET_STEP = 100;
-const DEFAULT_BUDGET = 300;
+const DEFAULT_BUDGET = 100;
 
 type RecommendationTone = "warning" | "balanced" | "dominant";
 

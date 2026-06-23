@@ -14,9 +14,16 @@ import { calculateDynamicMetrics } from "@/lib/mock-metrics";
 import { getActiveUserId } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
-  decrementWalletBalance,
-  getOrCreateWallet,
-} from "@/lib/wallet-service";
+  decrementUserWalletBalance,
+  getOrCreateUserWallet,
+} from "@/lib/user-wallet-service";
+import {
+  isTrialBlockedForBusiness,
+  registerBusinessForTrial,
+} from "@/lib/registered-business-store";
+import { createCampaignGrowthLoop } from "@/lib/growth-loop-store";
+import { isIyzicoConfigured } from "@/lib/iyzico-client";
+import { MIN_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
 import {
   buildBaitRecordsFromSelectedQuestionsAsync,
   type SelectedQuestionPair,
@@ -103,16 +110,19 @@ export async function POST(request: Request) {
       );
     }
 
-    if (gunlukButce < 10) {
+    if (gunlukButce < 100) {
       return NextResponse.json(
-        { success: false, error: "Günlük bütçe en az 10 TL olmalıdır." },
+        { success: false, error: "Günlük bütçe en az 100 TL olmalıdır." },
         { status: 400 },
       );
     }
 
-    if (gunSayisi < 1) {
+    if (gunSayisi < MIN_CAMPAIGN_DAYS) {
       return NextResponse.json(
-        { success: false, error: "Kampanya süresi geçerli olmalıdır." },
+        {
+          success: false,
+          error: `Kampanya süresi en az ${MIN_CAMPAIGN_DAYS} gün olmalıdır.`,
+        },
         { status: 400 },
       );
     }
@@ -132,12 +142,54 @@ export async function POST(request: Request) {
     const trimmedSektor = sektor;
     const trimmedSehir = sehir;
 
-    const wallet = await getOrCreateWallet();
+    const trialBlocked = await isTrialBlockedForBusiness(
+      trimmedMarka,
+      activeUserId,
+    );
 
-    if (wallet.balance < toplamMaliyet) {
+    if (trialBlocked) {
       return NextResponse.json(
         {
-          error: `SİBER BAKİYE HATASI: Bu operasyonun toplam maliyeti $${toplamMaliyet}. Mevcut bakiyeniz ($${wallet.balance}) yetersizdir!`,
+          success: false,
+          error: "TRIAL_BUSINESS_BLOCKED",
+          message:
+            "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const userWallet = await getOrCreateUserWallet(activeUserId);
+    const walletBalance = userWallet.balance;
+
+    if (walletBalance < toplamMaliyet) {
+      const amountDue = toplamMaliyet - walletBalance;
+
+      if (isIyzicoConfigured()) {
+        return NextResponse.json(
+          {
+            success: false,
+            requiresPayment: true,
+            amountDue,
+            totalCost: toplamMaliyet,
+            currentBalance: walletBalance,
+            error: `Yetersiz bakiye. Eksik tutar: ${amountDue.toLocaleString("tr-TR")} ₺`,
+            campaignDraft: {
+              companyName: trimmedMarka,
+              sector: trimmedSektor,
+              city: trimmedSehir,
+              budget: gunlukButce,
+              campaignDays: gunSayisi,
+            },
+          },
+          { status: 402 },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: `SİBER BAKİYE HATASI: Bu operasyonun toplam maliyeti ${toplamMaliyet.toLocaleString("tr-TR")} ₺. Mevcut bakiyeniz (${walletBalance.toLocaleString("tr-TR")} ₺) yetersizdir!`,
         },
         { status: 400 },
       );
@@ -310,18 +362,31 @@ export async function POST(request: Request) {
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk`,
       );
 
-      await decrementWalletBalance(wallet.id, toplamMaliyet);
+      await decrementUserWalletBalance(activeUserId, toplamMaliyet);
+
+      if (!userWallet.hasPaidTopUp) {
+        await registerBusinessForTrial(trimmedMarka, activeUserId);
+      }
 
       await recordPayment({
         userId: activeUserId,
         amount: toplamMaliyet,
-        currency: "USD",
+        currency: "TRY",
         status: "success",
         provider: "internal",
         providerStatusCode: "WALLET_DEBIT",
         description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
         campaignId: yeniKampanya.id,
       });
+
+      const growthQuestions = questionPairsForBaits.map((pair) => pair.question);
+      if (growthQuestions.length > 0) {
+        await createCampaignGrowthLoop(
+          yeniKampanya.id,
+          activeUserId,
+          growthQuestions,
+        );
+      }
     } catch (dbError) {
       console.error(
         "[KRİTİK VERİTABANI HATASI]: Veri tabanına yazılırken bir hata oluştu:",
@@ -361,6 +426,7 @@ export async function POST(request: Request) {
 
     const response: CampaignResponse = {
       success: true,
+      campaignId: persistedCampaignId ?? undefined,
       metrics,
       terminalLogs,
       llmResult,

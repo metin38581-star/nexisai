@@ -61,12 +61,18 @@ export interface TerminalLogEntry {
 
 export interface CampaignResponse {
   success: boolean;
+  campaignId?: string;
+  requiresPayment?: boolean;
+  amountDue?: number;
+  totalCost?: number;
+  currentBalance?: number;
+  campaignDraft?: CampaignApiRequest;
+  message?: string;
   metrics: CampaignMetrics;
   terminalLogs: TerminalLogEntry[];
   llmResult?: LlmInquiryResult;
   /** Arka planda üretilen gizli GEO yem sayısı; makale içerikleri istemciye gönderilmez. */
   baitsGenerated?: number;
-  message?: string;
   /** Make.com webhook'undan dönen dış platform URL'si (kampanya düzeyi). */
   liveUrl?: string;
   externalUrl?: string | null;

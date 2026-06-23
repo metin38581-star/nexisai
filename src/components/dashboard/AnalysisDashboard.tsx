@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CampaignFormData, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
+import { toast } from "sonner";
+import type { CampaignFormData, CampaignResponse, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
 import {
   buildCampaignSession,
   clearCampaignSession,
@@ -19,6 +20,7 @@ import DistributionStatusPanel from "@/components/dashboard/DistributionStatusPa
 import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
 import CyberTerminal from "@/components/terminal/CyberTerminal";
 import CyberWalletBar from "@/components/wallet/CyberWalletBar";
+import TargetedQuestionsGrowthPanel from "@/components/campaign/TargetedQuestionsGrowthPanel";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 
@@ -85,6 +87,7 @@ function AnalysisDashboardContent({
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [terminalSessionKey, setTerminalSessionKey] = useState(0);
+  const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const analysisInFlightRef = useRef(false);
   const pendingDistributionRef = useRef<{
     count: number;
@@ -247,10 +250,48 @@ function AnalysisDashboardContent({
           }),
         );
 
-        const result = await response.json();
+        const result = (await response.json()) as CampaignResponse & {
+          message?: string;
+        };
 
         if (!response.ok) {
           analysisInFlightRef.current = false;
+
+          if (
+            response.status === 403 &&
+            (result.error === "TRIAL_BUSINESS_BLOCKED" || result.message)
+          ) {
+            toast.error(
+              result.message ??
+                "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+            );
+          }
+
+          if (response.status === 402 && result.requiresPayment) {
+            toast.info("Ödeme gerekiyor — iyzico sayfasına yönlendiriliyorsunuz...");
+            const payResponse = await fetch(
+              "/api/payments/initialize",
+              buildAuthFetchInit(accessToken, {
+                method: "POST",
+                body: JSON.stringify({
+                  amount: result.amountDue,
+                  campaignDraft: result.campaignDraft,
+                  buyerEmail: userEmail,
+                  buyerName: payload.markaAdi,
+                }),
+              }),
+            );
+            const payResult = (await payResponse.json()) as {
+              paymentPageUrl?: string;
+              error?: string;
+            };
+            if (payResponse.ok && payResult.paymentPageUrl) {
+              window.location.href = payResult.paymentPageUrl;
+              return;
+            }
+            toast.error(payResult.error ?? "Ödeme başlatılamadı.");
+          }
+
           const isDuplicate =
             response.status === 429 &&
             typeof result.error === "string" &&
@@ -284,6 +325,9 @@ function AnalysisDashboardContent({
         }
 
         if (result.success) {
+          if (result.campaignId) {
+            setActiveCampaignId(result.campaignId);
+          }
           if (result.llmResult) {
             setLlmResult(result.llmResult);
           }
@@ -337,8 +381,12 @@ function AnalysisDashboardContent({
         setIsLoading(false);
       }
     },
-    [accessToken, resetDistribution, runRadarScan, onWalletRefresh, fetchCampaigns],
+    [accessToken, resetDistribution, runRadarScan, onWalletRefresh, fetchCampaigns, userEmail],
   );
+
+  useEffect(() => {
+    void fetch("/api/cron/growth-loop", { method: "POST" }).catch(() => undefined);
+  }, [activeCampaignId]);
 
   useEffect(() => {
     setSessionReady(true);
@@ -483,6 +531,11 @@ function AnalysisDashboardContent({
               isLoading={isLoading}
             />
             <DistributionStatusPanel />
+            <TargetedQuestionsGrowthPanel
+              campaignId={activeCampaignId}
+              brandName={session.markaAdi}
+              accessToken={accessToken}
+            />
           </div>
         </div>
       )}

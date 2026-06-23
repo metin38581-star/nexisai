@@ -16,6 +16,71 @@ model Wallet {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
+model UserWallet {
+  id             String   @id @default(uuid())
+  userId         String   @unique @map("userId")
+  balance        Float    @default(0)
+  welcomeGranted Boolean  @default(false) @map("welcome_granted")
+  hasPaidTopUp   Boolean  @default(false) @map("has_paid_top_up")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@map("UserWallet")
+}
+
+model RegisteredBusiness {
+  id              String   @id @default(uuid())
+  businessName    String   @map("business_name")
+  normalizedName  String   @unique @map("normalized_name")
+  createdByUserId String   @map("created_by_user_id")
+  isTrialUsed     Boolean  @default(false) @map("is_trial_used")
+  createdAt       DateTime @default(now())
+
+  @@map("RegisteredBusiness")
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  email     String
+  codeHash  String   @map("code_hash")
+  purpose   String   @default("register")
+  expiresAt DateTime @map("expires_at")
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@map("OtpVerification")
+}
+
+model CampaignGrowthLoop {
+  id               String    @id @default(uuid())
+  campaignId       String    @unique @map("campaignId")
+  userId           String    @map("userId")
+  emailScheduledAt DateTime  @map("email_scheduled_at")
+  emailSentAt      DateTime? @map("email_sent_at")
+  scoresUpdatedAt  DateTime? @map("scores_updated_at")
+  questionScores   Json      @map("question_scores")
+  createdAt        DateTime  @default(now())
+  campaign         Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("CampaignGrowthLoop")
+}
+
+model IyzicoCheckout {
+  id             String   @id @default(uuid())
+  userId         String   @map("userId")
+  token          String?  @unique
+  conversationId String?  @unique @map("conversation_id")
+  amount         Float
+  currency       String   @default("TRY")
+  status         String   @default("pending")
+  campaignDraft  Json?    @map("campaign_draft")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@map("IyzicoCheckout")
+}
+
 model Campaign {
   id            String    @id @default(uuid())
   userId        String?   @map("userId")
@@ -40,6 +105,7 @@ model Campaign {
   intents       CampaignIntent[]
   payments      Payment[]
   radarLogs     CampaignRadarLog[]
+  growthLoop    CampaignGrowthLoop?
 }
 
 model MarketIntelligence {
