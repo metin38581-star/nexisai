@@ -33,26 +33,11 @@ function formatLogTimestamp(): string {
   });
 }
 
-const CAMPAIGN_DUPLICATE_GUARD_MS = 10_000;
-
 /** Strict Mode remount ve çift effect tetiklemesinde tekrar istek engeli. */
 const dashboardModuleGuard = {
   bootstrapToken: null as string | null,
   consumedPendingKeys: new Set<string>(),
-  lastLaunch: { key: "", at: 0 },
 };
-
-function claimCampaignLaunch(key: string, guardMs: number): boolean {
-  const now = Date.now();
-  if (
-    dashboardModuleGuard.lastLaunch.key === key &&
-    now - dashboardModuleGuard.lastLaunch.at < guardMs
-  ) {
-    return false;
-  }
-  dashboardModuleGuard.lastLaunch = { key, at: now };
-  return true;
-}
 
 function shouldRunDashboardBootstrap(tokenKey: string): boolean {
   if (dashboardModuleGuard.bootstrapToken === tokenKey) {
@@ -68,16 +53,6 @@ function consumePendingCampaignKey(key: string): boolean {
   }
   dashboardModuleGuard.consumedPendingKeys.add(key);
   return true;
-}
-
-function buildAnalysisRequestKey(payload: CampaignSessionPayload): string {
-  return [
-    payload.markaAdi.trim().toLowerCase(),
-    payload.sehir.trim().toLowerCase(),
-    payload.sektor.trim().toLowerCase(),
-    payload.gunlukButce,
-    payload.gunSayisi,
-  ].join("|");
 }
 
 function buildPendingCampaignKey(data: CampaignFormData): string {
@@ -317,15 +292,12 @@ function AnalysisDashboardContent({
 
   const runAnalysis = useCallback(
     async (payload: CampaignSessionPayload) => {
-      const requestKey = buildAnalysisRequestKey(payload);
       const token = accessTokenRef.current;
       const email = userEmailRef.current;
 
-      if (analysisInFlightRef.current) {
-        return;
-      }
-
       if (!token) {
+        analysisInFlightRef.current = false;
+        setIsLoading(false);
         setTerminalLogs([
           {
             id: `error-${Date.now()}`,
@@ -338,11 +310,6 @@ function AnalysisDashboardContent({
         return;
       }
 
-      if (!claimCampaignLaunch(requestKey, CAMPAIGN_DUPLICATE_GUARD_MS)) {
-        return;
-      }
-
-      analysisInFlightRef.current = true;
       resetDistribution();
       setTerminalLogs([]);
       setLlmResult(null);
@@ -419,6 +386,12 @@ function AnalysisDashboardContent({
             (result.error.toLowerCase().includes("yetersiz") ||
               result.error.toLowerCase().includes("siber bakiye"));
           const isUnauthorized = response.status === 401;
+
+          if (isDuplicate) {
+            toast.info(
+              "Kampanya isteği zaten işleniyor. Birkaç saniye bekleyip tekrar deneyin.",
+            );
+          }
 
           setTerminalLogs([
             {
@@ -527,6 +500,7 @@ function AnalysisDashboardContent({
       return;
     }
 
+    analysisInFlightRef.current = true;
     clearCampaignSession();
     const payload = buildCampaignSession(data);
     setSession(payload);
@@ -550,6 +524,8 @@ function AnalysisDashboardContent({
         return;
       }
 
+      consumePendingCampaignKey(buildPendingCampaignKey(data));
+      onPendingCampaignHandledRef.current?.();
       startCampaignAnalysis(data);
     },
     [startCampaignAnalysis, isLoading, isLoggedIn, userEmail, onRequireAuth],

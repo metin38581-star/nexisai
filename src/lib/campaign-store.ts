@@ -170,6 +170,9 @@ export async function listCampaignsByUserId(
 }
 
 const DUPLICATE_CAMPAIGN_WINDOW_MS = 60_000;
+/** Eşzamanlı çift POST koruması — tamamlanmış kampanyalar için kısa pencere. */
+const CONCURRENT_CAMPAIGN_WINDOW_MS = 5_000;
+const INCOMPLETE_SHELL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** Son 1 dakikada aynı marka + şehir için kampanya var mı? */
 export async function hasRecentDuplicateCampaign(
@@ -270,6 +273,97 @@ async function deleteCampaignById(campaignId: string): Promise<void> {
   await supabase.from("Campaign").delete().eq("id", campaignId);
 }
 
+async function findIncompleteCampaignShell(
+  userId: string,
+  markaAdi: string,
+  sehir: string,
+): Promise<string | null> {
+  const since = new Date(Date.now() - INCOMPLETE_SHELL_MAX_AGE_MS);
+  const normalizedBrand = markaAdi.trim().toLowerCase();
+  const normalizedCity = sehir.trim().toLowerCase();
+
+  if (hasDatabaseUrl()) {
+    try {
+      const rows = await prisma.campaign.findMany({
+        where: {
+          userId,
+          makaleSayisi: 0,
+          createdAt: { gte: since },
+        },
+        select: { id: true, markaAdi: true, sehir: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      });
+
+      const match = rows.find(
+        (row) =>
+          row.markaAdi.trim().toLowerCase() === normalizedBrand &&
+          row.sehir.trim().toLowerCase() === normalizedCity,
+      );
+      return match?.id ?? null;
+    } catch (error) {
+      console.error("[CAMPAIGN_SHELL]: Prisma sorgusu başarısız:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("Campaign")
+    .select("id, markaAdi, sehir, makaleSayisi, createdAt")
+    .eq("userId", userId)
+    .eq("makaleSayisi", 0)
+    .gte("createdAt", since.toISOString())
+    .order("createdAt", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.error("[CAMPAIGN_SHELL]: Supabase sorgusu başarısız:", error);
+    return null;
+  }
+
+  const match = (data ?? []).find(
+    (row) =>
+      row.markaAdi?.trim().toLowerCase() === normalizedBrand &&
+      row.sehir?.trim().toLowerCase() === normalizedCity,
+  );
+
+  return (match?.id as string | undefined) ?? null;
+}
+
+async function refreshCampaignShell(
+  campaignId: string,
+  input: CampaignShellInput,
+): Promise<void> {
+  const data = {
+    sektor: input.sektor.trim(),
+    markaAdi: input.markaAdi.trim(),
+    gunlukButce: input.gunlukButce,
+    gunSayisi: input.gunSayisi,
+    agresiflik: input.agresiflik,
+    radarSikligi: input.radarSikligi,
+    radarSikligiDakika: input.radarSikligiDakika,
+  };
+
+  if (hasDatabaseUrl()) {
+    try {
+      await prisma.campaign.update({ where: { id: campaignId }, data });
+      return;
+    } catch (error) {
+      console.error("[CAMPAIGN_SHELL]: Prisma güncelleme hatası:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("Campaign")
+    .update(data)
+    .eq("id", campaignId);
+
+  if (error) {
+    console.error("[CAMPAIGN_SHELL]: Supabase güncelleme hatası:", error);
+  }
+}
+
 async function findRecentMatchingCampaigns(
   userId: string,
   markaAdi: string,
@@ -331,10 +425,22 @@ async function findRecentMatchingCampaigns(
 export async function claimAutonomousCampaignSlot(
   input: CampaignShellInput,
 ): Promise<string | null> {
+  const reusableShellId = await findIncompleteCampaignShell(
+    input.userId,
+    input.markaAdi,
+    input.sehir,
+  );
+
+  if (reusableShellId) {
+    await refreshCampaignShell(reusableShellId, input);
+    return reusableShellId;
+  }
+
   const existingBefore = await findRecentMatchingCampaigns(
     input.userId,
     input.markaAdi,
     input.sehir,
+    CONCURRENT_CAMPAIGN_WINDOW_MS,
   );
 
   if (existingBefore.length > 0) {
