@@ -98,12 +98,12 @@ export default function DashboardCyberScene3D() {
     window.addEventListener("resize", applyLayout);
     applyLayout();
 
-    const clock = new THREE.Clock();
+    const startTime = performance.now();
     let frameId = 0;
 
     const animate = () => {
       frameId = requestAnimationFrame(animate);
-      const t = clock.getElapsedTime();
+      const t = (performance.now() - startTime) / 1000;
       core.rotation.y = t * 0.1;
       particles.rotation.y = t * 0.04;
       group.rotation.y += (targetRY - group.rotation.y) * 0.03;

@@ -436,17 +436,6 @@ export async function claimAutonomousCampaignSlot(
     return reusableShellId;
   }
 
-  const existingBefore = await findRecentMatchingCampaigns(
-    input.userId,
-    input.markaAdi,
-    input.sehir,
-    CONCURRENT_CAMPAIGN_WINDOW_MS,
-  );
-
-  if (existingBefore.length > 0) {
-    return null;
-  }
-
   const campaignId = crypto.randomUUID();
   const shell = {
     userId: input.userId,
@@ -497,7 +486,7 @@ export async function claimAutonomousCampaignSlot(
 
   if (winner.id !== campaignId) {
     await deleteCampaignById(campaignId);
-    return null;
+    return winner.id;
   }
 
   for (const duplicate of recent.slice(1)) {
@@ -505,6 +494,43 @@ export async function claimAutonomousCampaignSlot(
   }
 
   return campaignId;
+}
+
+export async function getCampaignBaitCount(campaignId: string): Promise<number> {
+  if (hasDatabaseUrl()) {
+    try {
+      return await prisma.bait.count({ where: { campaignId } });
+    } catch (error) {
+      console.error("[CAMPAIGN_BAITS]: Prisma sayım hatası:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { count, error } = await supabase
+    .from("Bait")
+    .select("*", { count: "exact", head: true })
+    .eq("campaignId", campaignId);
+
+  if (error) {
+    console.error("[CAMPAIGN_BAITS]: Supabase sayım hatası:", error);
+    return 0;
+  }
+
+  return count ?? 0;
+}
+
+export async function resolveRecentDuplicateCampaignId(
+  userId: string,
+  markaAdi: string,
+  sehir: string,
+): Promise<string | null> {
+  const recent = await findRecentMatchingCampaigns(
+    userId,
+    markaAdi,
+    sehir,
+    CONCURRENT_CAMPAIGN_WINDOW_MS,
+  );
+  return recent[0]?.id ?? null;
 }
 
 export async function completeCampaignWithBaits(

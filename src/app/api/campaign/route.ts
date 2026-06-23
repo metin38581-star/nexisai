@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
-import { claimAutonomousCampaignSlot, completeCampaignWithBaits } from "@/lib/campaign-store";
+import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, resolveRecentDuplicateCampaignId } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
@@ -35,6 +35,37 @@ import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
 import { recordPayment } from "@/lib/payment-store";
+
+function buildAlreadyProcessedResponse(
+  campaignId: string,
+  baitCount: number,
+  markaAdi: string,
+): CampaignResponse {
+  return {
+    success: true,
+    campaignId,
+    baitsGenerated: baitCount,
+    terminalLogs: [
+      {
+        id: `resume-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString("tr-TR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        category: "SİSTEM",
+        message: `✓ [OTURUM]: ${markaAdi} kampanyası zaten aktif — mevcut operasyona bağlandınız.`,
+      },
+    ],
+    message: "Kampanya zaten başlatılmış.",
+    metrics: {
+      visibilityRate: 0,
+      estimatedTraffic: 0,
+      spentBudget: 0,
+      totalBudget: 0,
+    },
+  };
+}
 
 function buildFallbackMakaleler(count: number): string[] {
   return Array.from(
@@ -180,7 +211,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const reservedCampaignId = await claimAutonomousCampaignSlot({
+    let reservedCampaignId = await claimAutonomousCampaignSlot({
       userId: activeUserId,
       sehir: trimmedSehir,
       sektor: trimmedSektor,
@@ -191,6 +222,14 @@ export async function POST(request: Request) {
       radarSikligi,
       radarSikligiDakika,
     });
+
+    if (!reservedCampaignId) {
+      reservedCampaignId = await resolveRecentDuplicateCampaignId(
+        activeUserId,
+        trimmedMarka,
+        trimmedSehir,
+      );
+    }
 
     if (!reservedCampaignId) {
       console.warn(
@@ -204,6 +243,17 @@ export async function POST(request: Request) {
           error: "Duplicate request",
         },
         { status: 429 },
+      );
+    }
+
+    const existingBaitCount = await getCampaignBaitCount(reservedCampaignId);
+    if (existingBaitCount > 0) {
+      return NextResponse.json(
+        buildAlreadyProcessedResponse(
+          reservedCampaignId,
+          existingBaitCount,
+          trimmedMarka,
+        ),
       );
     }
 

@@ -24,6 +24,7 @@ import CyberWalletBar from "@/components/wallet/CyberWalletBar";
 import TargetedQuestionsGrowthPanel from "@/components/campaign/TargetedQuestionsGrowthPanel";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
+import { runCampaignPostOnce } from "@/lib/campaign-post-lock";
 
 function formatLogTimestamp(): string {
   return new Date().toLocaleTimeString("tr-TR", {
@@ -31,6 +32,138 @@ function formatLogTimestamp(): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+const DUPLICATE_RECOVERY_WINDOW_MS = 120_000;
+
+function normalizeMatchText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+async function recoverDuplicateCampaignResult(
+  token: string,
+  payload: CampaignSessionPayload,
+): Promise<CampaignResponse | null> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 2000);
+      });
+    }
+
+    try {
+      const response = await fetch(
+        "/api/campaigns",
+        buildAuthFetchInit(token),
+      );
+      if (!response.ok) {
+        continue;
+      }
+
+      const campaigns = (await response.json()) as StoredCampaign[];
+      const match = campaigns.find((campaign) => {
+        const createdAt = new Date(campaign.createdAt).getTime();
+        if (Date.now() - createdAt > DUPLICATE_RECOVERY_WINDOW_MS) {
+          return false;
+        }
+
+        const brandMatch =
+          normalizeMatchText(campaign.markaAdi) ===
+          normalizeMatchText(payload.markaAdi);
+        const cityMatch =
+          normalizeMatchText(campaign.sehir) ===
+          normalizeMatchText(payload.sehir);
+
+        if (!brandMatch || !cityMatch) {
+          return false;
+        }
+
+        const hasContent =
+          campaign.makaleSayisi > 0 || (campaign.baits?.length ?? 0) > 0;
+
+        return hasContent || attempt >= 1;
+      });
+
+      if (!match) {
+        continue;
+      }
+
+      const baitCount = match.makaleSayisi || match.baits?.length || 0;
+      const inProgress = baitCount === 0;
+
+      return {
+        success: true,
+        campaignId: match.id,
+        baitsGenerated: baitCount,
+        metrics: {
+          visibilityRate: match.skor,
+          estimatedTraffic: 0,
+          spentBudget: match.gunlukButce * match.gunSayisi,
+          totalBudget: match.gunlukButce * match.gunSayisi,
+        },
+        terminalLogs: [
+          {
+            id: `recover-${Date.now()}`,
+            timestamp: formatLogTimestamp(),
+            category: "SİSTEM",
+            message: inProgress
+              ? `✓ [OTURUM]: ${payload.markaAdi} kampanyası işleniyor — operasyon devam ediyor.`
+              : `✓ [OTURUM]: ${payload.markaAdi} kampanyası bulundu — operasyon devam ediyor.`,
+          },
+        ],
+        message: "Kampanya zaten başlatılmış.",
+      };
+    } catch {
+      // Sonraki denemeye geç.
+    }
+  }
+
+  return null;
+}
+
+function applyCampaignSuccess(
+  payload: CampaignSessionPayload,
+  result: CampaignResponse,
+  handlers: {
+    setActiveCampaignId: (id: string) => void;
+    setLlmResult: (value: LlmInquiryResult | null) => void;
+    setTerminalLogs: (logs: TerminalLogEntry[]) => void;
+    setPendingDistribution: (value: {
+      count: number;
+      sehir: string;
+      sektor: string;
+    } | null) => void;
+    onWalletRefresh?: () => void;
+    runRadarScan: () => Promise<void>;
+    fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
+  },
+): void {
+  if (result.campaignId) {
+    handlers.setActiveCampaignId(result.campaignId);
+  }
+  if (result.llmResult) {
+    handlers.setLlmResult(result.llmResult);
+  }
+
+  const logs: TerminalLogEntry[] = payload.withTahsilat
+    ? [buildTahsilatLog(), ...(result.terminalLogs ?? [])]
+    : (result.terminalLogs ?? []);
+  handlers.setTerminalLogs(logs);
+
+  const baitsGenerated =
+    typeof result.baitsGenerated === "number" ? result.baitsGenerated : 0;
+
+  if (baitsGenerated > 0) {
+    handlers.setPendingDistribution({
+      count: baitsGenerated,
+      sehir: payload.sehir,
+      sektor: payload.sektor,
+    });
+  }
+
+  handlers.onWalletRefresh?.();
+  void handlers.runRadarScan();
+  void handlers.fetchCampaigns({ silent: true });
 }
 
 /** Strict Mode remount — bootstrap tekrar istek engeli. */
@@ -118,6 +251,7 @@ function AnalysisDashboardContent({
   const accessTokenRef = useRef(accessToken);
   const userEmailRef = useRef(userEmail);
   const isLoggedInRef = useRef(isLoggedIn);
+  const launchIdempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -301,130 +435,145 @@ function AnalysisDashboardContent({
       setIsActive(true);
 
       try {
-        const response = await fetch(
-          "/api/campaign",
-          buildAuthFetchInit(token, {
-            method: "POST",
-            body: JSON.stringify({
-              companyName: payload.markaAdi,
-              sector: payload.sektor,
-              city: payload.sehir,
-              budget: payload.gunlukButce,
-              campaignDays: payload.gunSayisi,
-            }),
-          }),
-        );
+        await runCampaignPostOnce(async () => {
+          const idempotencyKey =
+            launchIdempotencyKeyRef.current ?? crypto.randomUUID();
 
-        const result = (await response.json()) as CampaignResponse & {
-          message?: string;
-        };
-
-        if (!response.ok) {
-          analysisInFlightRef.current = false;
-
-          if (
-            response.status === 403 &&
-            (result.error === "TRIAL_BUSINESS_BLOCKED" || result.message)
-          ) {
-            toast.error(
-              result.message ??
-                "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
-            );
-          }
-
-          if (response.status === 402 && result.requiresPayment) {
-            toast.info("Ödeme gerekiyor — iyzico sayfasına yönlendiriliyorsunuz...");
-            const payResponse = await fetch(
-              "/api/payments/initialize",
-              buildAuthFetchInit(token, {
-                method: "POST",
-                body: JSON.stringify({
-                  amount: result.amountDue,
-                  campaignDraft: result.campaignDraft,
-                  buyerEmail: email,
-                  buyerName: payload.markaAdi,
-                }),
+          const response = await fetch(
+            "/api/campaign",
+            buildAuthFetchInit(token, {
+              method: "POST",
+              headers: {
+                "Idempotency-Key": idempotencyKey,
+              },
+              body: JSON.stringify({
+                companyName: payload.markaAdi,
+                sector: payload.sektor,
+                city: payload.sehir,
+                budget: payload.gunlukButce,
+                campaignDays: payload.gunSayisi,
               }),
-            );
-            const payResult = (await payResponse.json()) as {
-              paymentPageUrl?: string;
-              error?: string;
-            };
-            if (payResponse.ok && payResult.paymentPageUrl) {
-              window.location.href = payResult.paymentPageUrl;
-              return;
+            }),
+          );
+
+          const result = (await response.json()) as CampaignResponse & {
+            message?: string;
+            error?: string;
+          };
+
+          if (!response.ok) {
+            const isDuplicate =
+              response.status === 429 &&
+              typeof result.error === "string" &&
+              result.error.toLowerCase().includes("duplicate");
+
+            if (isDuplicate) {
+              const recovered = await recoverDuplicateCampaignResult(
+                token,
+                payload,
+              );
+              if (recovered?.success) {
+                applyCampaignSuccess(payload, recovered, {
+                  setActiveCampaignId,
+                  setLlmResult,
+                  setTerminalLogs,
+                  setPendingDistribution: (value) => {
+                    pendingDistributionRef.current = value;
+                  },
+                  onWalletRefresh,
+                  runRadarScan: () => runRadarScanRef.current(),
+                  fetchCampaigns: (options) =>
+                    fetchCampaignsRef.current(options),
+                });
+                return;
+              }
             }
-            toast.error(payResult.error ?? "Ödeme başlatılamadı.");
+
+            if (
+              response.status === 403 &&
+              (result.error === "TRIAL_BUSINESS_BLOCKED" || result.message)
+            ) {
+              toast.error(
+                result.message ??
+                  "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+              );
+            }
+
+            if (response.status === 402 && result.requiresPayment) {
+              toast.info(
+                "Ödeme gerekiyor — iyzico sayfasına yönlendiriliyorsunuz...",
+              );
+              const payResponse = await fetch(
+                "/api/payments/initialize",
+                buildAuthFetchInit(token, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    amount: result.amountDue,
+                    campaignDraft: result.campaignDraft,
+                    buyerEmail: email,
+                    buyerName: payload.markaAdi,
+                  }),
+                }),
+              );
+              const payResult = (await payResponse.json()) as {
+                paymentPageUrl?: string;
+                error?: string;
+              };
+              if (payResponse.ok && payResult.paymentPageUrl) {
+                window.location.href = payResult.paymentPageUrl;
+                return;
+              }
+              toast.error(payResult.error ?? "Ödeme başlatılamadı.");
+            }
+
+            const isInsufficientBalance =
+              response.status === 400 &&
+              typeof result.error === "string" &&
+              (result.error.toLowerCase().includes("yetersiz") ||
+                result.error.toLowerCase().includes("siber bakiye"));
+            const isUnauthorized = response.status === 401;
+
+            if (isDuplicate) {
+              toast.info(
+                "Kampanya isteği zaten işleniyor. Birkaç saniye bekleyip tekrar deneyin.",
+              );
+            }
+
+            setTerminalLogs([
+              {
+                id: `error-${Date.now()}`,
+                timestamp: formatLogTimestamp(),
+                category: isInsufficientBalance ? "HATA" : "SİSTEM",
+                message: isInsufficientBalance
+                  ? "⚠️ [SİBER KRİZ]: Yetersiz bakiye nedeniyle GEO Enjeksiyon Motoru bloke edildi. Lütfen bakiye yükleyin."
+                  : isDuplicate
+                    ? "⚠️ [KORUMA]: Yinelenen kampanya isteği engellendi. Operasyon zaten başlatıldı."
+                    : isUnauthorized
+                      ? "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor."
+                      : `⚠️ [SİBER HATA]: ${result.error ?? "Operasyon başlatılamadı."}`,
+              },
+            ]);
+
+            resetDistribution();
+            setIsActive(false);
+            return;
           }
 
-          const isDuplicate =
-            response.status === 429 &&
-            typeof result.error === "string" &&
-            result.error.toLowerCase().includes("duplicate");
-          const isInsufficientBalance =
-            response.status === 400 &&
-            typeof result.error === "string" &&
-            (result.error.toLowerCase().includes("yetersiz") ||
-              result.error.toLowerCase().includes("siber bakiye"));
-          const isUnauthorized = response.status === 401;
-
-          if (isDuplicate) {
-            toast.info(
-              "Kampanya isteği zaten işleniyor. Birkaç saniye bekleyip tekrar deneyin.",
-            );
+          if (result.success) {
+            applyCampaignSuccess(payload, result, {
+              setActiveCampaignId,
+              setLlmResult,
+              setTerminalLogs,
+              setPendingDistribution: (value) => {
+                pendingDistributionRef.current = value;
+              },
+              onWalletRefresh,
+              runRadarScan: () => runRadarScanRef.current(),
+              fetchCampaigns: (options) => fetchCampaignsRef.current(options),
+            });
+            return;
           }
 
-          setTerminalLogs([
-            {
-              id: `error-${Date.now()}`,
-              timestamp: formatLogTimestamp(),
-              category: isInsufficientBalance ? "HATA" : "SİSTEM",
-              message: isInsufficientBalance
-                ? "⚠️ [SİBER KRİZ]: Yetersiz bakiye nedeniyle GEO Enjeksiyon Motoru bloke edildi. Lütfen bakiye yükleyin."
-                : isDuplicate
-                  ? "⚠️ [KORUMA]: Yinelenen kampanya isteği engellendi. Operasyon zaten başlatıldı."
-                  : isUnauthorized
-                  ? "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor."
-                  : `⚠️ [SİBER HATA]: ${result.error ?? "Operasyon başlatılamadı."}`,
-            },
-          ]);
-
-          resetDistribution();
-          setIsActive(false);
-          setIsLoading(false);
-          return;
-        }
-
-        if (result.success) {
-          if (result.campaignId) {
-            setActiveCampaignId(result.campaignId);
-          }
-          if (result.llmResult) {
-            setLlmResult(result.llmResult);
-          }
-
-          const logs: TerminalLogEntry[] = payload.withTahsilat
-            ? [buildTahsilatLog(), ...result.terminalLogs]
-            : result.terminalLogs;
-          setTerminalLogs(logs);
-
-          const baitsGenerated =
-            typeof result.baitsGenerated === "number"
-              ? result.baitsGenerated
-              : 0;
-
-          if (baitsGenerated > 0) {
-            pendingDistributionRef.current = {
-              count: baitsGenerated,
-              sehir: payload.sehir,
-              sektor: payload.sektor,
-            };
-          }
-
-          onWalletRefresh?.();
-          void runRadarScanRef.current();
-          void fetchCampaignsRef.current({ silent: true });
-        } else {
           setTerminalLogs([
             {
               id: `error-${Date.now()}`,
@@ -435,7 +584,7 @@ function AnalysisDashboardContent({
           ]);
           resetDistribution();
           setIsActive(false);
-        }
+        });
       } catch {
         setTerminalLogs([
           {
@@ -482,6 +631,7 @@ function AnalysisDashboardContent({
     }
 
     analysisInFlightRef.current = true;
+    launchIdempotencyKeyRef.current = crypto.randomUUID();
     clearCampaignSession();
     const payload = buildCampaignSession(data);
     setSession(payload);
