@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   SECTOR_OPTIONS,
   TURKEY_CITY_OPTIONS,
@@ -45,6 +46,8 @@ const initialForm: CampaignFormData = {
 
 const inputClass = "dc-cyber-input";
 
+const SLIDER_DEBOUNCE_MS = 500;
+
 export default function CampaignCreationStudio({
   onSubmit,
   isLoading,
@@ -56,6 +59,12 @@ export default function CampaignCreationStudio({
 
   const isSubmitLocked = submitting || isLoading;
 
+  const debouncedBudget = useDebouncedValue(form.dailyBudget, SLIDER_DEBOUNCE_MS);
+  const debouncedCampaignDays = useDebouncedValue(
+    form.campaignDays,
+    SLIDER_DEBOUNCE_MS,
+  );
+
   useEffect(() => {
     if (!isLoading) {
       submittingRef.current = false;
@@ -64,23 +73,23 @@ export default function CampaignCreationStudio({
   }, [isLoading]);
 
   const softCapResult = useMemo(
-    () => resolveIntentSoftCap({ dailyBudget: form.dailyBudget }),
-    [form.dailyBudget],
+    () => resolveIntentSoftCap({ dailyBudget: debouncedBudget }),
+    [debouncedBudget],
   );
 
   const contentVolumePlan = useMemo(
-    () => resolveContentVolumePlan(form.dailyBudget),
-    [form.dailyBudget],
+    () => resolveContentVolumePlan(debouncedBudget),
+    [debouncedBudget],
   );
 
   const budgetTier = useMemo(
-    () => resolveBudgetOperationTier(form.dailyBudget),
-    [form.dailyBudget],
+    () => resolveBudgetOperationTier(debouncedBudget),
+    [debouncedBudget],
   );
 
   const submitButtonLabel = useMemo(
-    () => resolveAutonomousCampaignButtonLabel(form.dailyBudget),
-    [form.dailyBudget],
+    () => resolveAutonomousCampaignButtonLabel(debouncedBudget),
+    [debouncedBudget],
   );
 
   const updateField = <K extends keyof CampaignFormData>(
@@ -201,6 +210,7 @@ export default function CampaignCreationStudio({
             step={CAMPAIGN_BUDGET_STEP}
             suffix="₺"
             clampMode="blur"
+            tierBudget={debouncedBudget}
             onChange={(value) => updateField("dailyBudget", value)}
             showAgresiflik
           />

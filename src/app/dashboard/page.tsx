@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Navbar from "@/components/layout/Navbar";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import DashboardCyberScene3D from "@/components/dashboard/DashboardCyberScene3D";
@@ -17,23 +17,35 @@ export default function DashboardPage() {
   const [pendingCampaign, setPendingCampaign] =
     useState<CampaignFormData | null>(null);
 
-  const handleRequireAuth = (data?: CampaignFormData) => {
+  const handleRequireAuth = useCallback((data?: CampaignFormData) => {
     if (data) {
       setPendingCampaign(data);
     }
     setAuthMode("register");
     setShowAuthModal(true);
-  };
+  }, []);
 
-  const handleAuthSuccess = (payload: {
-    userName: string;
-    userEmail: string | null;
-    userId: string;
-    accessToken: string;
-  }) => {
-    login(payload);
+  const handlePendingCampaignHandled = useCallback(() => {
+    setPendingCampaign(null);
+  }, []);
+
+  const handleAuthSuccess = useCallback(
+    (payload: {
+      userName: string;
+      userEmail: string | null;
+      userId: string;
+      accessToken: string;
+    }) => {
+      login(payload);
+      setShowAuthModal(false);
+    },
+    [login],
+  );
+
+  const handleAuthModalClose = useCallback(() => {
     setShowAuthModal(false);
-  };
+    setPendingCampaign(null);
+  }, []);
 
   return (
     <div className="dashboard-cyber relative flex min-h-screen flex-col overflow-x-hidden bg-[#050505] text-white">
@@ -43,17 +55,14 @@ export default function DashboardPage() {
       <main className="relative z-10 flex-1">
         <DashboardShell
           pendingCampaign={pendingCampaign}
-          onPendingCampaignHandled={() => setPendingCampaign(null)}
+          onPendingCampaignHandled={handlePendingCampaignHandled}
           onRequireAuth={handleRequireAuth}
         />
       </main>
       <CorporateFooter />
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => {
-          setShowAuthModal(false);
-          setPendingCampaign(null);
-        }}
+        onClose={handleAuthModalClose}
         onSuccess={handleAuthSuccess}
         authMode={authMode}
         onAuthModeChange={setAuthMode}

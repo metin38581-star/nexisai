@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import AnalysisDashboard from "@/components/dashboard/AnalysisDashboard";
 import type { CampaignFormData } from "@/types/campaign";
 
@@ -17,10 +17,14 @@ export default function DashboardShell({
 }: DashboardShellProps) {
   const [walletRefreshToken, setWalletRefreshToken] = useState(0);
 
+  const handleWalletRefresh = useCallback(() => {
+    setWalletRefreshToken((value) => value + 1);
+  }, []);
+
   return (
     <AnalysisDashboard
       walletRefreshToken={walletRefreshToken}
-      onWalletRefresh={() => setWalletRefreshToken((value) => value + 1)}
+      onWalletRefresh={handleWalletRefresh}
       pendingCampaign={pendingCampaign}
       onPendingCampaignHandled={onPendingCampaignHandled}
       onRequireAuth={onRequireAuth}

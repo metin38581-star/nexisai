@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CampaignFormData, CampaignResponse, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import {
   buildCampaignSession,
   clearCampaignSession,
@@ -30,6 +31,28 @@ function formatLogTimestamp(): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+  });
+}
+
+const CAMPAIGN_REQUEST_DEBOUNCE_MS = 500;
+
+function buildAnalysisRequestKey(payload: CampaignSessionPayload): string {
+  return [
+    payload.markaAdi.trim().toLowerCase(),
+    payload.sehir.trim().toLowerCase(),
+    payload.sektor.trim().toLowerCase(),
+    payload.gunlukButce,
+    payload.gunSayisi,
+  ].join("|");
+}
+
+function buildPendingCampaignKey(data: CampaignFormData): string {
+  return JSON.stringify({
+    businessName: data.businessName.trim(),
+    sector: data.sector,
+    city: data.city,
+    dailyBudget: data.dailyBudget,
+    campaignDays: data.campaignDays,
   });
 }
 
@@ -90,6 +113,12 @@ function AnalysisDashboardContent({
   const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const analysisInFlightRef = useRef(false);
+  const lastAnalysisRequestRef = useRef<{ key: string; at: number } | null>(
+    null,
+  );
+  const pendingCampaignHandledRef = useRef<string | null>(null);
+  const growthLoopTriggeredRef = useRef<string | null>(null);
+  const dashboardBootstrapRef = useRef<string | null>(null);
   const pendingDistributionRef = useRef<{
     count: number;
     sehir: string;
@@ -157,23 +186,38 @@ function AnalysisDashboardContent({
     await fetchCampaigns({ silent: true });
   }, [fetchCampaigns]);
 
+  const fetchCampaignsRef = useRef(fetchCampaigns);
+  const runRadarScanRef = useRef(runRadarScan);
+
+  useEffect(() => {
+    fetchCampaignsRef.current = fetchCampaigns;
+    runRadarScanRef.current = runRadarScan;
+  }, [fetchCampaigns, runRadarScan]);
+
   useEffect(() => {
     if (!isAuthReady) {
       return;
     }
 
-    void fetchCampaigns();
+    const bootstrapKey = accessToken ?? "guest";
+    if (dashboardBootstrapRef.current === bootstrapKey) {
+      return;
+    }
+    dashboardBootstrapRef.current = bootstrapKey;
 
-    void runRadarScan();
+    void (async () => {
+      await fetchCampaignsRef.current();
+      await runRadarScanRef.current();
+    })();
 
     const intervalId = window.setInterval(() => {
-      void runRadarScan();
+      void runRadarScanRef.current();
     }, 60_000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [fetchCampaigns, isAuthReady, runRadarScan]);
+  }, [isAuthReady, accessToken]);
 
   const appendDistributionLog = useCallback((message: string, id: string) => {
     setTerminalLogs((prev) => [
@@ -223,9 +267,23 @@ function AnalysisDashboardContent({
 
   const runAnalysis = useCallback(
     async (payload: CampaignSessionPayload) => {
+      const requestKey = buildAnalysisRequestKey(payload);
+      const now = Date.now();
+      const lastRequest = lastAnalysisRequestRef.current;
+
       if (analysisInFlightRef.current) {
         return;
       }
+
+      if (
+        lastRequest &&
+        lastRequest.key === requestKey &&
+        now - lastRequest.at < CAMPAIGN_REQUEST_DEBOUNCE_MS
+      ) {
+        return;
+      }
+
+      lastAnalysisRequestRef.current = { key: requestKey, at: now };
       analysisInFlightRef.current = true;
       resetDistribution();
       setTerminalLogs([]);
@@ -385,7 +443,23 @@ function AnalysisDashboardContent({
     [accessToken, resetDistribution, runRadarScan, onWalletRefresh, fetchCampaigns, userEmail],
   );
 
+  const debouncedRunAnalysis = useDebouncedCallback(
+    (payload: CampaignSessionPayload) => {
+      void runAnalysis(payload);
+    },
+    CAMPAIGN_REQUEST_DEBOUNCE_MS,
+  );
+
   useEffect(() => {
+    if (!activeCampaignId) {
+      return;
+    }
+
+    if (growthLoopTriggeredRef.current === activeCampaignId) {
+      return;
+    }
+
+    growthLoopTriggeredRef.current = activeCampaignId;
     void fetch("/api/cron/growth-loop", { method: "POST" }).catch(() => undefined);
   }, [activeCampaignId]);
 
@@ -404,13 +478,22 @@ function AnalysisDashboardContent({
         return;
       }
 
+      debouncedRunAnalysis.cancel();
+
       clearCampaignSession();
 
       const payload = buildCampaignSession(data);
       setSession(payload);
       void runAnalysis(payload);
     },
-    [runAnalysis, isLoading, isLoggedIn, userEmail, onRequireAuth],
+    [
+      runAnalysis,
+      debouncedRunAnalysis,
+      isLoading,
+      isLoggedIn,
+      userEmail,
+      onRequireAuth,
+    ],
   );
 
   useEffect(() => {
@@ -418,16 +501,28 @@ function AnalysisDashboardContent({
       return;
     }
 
-    const data = pendingCampaign;
+    const pendingKey = buildPendingCampaignKey(pendingCampaign);
+    if (pendingCampaignHandledRef.current === pendingKey) {
+      return;
+    }
+
+    pendingCampaignHandledRef.current = pendingKey;
     onPendingCampaignHandled?.();
-    handleFormSubmit(data);
+
+    debouncedRunAnalysis.cancel();
+    clearCampaignSession();
+
+    const payload = buildCampaignSession(pendingCampaign);
+    setSession(payload);
+    void runAnalysis(payload);
   }, [
     pendingCampaign,
     isLoggedIn,
     userEmail,
     accessToken,
     onPendingCampaignHandled,
-    handleFormSubmit,
+    runAnalysis,
+    debouncedRunAnalysis,
   ]);
 
   const handleFlowComplete = useCallback(() => {

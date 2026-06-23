@@ -19,6 +19,8 @@ interface CyberBudgetFieldProps {
   allowUnset?: boolean;
   /** immediate: her değişimde min/max kilitle | blur: min yalnızca odak kaybında uygulanır */
   clampMode?: "immediate" | "blur";
+  /** Tier paneli için gecikmeli bütçe (sürgü kaydırırken debounce). */
+  tierBudget?: number;
 }
 
 export default function CyberBudgetField({
@@ -33,10 +35,12 @@ export default function CyberBudgetField({
   showAgresiflik = false,
   allowUnset = false,
   clampMode = "immediate",
+  tierBudget,
 }: CyberBudgetFieldProps) {
   const displayBudget = value > 0 ? value : min;
+  const tierSource = tierBudget ?? displayBudget;
   const tierNeon = showAgresiflik
-    ? resolveBudgetOperationTier(displayBudget).neonTheme
+    ? resolveBudgetOperationTier(tierSource).neonTheme
     : "cyan";
 
   const clampValue = (next: number): number =>
@@ -143,7 +147,7 @@ export default function CyberBudgetField({
       </div>
 
       {showAgresiflik ? (
-        <BudgetOperationTierPanel budget={displayBudget} />
+        <BudgetOperationTierPanel budget={tierSource} />
       ) : null}
     </div>
   );
