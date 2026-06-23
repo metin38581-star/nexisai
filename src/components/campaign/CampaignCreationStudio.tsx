@@ -33,6 +33,9 @@ import "@/components/campaign/budget-operation-tier.css";
 interface CampaignCreationStudioProps {
   onSubmit: (data: CampaignFormData) => void;
   isLoading: boolean;
+  /** Giriş sonrası formu doldurmak için — kampanya başlatmaz. */
+  draftForm?: CampaignFormData | null;
+  onDraftApplied?: () => void;
 }
 
 const initialForm: CampaignFormData = {
@@ -48,6 +51,8 @@ const inputClass = "dc-cyber-input";
 export default function CampaignCreationStudio({
   onSubmit,
   isLoading,
+  draftForm = null,
+  onDraftApplied,
 }: CampaignCreationStudioProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
   const [budgetPreview, setBudgetPreview] = useState(MIN_CAMPAIGN_DAILY_BUDGET);
@@ -55,6 +60,7 @@ export default function CampaignCreationStudio({
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const lastAppliedDraftRef = useRef<string | null>(null);
 
   const isSubmitLocked = submitting || isLoading;
 
@@ -64,6 +70,23 @@ export default function CampaignCreationStudio({
       setSubmitting(false);
     }
   }, [isLoading]);
+
+  useEffect(() => {
+    if (!draftForm) {
+      return;
+    }
+
+    const draftKey = JSON.stringify(draftForm);
+    if (lastAppliedDraftRef.current === draftKey) {
+      return;
+    }
+
+    lastAppliedDraftRef.current = draftKey;
+    setForm(draftForm);
+    setBudgetPreview(draftForm.dailyBudget);
+    setDaysPreview(draftForm.campaignDays);
+    onDraftApplied?.();
+  }, [draftForm, onDraftApplied]);
 
   useEffect(() => {
     setBudgetPreview(form.dailyBudget);

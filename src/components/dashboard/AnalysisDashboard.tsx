@@ -33,10 +33,9 @@ function formatLogTimestamp(): string {
   });
 }
 
-/** Strict Mode remount ve çift effect tetiklemesinde tekrar istek engeli. */
+/** Strict Mode remount — bootstrap tekrar istek engeli. */
 const dashboardModuleGuard = {
   bootstrapToken: null as string | null,
-  consumedPendingKeys: new Set<string>(),
 };
 
 function shouldRunDashboardBootstrap(tokenKey: string): boolean {
@@ -45,24 +44,6 @@ function shouldRunDashboardBootstrap(tokenKey: string): boolean {
   }
   dashboardModuleGuard.bootstrapToken = tokenKey;
   return true;
-}
-
-function consumePendingCampaignKey(key: string): boolean {
-  if (dashboardModuleGuard.consumedPendingKeys.has(key)) {
-    return false;
-  }
-  dashboardModuleGuard.consumedPendingKeys.add(key);
-  return true;
-}
-
-function buildPendingCampaignKey(data: CampaignFormData): string {
-  return JSON.stringify({
-    businessName: data.businessName.trim(),
-    sector: data.sector,
-    city: data.city,
-    dailyBudget: data.dailyBudget,
-    campaignDays: data.campaignDays,
-  });
 }
 
 export default function AnalysisDashboard({
@@ -507,12 +488,6 @@ function AnalysisDashboardContent({
     void runAnalysisRef.current(payload);
   }, []);
 
-  const startCampaignAnalysisRef = useRef(startCampaignAnalysis);
-
-  useEffect(() => {
-    startCampaignAnalysisRef.current = startCampaignAnalysis;
-  }, [startCampaignAnalysis]);
-
   const handleFormSubmit = useCallback(
     (data: CampaignFormData) => {
       if (analysisInFlightRef.current || isLoading) {
@@ -524,28 +499,15 @@ function AnalysisDashboardContent({
         return;
       }
 
-      consumePendingCampaignKey(buildPendingCampaignKey(data));
       onPendingCampaignHandledRef.current?.();
       startCampaignAnalysis(data);
     },
     [startCampaignAnalysis, isLoading, isLoggedIn, userEmail, onRequireAuth],
   );
 
-  useEffect(() => {
-    if (!pendingCampaign || !isLoggedIn || !userEmail || !accessToken) {
-      return;
-    }
-
-    const pendingKey = buildPendingCampaignKey(pendingCampaign);
-    if (!consumePendingCampaignKey(pendingKey)) {
-      return;
-    }
-
+  const handleDraftApplied = useCallback(() => {
     onPendingCampaignHandledRef.current?.();
-
-    const data = pendingCampaign;
-    startCampaignAnalysisRef.current(data);
-  }, [pendingCampaign, isLoggedIn, userEmail, accessToken]);
+  }, []);
 
   const handleFlowComplete = useCallback(() => {
     if (pendingDistributionRef.current) {
@@ -631,6 +593,8 @@ function AnalysisDashboardContent({
           <CampaignCreationStudio
             onSubmit={handleFormSubmit}
             isLoading={isLoading}
+            draftForm={isLoggedIn ? pendingCampaign : null}
+            onDraftApplied={handleDraftApplied}
           />
         </DashboardHolographicPanel>
       </section>
