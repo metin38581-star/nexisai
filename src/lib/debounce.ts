@@ -1,18 +1,18 @@
-export interface DebouncedFunction<T extends (...args: any[]) => void> {
-  (...args: Parameters<T>): void;
+export interface DebouncedFunction<TArgs extends readonly unknown[]> {
+  (...args: TArgs): void;
   cancel: () => void;
   flush: () => void;
   pending: () => boolean;
 }
 
-export function debounce<T extends (...args: any[]) => void>(
-  fn: (...args: Parameters<T>) => void,
+export function debounce<TArgs extends readonly unknown[]>(
+  fn: (...args: TArgs) => void,
   waitMs: number,
-): DebouncedFunction<T> {
+): DebouncedFunction<TArgs> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let lastArgs: Parameters<T> | null = null;
+  let lastArgs: TArgs | null = null;
 
-  const debounced = ((...args: Parameters<T>) => {
+  const debounced = ((...args: TArgs) => {
     lastArgs = args;
 
     if (timeoutId !== null) {
@@ -27,7 +27,7 @@ export function debounce<T extends (...args: any[]) => void>(
         fn(...callArgs);
       }
     }, waitMs);
-  }) as DebouncedFunction<T>;
+  }) as DebouncedFunction<TArgs>;
 
   debounced.cancel = () => {
     if (timeoutId !== null) {
