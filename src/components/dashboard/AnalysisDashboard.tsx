@@ -33,7 +33,42 @@ function formatLogTimestamp(): string {
   });
 }
 
-const CAMPAIGN_DUPLICATE_GUARD_MS = 3_000;
+const CAMPAIGN_DUPLICATE_GUARD_MS = 10_000;
+
+/** Strict Mode remount ve çift effect tetiklemesinde tekrar istek engeli. */
+const dashboardModuleGuard = {
+  bootstrapToken: null as string | null,
+  consumedPendingKeys: new Set<string>(),
+  lastLaunch: { key: "", at: 0 },
+};
+
+function claimCampaignLaunch(key: string, guardMs: number): boolean {
+  const now = Date.now();
+  if (
+    dashboardModuleGuard.lastLaunch.key === key &&
+    now - dashboardModuleGuard.lastLaunch.at < guardMs
+  ) {
+    return false;
+  }
+  dashboardModuleGuard.lastLaunch = { key, at: now };
+  return true;
+}
+
+function shouldRunDashboardBootstrap(tokenKey: string): boolean {
+  if (dashboardModuleGuard.bootstrapToken === tokenKey) {
+    return false;
+  }
+  dashboardModuleGuard.bootstrapToken = tokenKey;
+  return true;
+}
+
+function consumePendingCampaignKey(key: string): boolean {
+  if (dashboardModuleGuard.consumedPendingKeys.has(key)) {
+    return false;
+  }
+  dashboardModuleGuard.consumedPendingKeys.add(key);
+  return true;
+}
 
 function buildAnalysisRequestKey(payload: CampaignSessionPayload): string {
   return [
@@ -112,10 +147,6 @@ function AnalysisDashboardContent({
   const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const analysisInFlightRef = useRef(false);
-  const lastAnalysisRequestRef = useRef<{ key: string; at: number } | null>(
-    null,
-  );
-  const pendingCampaignHandledRef = useRef<string | null>(null);
   const growthLoopTriggeredRef = useRef<string | null>(null);
   const dashboardBootstrapRef = useRef<string | null>(null);
   const pendingDistributionRef = useRef<{
@@ -128,6 +159,15 @@ function AnalysisDashboardContent({
     (payload: CampaignSessionPayload) => Promise<void>
   >(async () => undefined);
   const onPendingCampaignHandledRef = useRef(onPendingCampaignHandled);
+  const accessTokenRef = useRef(accessToken);
+  const userEmailRef = useRef(userEmail);
+  const isLoggedInRef = useRef(isLoggedIn);
+
+  useEffect(() => {
+    accessTokenRef.current = accessToken;
+    userEmailRef.current = userEmail;
+    isLoggedInRef.current = isLoggedIn;
+  }, [accessToken, userEmail, isLoggedIn]);
 
   useEffect(() => {
     onPendingCampaignHandledRef.current = onPendingCampaignHandled;
@@ -207,7 +247,10 @@ function AnalysisDashboardContent({
     }
 
     const bootstrapKey = accessToken ?? "guest";
-    if (dashboardBootstrapRef.current === bootstrapKey) {
+    if (
+      dashboardBootstrapRef.current === bootstrapKey ||
+      !shouldRunDashboardBootstrap(bootstrapKey)
+    ) {
       return;
     }
     dashboardBootstrapRef.current = bootstrapKey;
@@ -275,22 +318,30 @@ function AnalysisDashboardContent({
   const runAnalysis = useCallback(
     async (payload: CampaignSessionPayload) => {
       const requestKey = buildAnalysisRequestKey(payload);
-      const now = Date.now();
-      const lastRequest = lastAnalysisRequestRef.current;
+      const token = accessTokenRef.current;
+      const email = userEmailRef.current;
 
       if (analysisInFlightRef.current) {
         return;
       }
 
-      if (
-        lastRequest &&
-        lastRequest.key === requestKey &&
-        now - lastRequest.at < CAMPAIGN_DUPLICATE_GUARD_MS
-      ) {
+      if (!token) {
+        setTerminalLogs([
+          {
+            id: `error-${Date.now()}`,
+            timestamp: formatLogTimestamp(),
+            category: "SİSTEM",
+            message:
+              "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor.",
+          },
+        ]);
         return;
       }
 
-      lastAnalysisRequestRef.current = { key: requestKey, at: now };
+      if (!claimCampaignLaunch(requestKey, CAMPAIGN_DUPLICATE_GUARD_MS)) {
+        return;
+      }
+
       analysisInFlightRef.current = true;
       resetDistribution();
       setTerminalLogs([]);
@@ -304,7 +355,7 @@ function AnalysisDashboardContent({
       try {
         const response = await fetch(
           "/api/campaign",
-          buildAuthFetchInit(accessToken, {
+          buildAuthFetchInit(token, {
             method: "POST",
             body: JSON.stringify({
               companyName: payload.markaAdi,
@@ -337,12 +388,12 @@ function AnalysisDashboardContent({
             toast.info("Ödeme gerekiyor — iyzico sayfasına yönlendiriliyorsunuz...");
             const payResponse = await fetch(
               "/api/payments/initialize",
-              buildAuthFetchInit(accessToken, {
+              buildAuthFetchInit(token, {
                 method: "POST",
                 body: JSON.stringify({
                   amount: result.amountDue,
                   campaignDraft: result.campaignDraft,
-                  buyerEmail: userEmail,
+                  buyerEmail: email,
                   buyerName: payload.markaAdi,
                 }),
               }),
@@ -417,8 +468,8 @@ function AnalysisDashboardContent({
           }
 
           onWalletRefresh?.();
-          void runRadarScan();
-          void fetchCampaigns({ silent: true });
+          void runRadarScanRef.current();
+          void fetchCampaignsRef.current({ silent: true });
         } else {
           setTerminalLogs([
             {
@@ -447,7 +498,7 @@ function AnalysisDashboardContent({
         setIsLoading(false);
       }
     },
-    [accessToken, resetDistribution, runRadarScan, onWalletRefresh, fetchCampaigns, userEmail],
+    [resetDistribution, onWalletRefresh],
   );
 
   useEffect(() => {
@@ -510,11 +561,10 @@ function AnalysisDashboardContent({
     }
 
     const pendingKey = buildPendingCampaignKey(pendingCampaign);
-    if (pendingCampaignHandledRef.current === pendingKey) {
+    if (!consumePendingCampaignKey(pendingKey)) {
       return;
     }
 
-    pendingCampaignHandledRef.current = pendingKey;
     onPendingCampaignHandledRef.current?.();
 
     const data = pendingCampaign;

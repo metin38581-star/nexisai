@@ -49,6 +49,7 @@ export default function NeonCyberRange({
   const [isDragging, setIsDragging] = useState(false);
   const prevValueRef = useRef(value);
   const latestValueRef = useRef(value);
+  const lastCommitAtRef = useRef(0);
 
   useEffect(() => {
     latestValueRef.current = value;
@@ -132,6 +133,11 @@ export default function NeonCyberRange({
   }, [isDragging, value, min, max, spawnParticles, neonTheme, colors]);
 
   const finishDrag = useCallback(() => {
+    const now = Date.now();
+    if (now - lastCommitAtRef.current < 80) {
+      return;
+    }
+    lastCommitAtRef.current = now;
     setIsDragging(false);
     onCommit(latestValueRef.current);
   }, [onCommit]);
@@ -168,7 +174,8 @@ export default function NeonCyberRange({
             onLiveChange(next);
           }}
           onPointerDown={() => setIsDragging(true)}
-          onPointerUp={finishDrag}
+          onMouseUp={finishDrag}
+          onTouchEnd={finishDrag}
           onPointerCancel={finishDrag}
           onLostPointerCapture={finishDrag}
           className="cyber-range-neon relative z-10 w-full"

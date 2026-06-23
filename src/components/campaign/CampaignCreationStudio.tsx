@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   SECTOR_OPTIONS,
   TURKEY_CITY_OPTIONS,
@@ -46,20 +45,18 @@ const initialForm: CampaignFormData = {
 
 const inputClass = "dc-cyber-input";
 
-const SLIDER_DEBOUNCE_MS = 500;
-
 export default function CampaignCreationStudio({
   onSubmit,
   isLoading,
 }: CampaignCreationStudioProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
+  const [budgetPreview, setBudgetPreview] = useState(MIN_CAMPAIGN_DAILY_BUDGET);
+  const [daysPreview, setDaysPreview] = useState(7);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
   const isSubmitLocked = submitting || isLoading;
-
-  const debouncedBudget = useDebouncedValue(form.dailyBudget, SLIDER_DEBOUNCE_MS);
 
   useEffect(() => {
     if (!isLoading) {
@@ -68,24 +65,32 @@ export default function CampaignCreationStudio({
     }
   }, [isLoading]);
 
+  useEffect(() => {
+    setBudgetPreview(form.dailyBudget);
+  }, [form.dailyBudget]);
+
+  useEffect(() => {
+    setDaysPreview(form.campaignDays);
+  }, [form.campaignDays]);
+
   const softCapResult = useMemo(
-    () => resolveIntentSoftCap({ dailyBudget: debouncedBudget }),
-    [debouncedBudget],
+    () => resolveIntentSoftCap({ dailyBudget: budgetPreview }),
+    [budgetPreview],
   );
 
   const contentVolumePlan = useMemo(
-    () => resolveContentVolumePlan(debouncedBudget),
-    [debouncedBudget],
+    () => resolveContentVolumePlan(budgetPreview),
+    [budgetPreview],
   );
 
   const budgetTier = useMemo(
-    () => resolveBudgetOperationTier(debouncedBudget),
-    [debouncedBudget],
+    () => resolveBudgetOperationTier(budgetPreview),
+    [budgetPreview],
   );
 
   const submitButtonLabel = useMemo(
-    () => resolveAutonomousCampaignButtonLabel(debouncedBudget),
-    [debouncedBudget],
+    () => resolveAutonomousCampaignButtonLabel(budgetPreview),
+    [budgetPreview],
   );
 
   const updateField = <K extends keyof CampaignFormData>(
@@ -131,7 +136,7 @@ export default function CampaignCreationStudio({
 
   return (
     <div className="overflow-hidden">
-        <div className="mb-6">
+      <div className="mb-6">
         <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
           <Sparkles className="h-3.5 w-3.5" />
           Otonom GEO Kampanya Motoru
@@ -206,7 +211,7 @@ export default function CampaignCreationStudio({
             step={CAMPAIGN_BUDGET_STEP}
             suffix="₺"
             clampMode="blur"
-            tierBudget={debouncedBudget}
+            onDraftChange={setBudgetPreview}
             onChange={(value) => updateField("dailyBudget", value)}
             showAgresiflik
           />
@@ -218,6 +223,7 @@ export default function CampaignCreationStudio({
             step={1}
             prefix=""
             suffix="gün"
+            onDraftChange={setDaysPreview}
             onChange={(value) =>
               updateField("campaignDays", clampCampaignDays(value))
             }
@@ -230,6 +236,7 @@ export default function CampaignCreationStudio({
           targetCount={softCapResult.maxQuestions}
           analysisDescription={softCapResult.analysisDescription}
           contentDescription={contentVolumePlan.description}
+          previewDays={daysPreview}
         />
 
         {formError ? (
@@ -271,12 +278,14 @@ function AutonomousAnalysisInfoCard({
   targetCount,
   analysisDescription,
   contentDescription,
+  previewDays,
 }: {
   tier: ReturnType<typeof resolveBudgetOperationTier>;
   tierLabel: string;
   targetCount: number;
   analysisDescription: string;
   contentDescription: string;
+  previewDays: number;
 }) {
   const cardThemeClass = `bot-analysis-card bot-analysis-card--${tier.neonTheme}`;
 
@@ -305,6 +314,9 @@ function AutonomousAnalysisInfoCard({
             </span>
             <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold text-cyan-200">
               Radar: {tier.radarSikligi}
+            </span>
+            <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-3 py-1 text-[11px] text-zinc-400">
+              {previewDays} gün operasyon
             </span>
           </div>
           <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">

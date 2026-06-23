@@ -4,11 +4,8 @@ import { useEffect, useState } from "react";
 
 import NeonCyberRange from "@/components/campaign/NeonCyberRange";
 import BudgetOperationTierPanel from "@/components/campaign/BudgetOperationTierPanel";
-import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
 import "@/components/campaign/budget-operation-tier.css";
-
-const SLIDER_COMMIT_DEBOUNCE_MS = 500;
 
 interface CyberBudgetFieldProps {
   label: string;
@@ -18,14 +15,13 @@ interface CyberBudgetFieldProps {
   step?: number;
   prefix?: string;
   suffix?: string;
+  /** Sürgü bırakıldığında (mouseup/touchend) veya sayı alanı blur olduğunda çağrılır. */
   onChange: (value: number) => void;
+  /** Sürüklerken yalnızca UI önizlemesi — API veya üst form commit tetiklenmez. */
+  onDraftChange?: (value: number) => void;
   showAgresiflik?: boolean;
-  /** true iken 0 değeri boş input olarak gösterilir (tarama öncesi bütçe zorunluluğu). */
   allowUnset?: boolean;
-  /** immediate: her değişimde min/max kilitle | blur: min yalnızca odak kaybında uygulanır */
   clampMode?: "immediate" | "blur";
-  /** Tier paneli için gecikmeli bütçe (sürgü kaydırırken debounce). */
-  tierBudget?: number;
 }
 
 export default function CyberBudgetField({
@@ -37,10 +33,10 @@ export default function CyberBudgetField({
   prefix = "",
   suffix,
   onChange,
+  onDraftChange,
   showAgresiflik = false,
   allowUnset = false,
   clampMode = "immediate",
-  tierBudget,
 }: CyberBudgetFieldProps) {
   const [localValue, setLocalValue] = useState(value);
 
@@ -49,9 +45,8 @@ export default function CyberBudgetField({
   }, [value]);
 
   const displayBudget = localValue > 0 ? localValue : min;
-  const tierSource = tierBudget ?? displayBudget;
   const tierNeon = showAgresiflik
-    ? resolveBudgetOperationTier(tierSource).neonTheme
+    ? resolveBudgetOperationTier(displayBudget).neonTheme
     : "cyan";
 
   const clampValue = (next: number): number =>
@@ -76,50 +71,60 @@ export default function CyberBudgetField({
     return formatted;
   };
 
-  const debouncedCommit = useDebouncedCallback((next: number) => {
-    onChange(next);
-  }, SLIDER_COMMIT_DEBOUNCE_MS);
-
-  const commitValue = (raw: number, options?: { immediate?: boolean }) => {
+  const applyLocalPreview = (raw: number) => {
     if (allowUnset && raw <= 0) {
       setLocalValue(0);
-      debouncedCommit.cancel();
+      onDraftChange?.(0);
+      return;
+    }
+
+    const next =
+      clampMode === "blur" ? Math.min(max, raw) : snapToStep(raw);
+
+    setLocalValue(next);
+    onDraftChange?.(next);
+  };
+
+  const commitToParent = (raw: number) => {
+    if (allowUnset && raw <= 0) {
+      setLocalValue(0);
+      onDraftChange?.(0);
       onChange(0);
       return;
     }
 
     let next = raw;
-    if (clampMode !== "blur") {
-      next = snapToStep(raw);
-    } else {
-      next = Math.min(max, raw);
-    }
-
-    setLocalValue(next);
-
-    if (options?.immediate) {
-      debouncedCommit.cancel();
-      onChange(next);
-      return;
-    }
-
-    debouncedCommit(next);
-  };
-
-  const handleBlur = () => {
-    if (allowUnset && localValue === 0) {
-      return;
-    }
-
-    let next = localValue;
     if (!Number.isFinite(next) || next < min) {
       next = min;
     }
     if (next > max) {
       next = max;
     }
-    next = snapToStep(next);
-    commitValue(next, { immediate: true });
+    if (clampMode !== "blur") {
+      next = snapToStep(next);
+    } else {
+      next = Math.min(max, next);
+    }
+
+    setLocalValue(next);
+    onDraftChange?.(next);
+    onChange(next);
+  };
+
+  const handleNumberInputChange = (raw: string) => {
+    if (allowUnset && raw === "") {
+      applyLocalPreview(0);
+      return;
+    }
+    applyLocalPreview(Number(raw));
+  };
+
+  const handleBlur = () => {
+    if (allowUnset && localValue === 0) {
+      commitToParent(0);
+      return;
+    }
+    commitToParent(localValue);
   };
 
   return (
@@ -139,14 +144,7 @@ export default function CyberBudgetField({
             step={step}
             value={allowUnset && localValue === 0 ? "" : localValue}
             placeholder={allowUnset ? "Bütçe girin" : undefined}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (allowUnset && raw === "") {
-                commitValue(0, { immediate: true });
-                return;
-              }
-              commitValue(Number(raw));
-            }}
+            onChange={(e) => handleNumberInputChange(e.target.value)}
             onBlur={handleBlur}
             className="w-full min-w-0 bg-transparent text-right text-sm font-semibold text-white outline-none placeholder:text-zinc-600 sm:w-24"
           />
@@ -164,14 +162,8 @@ export default function CyberBudgetField({
         step={step}
         value={localValue > 0 ? localValue : min}
         neonTheme={tierNeon}
-        onLiveChange={(next) => {
-          const snapped = snapToStep(next);
-          setLocalValue(snapped);
-          debouncedCommit(snapped);
-        }}
-        onCommit={(next) => {
-          commitValue(next, { immediate: true });
-        }}
+        onLiveChange={applyLocalPreview}
+        onCommit={commitToParent}
       />
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
@@ -180,7 +172,7 @@ export default function CyberBudgetField({
       </div>
 
       {showAgresiflik ? (
-        <BudgetOperationTierPanel budget={tierSource} />
+        <BudgetOperationTierPanel budget={displayBudget} />
       ) : null}
     </div>
   );
