@@ -1,27 +1,40 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import BrandLogo from "@/components/brand/BrandLogo";
 import { getLandingParallax } from "@/lib/landing-parallax";
+import { useAuth } from "@/context/AuthContext";
+import { buildAuthFetchInit } from "@/lib/auth-headers";
 import {
   isSupabaseConfigured,
   SUPABASE_SETUP_HINT,
 } from "@/lib/supabase-config";
+import "@/components/landing/landing-futuristic.css";
 
 const inputClassName =
   "w-full rounded-xl border border-violet-500/25 bg-slate-950/50 px-4 py-3 text-sm text-white placeholder:text-zinc-600 backdrop-blur-md transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 focus:shadow-[0_0_20px_rgba(6,182,212,0.15)]";
 
-export default function LandingRegisterPanel3D() {
-  const router = useRouter();
+interface RegisterWalletPanelContentProps {
+  mode: "register" | "wallet";
+  onClose: () => void;
+  onWalletSuccess?: () => void;
+}
+
+export default function RegisterWalletPanelContent({
+  mode,
+  onClose,
+  onWalletSuccess,
+}: RegisterWalletPanelContentProps) {
+  const { login, accessToken } = useAuth();
   const panelRef = useRef<HTMLDivElement>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
+  const [topUpAmount, setTopUpAmount] = useState("100");
   const [registerStep, setRegisterStep] = useState<"form" | "otp">("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -42,7 +55,6 @@ export default function LandingRegisterPanel3D() {
           "translateZ(0)",
         ].join(" ");
       }
-
       const elapsed = (performance.now() - start) / 1000;
       setFieldReveal(Math.min(elapsed / 1.2, 1));
       frameId = requestAnimationFrame(tick);
@@ -52,7 +64,13 @@ export default function LandingRegisterPanel3D() {
     return () => cancelAnimationFrame(frameId);
   }, []);
 
-  const validateForm = (): string | null => {
+  const fieldStyle = (index: number): React.CSSProperties => ({
+    opacity: fieldReveal > index * 0.22 ? 1 : 0,
+    transform: fieldReveal > index * 0.22 ? "translateY(0)" : "translateY(18px)",
+    transition: "opacity 0.55s ease, transform 0.55s ease",
+  });
+
+  const validateRegister = (): string | null => {
     if (!fullName.trim()) return "İşletme adı zorunludur.";
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return "Geçerli bir e-posta adresi girin.";
@@ -62,7 +80,7 @@ export default function LandingRegisterPanel3D() {
   };
 
   const sendOtp = async (): Promise<boolean> => {
-    const validationError = validateForm();
+    const validationError = validateRegister();
     if (validationError) {
       setErrorMessage(validationError);
       return false;
@@ -92,7 +110,7 @@ export default function LandingRegisterPanel3D() {
     }
   };
 
-  const completeRegister = async (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
@@ -130,16 +148,24 @@ export default function LandingRegisterPanel3D() {
       const result = (await response.json()) as {
         success?: boolean;
         error?: string;
+        user?: { id: string; email: string; userName: string };
         accessToken?: string;
       };
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || !result.success || !result.user || !result.accessToken) {
         setErrorMessage(result.error ?? "Kayıt tamamlanamadı.");
         return;
       }
 
+      login({
+        userName: result.user.userName,
+        userEmail: result.user.email,
+        userId: result.user.id,
+        accessToken: result.accessToken,
+      });
+
       toast.success("Hesabınız doğrulandı! 100 ₺ hediye bakiyeniz tanımlandı. 🎁");
-      router.push("/dashboard");
+      onClose();
     } catch {
       setErrorMessage("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {
@@ -147,47 +173,83 @@ export default function LandingRegisterPanel3D() {
     }
   };
 
-  const fieldStyle = (index: number): React.CSSProperties => ({
-    opacity: fieldReveal > index * 0.22 ? 1 : 0,
-    transform:
-      fieldReveal > index * 0.22
-        ? "translateY(0)"
-        : "translateY(18px)",
-    transition: "opacity 0.55s ease, transform 0.55s ease",
-  });
+  const handleWalletSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(
+        "/api/wallet",
+        buildAuthFetchInit(accessToken, {
+          method: "POST",
+          body: JSON.stringify({ amount: Number(topUpAmount) }),
+        }),
+      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        setErrorMessage(result.error ?? "Bakiye yüklenemedi.");
+        return;
+      }
+
+      if (result.requiresPayment && result.paymentPageUrl) {
+        window.location.href = result.paymentPageUrl as string;
+        return;
+      }
+
+      toast.success("Bakiye başarıyla yüklendi.");
+      onWalletSuccess?.();
+      onClose();
+    } catch {
+      setErrorMessage("Bağlantı hatası. Lütfen tekrar deneyin.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isRegister = mode === "register";
 
   return (
-    <div className="relative flex min-h-[520px] items-center justify-center [perspective:900px]">
-      <div
-        ref={panelRef}
-        className="lf-register-panel-3d w-full max-w-md will-change-transform"
-        style={{ transformStyle: "preserve-3d" }}
+    <div
+      ref={panelRef}
+      className="lf-register-panel-3d relative z-10 w-full max-w-md will-change-transform"
+      style={{ transformStyle: "preserve-3d" }}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute -right-2 -top-2 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900/90 text-zinc-400 transition hover:text-white"
+        aria-label="Kapat"
       >
-        <div className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-slate-950/45 p-8 shadow-[0_0_48px_rgba(139,92,246,0.18),0_0_80px_rgba(6,182,212,0.08)] backdrop-blur-xl">
-          <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.12),transparent_55%)]"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute -bottom-16 -right-16 h-48 w-48 rounded-full bg-cyan-500/10 blur-3xl"
-            aria-hidden
-          />
+        <X className="h-4 w-4" />
+      </button>
 
-          <div className="relative mb-6 flex justify-center" style={fieldStyle(0)}>
-            <BrandLogo className="h-auto w-48 object-contain drop-shadow-[0_0_16px_rgba(139,92,246,0.45)]" />
-          </div>
+      <div className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-slate-950/55 p-8 shadow-[0_0_48px_rgba(139,92,246,0.22),0_0_80px_rgba(6,182,212,0.1)] backdrop-blur-xl">
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.14),transparent_55%)]"
+          aria-hidden
+        />
 
-          <div className="relative text-center" style={fieldStyle(0)}>
-            <h2 className="lf-orbitron bg-gradient-to-r from-white via-slate-200 to-purple-400 bg-clip-text text-xl font-bold text-transparent sm:text-2xl">
-              NexisAI Operasyon Merkezine Katılın
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-              Yapay zeka optimizasyon kampanyalarınızı yönetmek ve cüzdanınızı
-              aktif etmek için ücretsiz hesabınızı oluşturun.
-            </p>
-          </div>
+        <div className="relative mb-6 flex justify-center" style={fieldStyle(0)}>
+          <BrandLogo className="h-auto w-44 object-contain drop-shadow-[0_0_16px_rgba(139,92,246,0.45)]" />
+        </div>
 
-          <form onSubmit={completeRegister} className="relative mt-6 space-y-4">
+        <div className="relative text-center" style={fieldStyle(0)}>
+          <h2 className="lf-orbitron bg-gradient-to-r from-white via-slate-200 to-purple-400 bg-clip-text text-xl font-bold text-transparent">
+            {isRegister
+              ? "NexisAI Operasyon Merkezine Katılın"
+              : "Siber Cüzdan — Bakiye Yükle"}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+            {isRegister
+              ? "Yapay zeka optimizasyon kampanyalarınızı yönetmek ve cüzdanınızı aktif etmek için ücretsiz hesabınızı oluşturun."
+              : "Operasyon maliyetinizi karşılamak için cüzdanınıza TL yükleyin."}
+          </p>
+        </div>
+
+        {isRegister ? (
+          <form onSubmit={handleRegisterSubmit} className="relative mt-6 space-y-4">
             <div style={fieldStyle(1)}>
               <label className="mb-2 block text-sm font-medium text-zinc-300">
                 İşletme Adı
@@ -202,7 +264,6 @@ export default function LandingRegisterPanel3D() {
                 autoComplete="organization"
               />
             </div>
-
             <div style={fieldStyle(2)}>
               <label className="mb-2 block text-sm font-medium text-zinc-300">
                 E-posta
@@ -217,7 +278,6 @@ export default function LandingRegisterPanel3D() {
                 autoComplete="email"
               />
             </div>
-
             <div style={fieldStyle(3)}>
               <label className="mb-2 block text-sm font-medium text-zinc-300">
                 Şifre
@@ -232,7 +292,6 @@ export default function LandingRegisterPanel3D() {
                 autoComplete="new-password"
               />
             </div>
-
             {registerStep === "otp" && (
               <div style={fieldStyle(4)}>
                 <label className="mb-2 block text-sm font-medium text-zinc-300">
@@ -243,9 +302,7 @@ export default function LandingRegisterPanel3D() {
                   inputMode="numeric"
                   maxLength={6}
                   value={otpCode}
-                  onChange={(e) =>
-                    setOtpCode(e.target.value.replace(/\D/g, ""))
-                  }
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="6 haneli kod"
                   disabled={isSubmitting}
                   className={inputClassName}
@@ -253,13 +310,11 @@ export default function LandingRegisterPanel3D() {
                 />
               </div>
             )}
-
             {errorMessage ? (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                 {errorMessage}
               </p>
             ) : null}
-
             <div style={fieldStyle(4)}>
               <button
                 type="submit"
@@ -283,18 +338,42 @@ export default function LandingRegisterPanel3D() {
               </button>
             </div>
           </form>
-
-          <p className="relative mt-5 text-center text-sm text-zinc-500">
-            Zaten hesabınız var mı?{" "}
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="font-medium text-violet-400 transition hover:text-violet-300"
-            >
-              Giriş Yap
-            </button>
-          </p>
-        </div>
+        ) : (
+          <form onSubmit={handleWalletSubmit} className="relative mt-6 space-y-4">
+            <div style={fieldStyle(1)}>
+              <label className="mb-2 block text-sm font-medium text-zinc-300">
+                Yüklenecek Miktar (₺)
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                required
+                value={topUpAmount}
+                onChange={(e) => setTopUpAmount(e.target.value)}
+                className={inputClassName}
+              />
+            </div>
+            {errorMessage ? (
+              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {errorMessage}
+              </p>
+            ) : null}
+            <div style={fieldStyle(2)}>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="lf-register-btn relative w-full overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                <span className="absolute inset-0 bg-neon-gradient opacity-90" />
+                <span className="absolute inset-[1px] rounded-[11px] bg-slate-950/15 backdrop-blur-sm" />
+                <span className="relative">
+                  {isSubmitting ? "Yükleniyor..." : "Bakiyeyi Onayla"}
+                </span>
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

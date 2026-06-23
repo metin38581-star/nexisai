@@ -7,7 +7,6 @@ import { ArrowRight } from "lucide-react";
 
 import FuturisticScene3D from "@/components/landing/FuturisticScene3D";
 import LandingAppFeatures from "@/components/landing/LandingAppFeatures";
-import LandingRegisterPanel3D from "@/components/landing/LandingRegisterPanel3D";
 import "@/components/landing/landing-futuristic.css";
 
 const orbitron = Orbitron({
@@ -137,9 +136,10 @@ export default function HomeLanding() {
             </div>
           </div>
 
-          <div className="relative hidden min-h-[520px] lg:block">
-            <LandingRegisterPanel3D />
-          </div>
+          <div
+            className="hidden min-h-[320px] lg:block"
+            aria-hidden
+          />
         </section>
 
         {/* Optimize */}
