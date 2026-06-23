@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import BrandLogo from "@/components/brand/BrandLogo";
 import { getLandingParallax } from "@/lib/landing-parallax";
+import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import {
@@ -28,6 +30,7 @@ export default function RegisterWalletPanelContent({
   onClose,
   onWalletSuccess,
 }: RegisterWalletPanelContentProps) {
+  const router = useRouter();
   const { login, accessToken } = useAuth();
   const panelRef = useRef<HTMLDivElement>(null);
   const [fullName, setFullName] = useState("");
@@ -110,17 +113,10 @@ export default function RegisterWalletPanelContent({
     }
   };
 
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-
-    if (registerStep === "form") {
-      await sendOtp();
-      return;
-    }
-
-    if (!/^\d{6}$/.test(otpCode.trim())) {
-      setErrorMessage("6 haneli doğrulama kodunu girin.");
+  const completeRegister = async (): Promise<void> => {
+    const validationError = validateRegister();
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
@@ -142,7 +138,7 @@ export default function RegisterWalletPanelContent({
           email: email.trim(),
           password: password.trim(),
           companyName: fullName.trim(),
-          otpCode: otpCode.trim(),
+          ...(OTP_BYPASS_ENABLED ? {} : { otpCode: otpCode.trim() }),
         }),
       });
       const result = (await response.json()) as {
@@ -166,11 +162,34 @@ export default function RegisterWalletPanelContent({
 
       toast.success("Hesabınız doğrulandı! 100 ₺ hediye bakiyeniz tanımlandı. 🎁");
       onClose();
+      router.push("/dashboard");
     } catch {
       setErrorMessage("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    if (OTP_BYPASS_ENABLED) {
+      await completeRegister();
+      return;
+    }
+
+    if (registerStep === "form") {
+      await sendOtp();
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otpCode.trim())) {
+      setErrorMessage("6 haneli doğrulama kodunu girin.");
+      return;
+    }
+
+    await completeRegister();
   };
 
   const handleWalletSubmit = async (e: React.FormEvent) => {
@@ -292,7 +311,8 @@ export default function RegisterWalletPanelContent({
                 autoComplete="new-password"
               />
             </div>
-            {registerStep === "otp" && (
+            {/* OTP adımı — OTP_BYPASS_ENABLED iken gizli; tekrar açmak için bypass'ı kapatın */}
+            {!OTP_BYPASS_ENABLED && registerStep === "otp" && (
               <div style={fieldStyle(4)}>
                 <label className="mb-2 block text-sm font-medium text-zinc-300">
                   E-posta Doğrulama Kodu
@@ -327,9 +347,13 @@ export default function RegisterWalletPanelContent({
                   {isSubmitting || isSendingOtp ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {registerStep === "otp" ? "Doğrulanıyor..." : "Gönderiliyor..."}
+                      {OTP_BYPASS_ENABLED
+                        ? "Kaydediliyor..."
+                        : registerStep === "otp"
+                          ? "Doğrulanıyor..."
+                          : "Gönderiliyor..."}
                     </>
-                  ) : registerStep === "otp" ? (
+                  ) : !OTP_BYPASS_ENABLED && registerStep === "otp" ? (
                     "Doğrula ve 100 ₺ Hediye Bakiyeni Al 🎁"
                   ) : (
                     "Doğrulama Kodu Gönder 📧"

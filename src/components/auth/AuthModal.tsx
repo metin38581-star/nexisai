@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
+import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import {
   isSupabaseConfigured,
   SUPABASE_SETUP_HINT,
@@ -84,6 +86,7 @@ export default function AuthModal({
   authMode,
   onAuthModeChange,
 }: AuthModalProps) {
+  const router = useRouter();
   const isRegister = authMode === "register";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -194,7 +197,7 @@ export default function AuthModal({
       return;
     }
 
-    if (isRegister && registerStep === "form") {
+    if (isRegister && registerStep === "form" && !OTP_BYPASS_ENABLED) {
       const sent = await sendOtp();
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -204,7 +207,12 @@ export default function AuthModal({
       return;
     }
 
-    if (isRegister && registerStep === "otp" && !/^\d{6}$/.test(otpCode.trim())) {
+    if (
+      isRegister &&
+      !OTP_BYPASS_ENABLED &&
+      registerStep === "otp" &&
+      !/^\d{6}$/.test(otpCode.trim())
+    ) {
       setErrorMessage("6 haneli doğrulama kodunu girin.");
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -226,7 +234,10 @@ export default function AuthModal({
             email: email.trim(),
             password: password.trim(),
             ...(isRegister
-              ? { companyName: fullName.trim(), otpCode: otpCode.trim() }
+              ? {
+                  companyName: fullName.trim(),
+                  ...(OTP_BYPASS_ENABLED ? {} : { otpCode: otpCode.trim() }),
+                }
               : {}),
           },
           controller.signal,
@@ -268,6 +279,9 @@ export default function AuthModal({
         toast.success(
           "Hesabınız doğrulandı! 100 ₺ hediye bakiyeniz tanımlandı. 🎁",
         );
+        if (OTP_BYPASS_ENABLED) {
+          router.push("/dashboard");
+        }
       }
 
       onSuccess({
@@ -406,7 +420,8 @@ export default function AuthModal({
               />
             </div>
 
-            {isRegister && registerStep === "otp" && (
+            {/* OTP adımı — OTP_BYPASS_ENABLED iken gizli; tekrar açmak için bypass'ı kapatın */}
+            {isRegister && !OTP_BYPASS_ENABLED && registerStep === "otp" && (
               <div>
                 <label className="mb-2 block text-sm font-medium text-zinc-300">
                   E-posta Doğrulama Kodu
@@ -456,13 +471,15 @@ export default function AuthModal({
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {isRegister
-                      ? registerStep === "otp"
-                        ? "Doğrulanıyor..."
-                        : "Kod Gönderiliyor..."
+                      ? OTP_BYPASS_ENABLED
+                        ? "Kaydediliyor..."
+                        : registerStep === "otp"
+                          ? "Doğrulanıyor..."
+                          : "Kod Gönderiliyor..."
                       : "Giriş Yapılıyor..."}
                   </>
                 ) : isRegister ? (
-                  registerStep === "otp" ? (
+                  !OTP_BYPASS_ENABLED && registerStep === "otp" ? (
                     "Doğrula ve 100 ₺ Hediye Bakiyeni Al 🎁"
                   ) : (
                     "Doğrulama Kodu Gönder 📧"

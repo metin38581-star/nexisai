@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
+import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { verifyOtpCode } from "@/lib/otp-service";
 import { grantWelcomeBalance } from "@/lib/user-wallet-service";
@@ -64,11 +65,16 @@ function validatePayload(body: AuthSessionRequest): {
     return { error: "İşletme adı zorunludur." };
   }
 
-  if (action === "register" && !otpCode) {
+  if (action === "register" && !OTP_BYPASS_ENABLED && !otpCode) {
     return { error: "E-posta doğrulama kodu zorunludur." };
   }
 
-  if (action === "register" && otpCode && !/^\d{6}$/.test(otpCode)) {
+  if (
+    action === "register" &&
+    !OTP_BYPASS_ENABLED &&
+    otpCode &&
+    !/^\d{6}$/.test(otpCode)
+  ) {
     return { error: "Geçerli 6 haneli doğrulama kodu girin." };
   }
 
@@ -107,7 +113,7 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient();
     const siteUrl = resolveSiteUrl(request);
 
-    if (action === "register") {
+    if (action === "register" && !OTP_BYPASS_ENABLED) {
       const otpValid = await verifyOtpCode(email, otpCode ?? "", "register");
       if (!otpValid) {
         return NextResponse.json(
