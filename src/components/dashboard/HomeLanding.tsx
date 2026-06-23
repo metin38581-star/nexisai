@@ -6,6 +6,7 @@ import { Orbitron } from "next/font/google";
 import { ArrowRight } from "lucide-react";
 
 import FuturisticScene3D from "@/components/landing/FuturisticScene3D";
+import LandingAppFeatures from "@/components/landing/LandingAppFeatures";
 import "@/components/landing/landing-futuristic.css";
 
 const orbitron = Orbitron({
@@ -188,6 +189,8 @@ export default function HomeLanding() {
             })}
           </div>
         </section>
+
+        <LandingAppFeatures />
 
         {/* CTA */}
         <div className="lf-animate-in lf-animate-in-2 relative mb-16 overflow-hidden rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-cyan-500/5 px-6 py-12 text-center sm:px-10">

@@ -155,3 +155,66 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ── App Features (glassmorphic cards) ── */
+.lf-feature-glass {
+  background: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.45),
+    rgba(6, 182, 212, 0.35),
+    rgba(139, 92, 246, 0.4)
+  );
+  box-shadow: 0 0 32px rgba(139, 92, 246, 0.08);
+  transition:
+    transform 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.lf-feature-glass:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 16px 48px rgba(139, 92, 246, 0.2),
+    0 0 40px rgba(6, 182, 212, 0.12);
+}
+
+.lf-feature-inner {
+  background: rgba(8, 8, 14, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.lf-feature-icon {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.18);
+}
+
+.lf-feature-btn {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  box-shadow: inset 0 0 20px rgba(139, 92, 246, 0.05);
+}
+
+.lf-feature-btn:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(6, 182, 212, 0.08);
+  box-shadow:
+    0 0 20px rgba(6, 182, 212, 0.12),
+    inset 0 0 16px rgba(139, 92, 246, 0.08);
+}
+
+.lf-feature-glow-line {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(6, 182, 212, 0.6),
+    rgba(139, 92, 246, 0.6),
+    transparent
+  );
+  opacity: 0.5;
+}
+
+.lf-feat-1 { animation-delay: 0.1s; }
+.lf-feat-2 { animation-delay: 0.22s; }
+.lf-feat-3 { animation-delay: 0.34s; }
