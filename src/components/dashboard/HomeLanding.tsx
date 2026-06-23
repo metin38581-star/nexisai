@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
+import { WELCOME_BALANCE_TL, formatWelcomeBalanceStat } from "@/lib/wallet-constants";
 import { Orbitron } from "next/font/google";
 import { ArrowRight } from "lucide-react";
 
@@ -112,7 +112,7 @@ export default function HomeLanding() {
             <div className="lf-animate-in lf-animate-in-5 mt-10 flex flex-wrap gap-8">
               <div>
                 <p className="lf-orbitron lf-stat-value text-2xl font-bold text-cyan-400">
-                  100 ₺
+                  {formatWelcomeBalanceStat()}
                 </p>
                 <p className="mt-1 text-xs tracking-wide text-[#94a3b8]">
                   Ücretsiz Deneme

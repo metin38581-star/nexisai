@@ -8,6 +8,7 @@ import {
   creditUserWallet,
   decrementUserWalletBalance,
   getOrCreateUserWallet,
+  grantWelcomeBalance,
 } from "@/lib/user-wallet-service";
 import {
   buildPaymentCallbackUrl,
@@ -29,7 +30,16 @@ export async function GET(request: Request) {
       });
     }
 
-    const wallet = await getOrCreateUserWallet(activeUserId);
+    let wallet = await getOrCreateUserWallet(activeUserId);
+
+    if (!wallet.welcomeGranted) {
+      try {
+        const balance = await grantWelcomeBalance(activeUserId);
+        wallet = { ...wallet, balance, welcomeGranted: true };
+      } catch (welcomeError) {
+        console.error("[WALLET_GET]: Hoş geldin bakiyesi tanımlanamadı:", welcomeError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

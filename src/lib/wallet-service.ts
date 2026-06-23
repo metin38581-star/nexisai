@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
+import { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
 
@@ -14,7 +15,7 @@ async function getOrCreateWalletViaPrisma(): Promise<WalletRecord> {
 
   if (!wallet) {
     wallet = await prisma.wallet.create({
-      data: { id: crypto.randomUUID(), balance: 500.0 },
+      data: { id: crypto.randomUUID(), balance: WELCOME_BALANCE_TL },
     });
   }
 
@@ -39,7 +40,7 @@ async function getOrCreateWalletViaSupabase(): Promise<WalletRecord> {
 
   const { data: created, error: createError } = await supabase
     .from("Wallet")
-    .insert({ balance: 500.0 })
+    .insert({ balance: WELCOME_BALANCE_TL })
     .select("id, balance")
     .single();
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DEFAULT_WALLET_TOPUP_TL } from "@/lib/wallet-constants";
 
 interface WalletTopUpModalProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ export default function WalletTopUpModal({
   onClose,
   onSuccess,
 }: WalletTopUpModalProps) {
-  const [topUpAmount, setTopUpAmount] = useState("100");
+  const [topUpAmount, setTopUpAmount] = useState(String(DEFAULT_WALLET_TOPUP_TL));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

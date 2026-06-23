@@ -6,7 +6,10 @@ import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import BrandLogo from "@/components/brand/BrandLogo";
-import { formatWelcomeBalanceMessage } from "@/lib/wallet-constants";
+import {
+  DEFAULT_WALLET_TOPUP_TL,
+  formatWelcomeBalanceMessage,
+} from "@/lib/wallet-constants";
 import { getLandingParallax } from "@/lib/landing-parallax";
 import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { useAuth } from "@/context/AuthContext";
@@ -38,7 +41,7 @@ export default function RegisterWalletPanelContent({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
-  const [topUpAmount, setTopUpAmount] = useState("100");
+  const [topUpAmount, setTopUpAmount] = useState(String(DEFAULT_WALLET_TOPUP_TL));
   const [registerStep, setRegisterStep] = useState<"form" | "otp">("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -147,6 +150,7 @@ export default function RegisterWalletPanelContent({
         error?: string;
         user?: { id: string; email: string; userName: string };
         accessToken?: string;
+        welcomeBalance?: number;
       };
 
       if (!response.ok || !result.success || !result.user || !result.accessToken) {
@@ -161,7 +165,11 @@ export default function RegisterWalletPanelContent({
         accessToken: result.accessToken,
       });
 
-      toast.success(`Hesabınız doğrulandı! ${formatWelcomeBalanceMessage()} hediye bakiyeniz tanımlandı. 🎁`);
+      const granted =
+        typeof result.welcomeBalance === "number"
+          ? `${result.welcomeBalance.toLocaleString("tr-TR")} ₺`
+          : formatWelcomeBalanceMessage();
+      toast.success(`Hesabınız doğrulandı! ${granted} hediye bakiyeniz tanımlandı. 🎁`);
       onClose();
       router.push("/dashboard");
     } catch {

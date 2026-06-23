@@ -44,6 +44,7 @@ interface AuthSessionResponse {
     userName: string;
   };
   accessToken?: string;
+  welcomeBalance?: number;
 }
 
 async function requestAuthSession(
@@ -277,8 +278,12 @@ export default function AuthModal({
       }
 
       if (isRegister) {
+        const granted =
+          typeof authResult.welcomeBalance === "number"
+            ? `${authResult.welcomeBalance.toLocaleString("tr-TR")} ₺`
+            : formatWelcomeBalanceMessage();
         toast.success(
-          `Hesabınız doğrulandı! ${formatWelcomeBalanceMessage()} hediye bakiyeniz tanımlandı. 🎁`,
+          `Hesabınız doğrulandı! ${granted} hediye bakiyeniz tanımlandı. 🎁`,
         );
         if (OTP_BYPASS_ENABLED) {
           router.push("/dashboard");
