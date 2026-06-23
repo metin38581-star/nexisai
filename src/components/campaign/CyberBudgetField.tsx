@@ -1,6 +1,7 @@
 "use client";
 
 import { resolveAgresiflikProfile } from "@/lib/agresiflik";
+import NeonCyberRange from "@/components/campaign/NeonCyberRange";
 
 interface CyberBudgetFieldProps {
   label: string;
@@ -123,14 +124,12 @@ export default function CyberBudgetField({
         </div>
       </div>
 
-      <input
-        type="range"
+      <NeonCyberRange
         min={min}
         max={max}
         step={step}
         value={value > 0 ? value : min}
-        onChange={(e) => onChange(snapToStep(Number(e.target.value)))}
-        className="cyber-range w-full"
+        onChange={(next) => onChange(snapToStep(next))}
       />
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">

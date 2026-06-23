@@ -25,6 +25,8 @@ import {
 } from "@/lib/intent-soft-cap";
 import { resolveContentVolumePlan } from "@/lib/content-volume";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
+import CyberScanField from "@/components/campaign/CyberScanField";
+import OrbitRingIcon from "@/components/campaign/OrbitRingIcon";
 
 interface CampaignCreationStudioProps {
   onSubmit: (data: CampaignFormData) => void;
@@ -39,8 +41,7 @@ const initialForm: CampaignFormData = {
   campaignDays: 7,
 };
 
-const inputClass =
-  "w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 transition-colors duration-200 focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/20";
+const inputClass = "dc-cyber-input";
 
 export default function CampaignCreationStudio({
   onSubmit,
@@ -117,7 +118,7 @@ export default function CampaignCreationStudio({
   };
 
   return (
-    <div className="glass-card overflow-hidden p-6 lg:p-8">
+    <div className="overflow-hidden">
       <div className="mb-6">
         <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
           <Sparkles className="h-3.5 w-3.5" />
@@ -134,7 +135,7 @@ export default function CampaignCreationStudio({
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid gap-4 md:grid-cols-3">
-          <FormField label="İşletme / Marka Adı">
+          <CyberScanField label="İşletme / Marka Adı">
             <input
               type="text"
               required
@@ -143,9 +144,9 @@ export default function CampaignCreationStudio({
               onChange={(e) => updateField("businessName", e.target.value)}
               className={inputClass}
             />
-          </FormField>
+          </CyberScanField>
 
-          <FormField label="Sektör">
+          <CyberScanField label="Sektör">
             <select
               value={form.sector}
               onChange={(e) =>
@@ -162,9 +163,9 @@ export default function CampaignCreationStudio({
                 </option>
               ))}
             </select>
-          </FormField>
+          </CyberScanField>
 
-          <FormField label="Şehir">
+          <CyberScanField label="Şehir">
             <select
               value={form.city}
               onChange={(e) =>
@@ -181,7 +182,7 @@ export default function CampaignCreationStudio({
                 </option>
               ))}
             </select>
-          </FormField>
+          </CyberScanField>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -264,9 +265,9 @@ function AutonomousAnalysisInfoCard({
   return (
     <div className="rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/5 via-zinc-950/40 to-violet-500/5 p-5">
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-cyan-500/10">
+        <OrbitRingIcon className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-cyan-500/10">
           <Cpu className="h-5 w-5 text-cyan-300" />
-        </div>
+        </OrbitRingIcon>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
             Otonom Yapay Zeka Pazar Analizi
@@ -292,23 +293,6 @@ function AutonomousAnalysisInfoCard({
           </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-medium text-zinc-300">
-        {label}
-      </label>
-      {children}
     </div>
   );
 }

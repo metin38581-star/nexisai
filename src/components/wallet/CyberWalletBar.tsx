@@ -67,7 +67,7 @@ export default function CyberWalletBar({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-xs font-semibold text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:shadow-[0_0_16px_rgba(139,92,246,0.25)]"
+          className="dc-wallet-pulse rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-xs font-semibold text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20"
         >
           Bakiye Yükle (+)
         </button>

@@ -15,6 +15,7 @@ import {
   useDistribution,
 } from "@/context/DistributionContext";
 import CampaignCreationStudio from "@/components/campaign/CampaignCreationStudio";
+import DashboardHolographicPanel from "@/components/dashboard/DashboardHolographicPanel";
 import AnalysisInsightsPanel from "@/components/dashboard/AnalysisInsightsPanel";
 import DistributionStatusPanel from "@/components/dashboard/DistributionStatusPanel";
 import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
@@ -509,10 +510,12 @@ function AnalysisDashboardContent({
       </section>
 
       <section className="mb-10">
-        <CampaignCreationStudio
-          onSubmit={handleFormSubmit}
-          isLoading={isLoading}
-        />
+        <DashboardHolographicPanel>
+          <CampaignCreationStudio
+            onSubmit={handleFormSubmit}
+            isLoading={isLoading}
+          />
+        </DashboardHolographicPanel>
       </section>
 
       {session && (

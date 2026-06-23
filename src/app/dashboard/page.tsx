@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import BackgroundGlow from "@/components/layout/BackgroundGlow";
 import Navbar from "@/components/layout/Navbar";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import DashboardCyberScene3D from "@/components/dashboard/DashboardCyberScene3D";
 import CorporateFooter from "@/components/layout/CorporateFooter";
 import AuthModal, { type AuthViewMode } from "@/components/auth/AuthModal";
 import { useAuth } from "@/context/AuthContext";
 import type { CampaignFormData } from "@/types/campaign";
+import "@/components/dashboard/dashboard-cyber.css";
 
 export default function DashboardPage() {
   const { login } = useAuth();
@@ -35,8 +36,9 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-black text-white">
-      <BackgroundGlow />
+    <div className="dashboard-cyber relative flex min-h-screen flex-col overflow-x-hidden bg-[#050505] text-white">
+      <DashboardCyberScene3D />
+      <div className="dc-grid-overlay" aria-hidden />
       <Navbar />
       <main className="relative z-10 flex-1">
         <DashboardShell

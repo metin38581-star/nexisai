@@ -1,0 +1,264 @@
+/* Dashboard siber komuta merkezi — landing Three.js sahnesine dokunulmaz */
+
+.dashboard-cyber {
+  --dc-purple: #8b5cf6;
+  --dc-cyan: #06b6d4;
+}
+
+.dashboard-cyber .dc-grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(139, 92, 246, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 182, 212, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 15%, transparent 72%);
+}
+
+.dashboard-cyber .dc-holo-outer {
+  position: relative;
+}
+
+.dashboard-cyber .dc-holo-panel {
+  transform-style: preserve-3d;
+  transition: transform 0.08s ease-out;
+  border-radius: 1rem;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.45),
+    rgba(6, 182, 212, 0.35),
+    rgba(139, 92, 246, 0.4)
+  );
+  box-shadow:
+    0 0 40px rgba(139, 92, 246, 0.12),
+    0 0 80px rgba(6, 182, 212, 0.06);
+}
+
+.dashboard-cyber .dc-holo-panel-inner {
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 8, 14, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  padding: 1.5rem 2rem;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-cyber .dc-holo-panel-inner {
+    padding: 2rem;
+  }
+}
+
+.dashboard-cyber .dc-scan-field {
+  position: relative;
+  border-radius: 0.75rem;
+}
+
+.dashboard-cyber .dc-scan-field-inner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.dashboard-cyber .dc-scan-field-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  border: 1px solid transparent;
+  background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(6, 182, 212, 0.6),
+      transparent
+    )
+    border-box;
+  mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  transition: opacity 0.25s ease;
+}
+
+.dashboard-cyber .dc-scan-field--active .dc-scan-field-inner::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--dc-cyan),
+    var(--dc-purple),
+    transparent
+  );
+  animation: dc-scan-sweep 1.6s ease-in-out infinite;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.dashboard-cyber .dc-scan-field--active .dc-scan-field-inner::after {
+  opacity: 1;
+}
+
+@keyframes dc-scan-sweep {
+  0% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(calc(100% + 40px));
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(calc(200% + 80px));
+    opacity: 0.3;
+  }
+}
+
+.dashboard-cyber .dc-neon-range-track {
+  position: relative;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(39, 39, 42, 0.9);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5);
+}
+
+.dashboard-cyber .dc-neon-range-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--range-pct, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--dc-purple), var(--dc-cyan));
+  box-shadow:
+    0 0 14px rgba(6, 182, 212, 0.55),
+    0 0 28px rgba(139, 92, 246, 0.35);
+  pointer-events: none;
+}
+
+.dashboard-cyber .cyber-range-neon {
+  position: relative;
+  height: 0.5rem;
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.dashboard-cyber .cyber-range-neon::-webkit-slider-thumb {
+  appearance: none;
+  height: 1.1rem;
+  width: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid var(--dc-cyan);
+  background: radial-gradient(circle at 30% 30%, #fff, var(--dc-cyan));
+  box-shadow:
+    0 0 16px rgba(6, 182, 212, 0.9),
+    0 0 32px rgba(139, 92, 246, 0.5);
+}
+
+.dashboard-cyber .cyber-range-neon::-moz-range-thumb {
+  height: 1.1rem;
+  width: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid var(--dc-cyan);
+  background: radial-gradient(circle at 30% 30%, #fff, var(--dc-cyan));
+  box-shadow:
+    0 0 16px rgba(6, 182, 212, 0.9),
+    0 0 32px rgba(139, 92, 246, 0.5);
+}
+
+.dashboard-cyber .dc-orbit-icon {
+  position: relative;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+}
+
+.dashboard-cyber .dc-orbit-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  pointer-events: none;
+}
+
+.dashboard-cyber .dc-orbit-ring-a {
+  animation: dc-orbit-spin 4s linear infinite;
+  border-color: rgba(6, 182, 212, 0.45);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+}
+
+.dashboard-cyber .dc-orbit-ring-b {
+  inset: -10px;
+  animation: dc-orbit-spin-reverse 6s linear infinite;
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+}
+
+@keyframes dc-orbit-spin {
+  from {
+    transform: rotateX(65deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(65deg) rotateZ(360deg);
+  }
+}
+
+@keyframes dc-orbit-spin-reverse {
+  from {
+    transform: rotateY(55deg) rotateZ(360deg);
+  }
+  to {
+    transform: rotateY(55deg) rotateZ(0deg);
+  }
+}
+
+.dashboard-cyber .dc-wallet-pulse {
+  animation: dc-wallet-breathe 2s ease-in-out infinite;
+}
+
+@keyframes dc-wallet-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 24px rgba(139, 92, 246, 0.55),
+      0 0 48px rgba(6, 182, 212, 0.2);
+    border-color: rgba(139, 92, 246, 0.65);
+  }
+}
+
+.dashboard-cyber .dc-cyber-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(39 39 42);
+  background: rgba(9, 9, 11, 0.65);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: white;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.dashboard-cyber .dc-cyber-input:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.12);
+}
+
+.dashboard-cyber .dc-cyber-input::placeholder {
+  color: rgb(82 82 91);
+}
