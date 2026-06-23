@@ -1,24 +1,19 @@
--- Wallet tablosunu kullanici bazli cuzdan alanlariyla hizala (UserWallet yerine)
-ALTER TABLE "Wallet" ADD COLUMN IF NOT EXISTS "userId" TEXT;
-ALTER TABLE "Wallet" ADD COLUMN IF NOT EXISTS "welcome_granted" BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE "Wallet" ADD COLUMN IF NOT EXISTS "has_paid_top_up" BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE "Wallet" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+-- Wallet: id = Supabase auth user uuid (mevcut tablo: id, balance, updatedAt)
+-- userId kolonu kullanilmiyor; sorgular prisma.wallet.findUnique({ where: { id } })
 
-CREATE UNIQUE INDEX IF NOT EXISTS "Wallet_userId_key" ON "Wallet"("userId");
-
--- UserWallet varsa veriyi Wallet'a tasit
+-- UserWallet varsa veriyi Wallet.id = userId olacak sekilde tasit
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'UserWallet'
   ) THEN
-    INSERT INTO "Wallet" ("id", "userId", "balance", "welcome_granted", "has_paid_top_up", "createdAt", "updatedAt")
-    SELECT uw."id", uw."userId", uw."balance", uw."welcome_granted", uw."has_paid_top_up", uw."createdAt", uw."updatedAt"
+    INSERT INTO "Wallet" ("id", "balance", "updatedAt")
+    SELECT uw."userId", uw."balance", uw."updatedAt"
     FROM "UserWallet" uw
-    WHERE NOT EXISTS (
-      SELECT 1 FROM "Wallet" w WHERE w."userId" = uw."userId"
-    );
+    ON CONFLICT ("id") DO UPDATE SET
+      "balance" = EXCLUDED."balance",
+      "updatedAt" = EXCLUDED."updatedAt";
 
     DROP TABLE "UserWallet";
   END IF;

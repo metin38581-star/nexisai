@@ -13,7 +13,9 @@ async function getOrCreateWalletViaPrisma(): Promise<WalletRecord> {
   let wallet = await prisma.wallet.findFirst();
 
   if (!wallet) {
-    wallet = await prisma.wallet.create({ data: { balance: 500.0 } });
+    wallet = await prisma.wallet.create({
+      data: { id: crypto.randomUUID(), balance: 500.0 },
+    });
   }
 
   return { id: wallet.id, balance: wallet.balance };

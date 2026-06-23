@@ -11,13 +11,10 @@ datasource db {
 }
 
 model Wallet {
-  id             String   @id @default(uuid())
-  userId         String?  @unique @map("userId")
-  balance        Float    @default(0)
-  welcomeGranted Boolean  @default(false) @map("welcome_granted")
-  hasPaidTopUp   Boolean  @default(false) @map("has_paid_top_up")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now()) @updatedAt
+  /// Supabase auth.users id — cüzdan satırı kullanıcı başına bir adet
+  id        String   @id
+  balance   Float    @default(0)
+  updatedAt DateTime @updatedAt
 
   @@map("Wallet")
 }

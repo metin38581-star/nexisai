@@ -1,26 +1,74 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
+import { listPaymentsByUserId, recordPayment } from "@/lib/payment-store";
 
 export const WELCOME_BALANCE_TL = 100;
+const WELCOME_PROVIDER_CODE = "WELCOME_BALANCE";
+const TOPUP_PROVIDER_CODES = new Set(["WALLET_TOPUP", "IYZICO_CHECKOUT"]);
 
-export async function getOrCreateUserWallet(userId: string) {
+export interface UserWalletRecord {
+  id: string;
+  balance: number;
+  updatedAt: Date;
+  welcomeGranted: boolean;
+  hasPaidTopUp: boolean;
+}
+
+async function resolveWelcomeGranted(userId: string): Promise<boolean> {
+  const payments = await listPaymentsByUserId(userId);
+  return payments.some(
+    (payment) => payment.providerStatusCode === WELCOME_PROVIDER_CODE,
+  );
+}
+
+async function resolveHasPaidTopUp(userId: string): Promise<boolean> {
+  const payments = await listPaymentsByUserId(userId);
+  return payments.some(
+    (payment) =>
+      payment.status === "success" &&
+      (TOPUP_PROVIDER_CODES.has(payment.providerStatusCode ?? "") ||
+        payment.provider === "iyzico"),
+  );
+}
+
+async function enrichWallet(
+  wallet: { id: string; balance: number; updatedAt: Date },
+  userId: string,
+): Promise<UserWalletRecord> {
+  const [welcomeGranted, hasPaidTopUp] = await Promise.all([
+    resolveWelcomeGranted(userId),
+    resolveHasPaidTopUp(userId),
+  ]);
+
+  return {
+    id: wallet.id,
+    balance: wallet.balance,
+    updatedAt: wallet.updatedAt,
+    welcomeGranted,
+    hasPaidTopUp,
+  };
+}
+
+export async function getOrCreateUserWallet(
+  userId: string,
+): Promise<UserWalletRecord> {
   const existing = await prisma.wallet.findUnique({
-    where: { userId },
+    where: { id: userId },
   });
 
   if (existing) {
-    return existing;
+    return enrichWallet(existing, userId);
   }
 
-  return prisma.wallet.create({
+  const created = await prisma.wallet.create({
     data: {
-      userId,
+      id: userId,
       balance: 0,
-      welcomeGranted: false,
-      hasPaidTopUp: false,
     },
   });
+
+  return enrichWallet(created, userId);
 }
 
 export async function grantWelcomeBalance(userId: string): Promise<number> {
@@ -31,11 +79,20 @@ export async function grantWelcomeBalance(userId: string): Promise<number> {
   }
 
   const updated = await prisma.wallet.update({
-    where: { userId },
+    where: { id: userId },
     data: {
       balance: { increment: WELCOME_BALANCE_TL },
-      welcomeGranted: true,
     },
+  });
+
+  await recordPayment({
+    userId,
+    amount: WELCOME_BALANCE_TL,
+    currency: "TRY",
+    status: "success",
+    provider: "internal",
+    providerStatusCode: WELCOME_PROVIDER_CODE,
+    description: "Kayıt hoş geldin bakiyesi",
   });
 
   return updated.balance;
@@ -52,7 +109,7 @@ export async function decrementUserWalletBalance(
   }
 
   const updated = await prisma.wallet.update({
-    where: { userId },
+    where: { id: userId },
     data: { balance: { decrement: amount } },
   });
 
@@ -67,12 +124,21 @@ export async function creditUserWallet(
   await getOrCreateUserWallet(userId);
 
   const updated = await prisma.wallet.update({
-    where: { userId },
-    data: {
-      balance: { increment: amount },
-      ...(options?.markPaidTopUp ? { hasPaidTopUp: true } : {}),
-    },
+    where: { id: userId },
+    data: { balance: { increment: amount } },
   });
+
+  if (options?.markPaidTopUp) {
+    await recordPayment({
+      userId,
+      amount,
+      currency: "TRY",
+      status: "success",
+      provider: "internal",
+      providerStatusCode: "WALLET_TOPUP",
+      description: "Cüzdan bakiye yüklemesi",
+    });
+  }
 
   return updated.balance;
 }
@@ -80,4 +146,8 @@ export async function creditUserWallet(
 export async function getUserWalletBalance(userId: string): Promise<number> {
   const wallet = await getOrCreateUserWallet(userId);
   return wallet.balance;
+}
+
+export async function userHasPaidTopUp(userId: string): Promise<boolean> {
+  return resolveHasPaidTopUp(userId);
 }

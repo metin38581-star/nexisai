@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { normalizeBusinessName } from "@/lib/business-normalize";
+import { userHasPaidTopUp } from "@/lib/user-wallet-service";
 
 export async function findRegisteredBusiness(businessName: string) {
   const normalizedName = normalizeBusinessName(businessName);
@@ -41,11 +42,9 @@ export async function isTrialBlockedForBusiness(
     return false;
   }
 
-  const wallet = await prisma.wallet.findUnique({
-    where: { userId },
-  });
+  const paidTopUp = await userHasPaidTopUp(userId);
 
-  if (wallet?.hasPaidTopUp) {
+  if (paidTopUp) {
     return false;
   }
 
