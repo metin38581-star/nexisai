@@ -28,11 +28,6 @@ export const metadata: Metadata = {
     "işletme görünürlük",
     "NexisAI",
   ],
-  verification: {
-    other: {
-      "msvalidate.01": "6586032EFE7F68A22D457AA7A087E40E",
-    },
-  },
 };
 
 export const viewport = {
@@ -48,6 +43,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" className="dark">
+      <head>
+        <meta
+          name="msvalidate.01"
+          content="6586032EFE7F68A22D457AA7A087E40E"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans min-h-screen`}
       >
