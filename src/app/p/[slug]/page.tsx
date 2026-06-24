@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { fetchHubArticleBySlug } from "@/lib/hub-article";
+import {
+  buildHubArticleDescription,
+  buildTechArticleJsonLd,
+} from "@/lib/hub-json-ld";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 
 interface NexisBlogPageProps {
@@ -61,11 +65,7 @@ export async function generateMetadata({
     return { title: "Makale Bulunamadı | Sağlık Rehberi" };
   }
 
-  const description = (article.content ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .slice(0, 160)
-    .replace(/\s+/g, " ")
-    .trim();
+  const description = buildHubArticleDescription(article.content ?? "");
   const canonical = buildHubArticleUrl(slug);
 
   return {
@@ -100,8 +100,14 @@ export default async function NexisBlogPage({ params }: NexisBlogPageProps) {
     year: "numeric",
   });
 
+  const jsonLd = buildTechArticleJsonLd(article);
+
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <article className="mx-auto max-w-3xl rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">
         <header className="mb-8 border-b border-slate-100 pb-6">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600">
