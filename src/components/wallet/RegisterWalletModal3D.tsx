@@ -25,7 +25,7 @@ export default function RegisterWalletModal3D({
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative flex max-h-[92dvh] w-full max-w-lg items-start justify-center overflow-y-auto overscroll-contain [perspective:900px] sm:max-h-[min(90vh,720px)] sm:items-center sm:overflow-visible">
+      <div className="relative flex max-h-[92dvh] w-full max-w-lg items-start justify-center overflow-y-auto overscroll-contain sm:max-h-[min(90vh,720px)] sm:items-center sm:overflow-visible">
         <ModalPanelScene3D active={isOpen} />
         <RegisterWalletPanelContent
           mode={mode}

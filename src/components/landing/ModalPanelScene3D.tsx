@@ -7,8 +7,7 @@ import {
   buildRegisterPanel3D,
   updateRegisterPanel3D,
 } from "@/components/landing/build-register-panel-3d";
-import { bindPointerParallax, getSceneMobileScale } from "@/lib/pointer-parallax";
-import { setLandingParallax } from "@/lib/landing-parallax";
+import { getSceneMobileScale } from "@/lib/pointer-parallax";
 
 interface ModalPanelScene3DProps {
   active: boolean;
@@ -43,9 +42,6 @@ export default function ModalPanelScene3D({ active }: ModalPanelScene3DProps) {
     cLight.position.set(-2, -1, 3);
     scene.add(cLight);
 
-    let panelParallaxX = 0;
-    let panelParallaxY = 0;
-
     const applyLayout = () => {
       const parent = canvas.parentElement;
       const w = parent?.clientWidth ?? window.innerWidth;
@@ -59,13 +55,6 @@ export default function ModalPanelScene3D({ active }: ModalPanelScene3DProps) {
       camera.position.z = w < 480 ? 10 : w < 768 ? 9 : 8;
     };
 
-    const unbindParallax = bindPointerParallax((x, y) => {
-      const mobileFactor = window.innerWidth < 768 ? 0.5 : 1;
-      panelParallaxX = x * mobileFactor;
-      panelParallaxY = y * mobileFactor;
-      setLandingParallax(panelParallaxX, panelParallaxY);
-    });
-
     window.addEventListener("resize", applyLayout);
     applyLayout();
 
@@ -75,7 +64,7 @@ export default function ModalPanelScene3D({ active }: ModalPanelScene3DProps) {
     const animate = () => {
       frameId = requestAnimationFrame(animate);
       const t = clock.getElapsedTime();
-      updateRegisterPanel3D(registerPanel, t, panelParallaxX, panelParallaxY);
+      updateRegisterPanel3D(registerPanel, t, 0, 0);
       pLight.intensity = 1.4 + Math.sin(t * 2) * 0.25;
       cLight.intensity = 1 + Math.cos(t * 1.7) * 0.2;
       renderer.render(scene, camera);
@@ -85,9 +74,7 @@ export default function ModalPanelScene3D({ active }: ModalPanelScene3DProps) {
 
     return () => {
       cancelAnimationFrame(frameId);
-      unbindParallax();
       window.removeEventListener("resize", applyLayout);
-      setLandingParallax(0, 0);
       renderer.dispose();
       registerPanel.dispose();
     };

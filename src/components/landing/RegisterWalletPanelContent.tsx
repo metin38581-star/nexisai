@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -10,8 +10,6 @@ import {
   DEFAULT_WALLET_TOPUP_TL,
   formatWelcomeBalanceMessage,
 } from "@/lib/wallet-constants";
-import { getLandingParallax } from "@/lib/landing-parallax";
-import { isMobileViewport } from "@/lib/pointer-parallax";
 import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
@@ -37,7 +35,6 @@ export default function RegisterWalletPanelContent({
 }: RegisterWalletPanelContentProps) {
   const router = useRouter();
   const { login, accessToken } = useAuth();
-  const panelRef = useRef<HTMLDivElement>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,21 +51,12 @@ export default function RegisterWalletPanelContent({
     const start = performance.now();
 
     const tick = () => {
-      const { x, y } = getLandingParallax();
-      if (panelRef.current) {
-        const mobile = isMobileViewport();
-        const yDeg = mobile ? x * 4.5 : x * 10;
-        const xDeg = mobile ? -y * 3 : -y * 7;
-        panelRef.current.style.transform = [
-          "perspective(900px)",
-          `rotateY(${yDeg}deg)`,
-          `rotateX(${xDeg}deg)`,
-          "translateZ(0)",
-        ].join(" ");
-      }
       const elapsed = (performance.now() - start) / 1000;
-      setFieldReveal(Math.min(elapsed / 1.2, 1));
-      frameId = requestAnimationFrame(tick);
+      const reveal = Math.min(elapsed / 1.2, 1);
+      setFieldReveal(reveal);
+      if (reveal < 1) {
+        frameId = requestAnimationFrame(tick);
+      }
     };
 
     frameId = requestAnimationFrame(tick);
@@ -243,11 +231,7 @@ export default function RegisterWalletPanelContent({
   const isRegister = mode === "register";
 
   return (
-    <div
-      ref={panelRef}
-      className="lf-register-panel-3d relative z-10 mx-auto w-full max-w-md px-3 pb-6 pt-4 will-change-transform sm:px-0 sm:pb-0 sm:pt-0"
-      style={{ transformStyle: "preserve-3d" }}
-    >
+    <div className="lf-register-panel-3d relative z-10 mx-auto w-full max-w-md px-3 pb-6 pt-4 sm:px-0 sm:pb-0 sm:pt-0">
       <button
         type="button"
         onClick={onClose}
