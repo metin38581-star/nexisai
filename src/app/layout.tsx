@@ -28,6 +28,11 @@ export const metadata: Metadata = {
     "işletme görünürlük",
     "NexisAI",
   ],
+  verification: {
+    other: {
+      "msvalidate.01": "6586032EFE7F68A22D457AA7A087E40E",
+    },
+  },
 };
 
 export const viewport = {
