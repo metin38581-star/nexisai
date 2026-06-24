@@ -710,7 +710,7 @@ export async function tryAcquireCampaignExecution(
       return baitCountAfter > 0 ? "complete" : "in_progress";
     } catch (error) {
       console.error("[CAMPAIGN_LOCK]: Prisma kilidi alınamadı:", error);
-      return "acquired";
+      return "in_progress";
     }
   }
 

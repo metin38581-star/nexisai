@@ -68,3 +68,11 @@ export function buildFixedVisibilityIntent(
     simulatedAnswer: buildFixedVisibilityAnswer(city, brandName),
   };
 }
+
+export function buildFixedVisibilityQuestionList(
+  city: string | null | undefined,
+): string[] {
+  return FIXED_VISIBILITY_QUESTION_VARIANTS.map((variant) =>
+    buildFixedVisibilityQuestion(city, variant),
+  );
+}

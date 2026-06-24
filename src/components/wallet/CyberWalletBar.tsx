@@ -23,6 +23,7 @@ export default function CyberWalletBar({
   const { isLoggedIn, accessToken, isAuthReady } = useAuth();
   const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchBalance = useCallback(async () => {
@@ -32,21 +33,24 @@ export default function CyberWalletBar({
 
     if (!isLoggedIn || !accessToken) {
       setBalance(null);
+      setFetchError(null);
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
+    setFetchError(null);
 
     try {
       const response = await fetch("/api/wallet", buildAuthFetchInit(accessToken));
       if (!response.ok) {
+        setFetchError("Bakiye yüklenemedi.");
         return;
       }
       const data = (await response.json()) as { balance: number };
       setBalance(data.balance);
     } catch {
-      // Sessizce devam et.
+      setFetchError("Bağlantı hatası.");
     } finally {
       setIsLoading(false);
     }
@@ -72,9 +76,11 @@ export default function CyberWalletBar({
             <span className="text-emerald-300 drop-shadow-[0_0_10px_rgba(52,211,153,0.85)]">
               {!isLoggedIn
                 ? "Giriş gerekli"
-                : isLoading || balance === null
-                  ? "— ₺"
-                  : `${formatBalance(balance)} ₺`}
+                : fetchError
+                  ? fetchError
+                  : isLoading || balance === null
+                    ? "— ₺"
+                    : `${formatBalance(balance)} ₺`}
             </span>
           </p>
         </div>

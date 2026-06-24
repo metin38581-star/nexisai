@@ -8,7 +8,21 @@ export { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
 
 const WELCOME_PROVIDER_CODE = "WELCOME_BALANCE";
 const WELCOME_RECONCILE_CODE = "WELCOME_BALANCE_RECONCILE";
-const TOPUP_PROVIDER_CODES = new Set(["WALLET_TOPUP", "IYZICO_CHECKOUT"]);
+const TOPUP_PROVIDER_CODES = new Set([
+  "WALLET_TOPUP",
+  "IYZICO_CHECKOUT",
+  "CHECKOUT_SUCCESS",
+]);
+
+export interface CreditUserWalletOptions {
+  markPaidTopUp?: boolean;
+  paymentMeta?: {
+    provider: string;
+    providerStatusCode: string;
+    description: string;
+    currency?: string;
+  };
+}
 
 export interface UserWalletRecord {
   id: string;
@@ -175,34 +189,51 @@ export async function grantWelcomeBalance(userId: string): Promise<number> {
     throw new Error("Geçersiz kullanıcı kimliği.");
   }
 
-  if (await resolveWelcomeGranted(userId)) {
-    await reconcileLegacyWelcomeBalance(userId);
-    const wallet = await prisma.wallet.findUnique({ where: { id: userId } });
-    return wallet?.balance ?? 0;
-  }
+  return prisma.$transaction(async (tx) => {
+    const welcomePayments = await tx.payment.findMany({
+      where: {
+        userId,
+        providerStatusCode: {
+          in: [WELCOME_PROVIDER_CODE, WELCOME_RECONCILE_CODE],
+        },
+      },
+    });
 
-  const wallet = await prisma.wallet.upsert({
-    where: { id: userId },
-    create: {
-      id: userId,
-      balance: WELCOME_BALANCE_TL,
-    },
-    update: {
-      balance: { increment: WELCOME_BALANCE_TL },
-    },
+    const grantedTotal = welcomePayments.reduce(
+      (total, payment) => total + payment.amount,
+      0,
+    );
+
+    if (grantedTotal > 0) {
+      const wallet = await tx.wallet.findUnique({ where: { id: userId } });
+      return wallet?.balance ?? 0;
+    }
+
+    const wallet = await tx.wallet.upsert({
+      where: { id: userId },
+      create: {
+        id: userId,
+        balance: WELCOME_BALANCE_TL,
+      },
+      update: {
+        balance: { increment: WELCOME_BALANCE_TL },
+      },
+    });
+
+    await tx.payment.create({
+      data: {
+        userId,
+        amount: WELCOME_BALANCE_TL,
+        currency: "TRY",
+        status: "success",
+        provider: "internal",
+        providerStatusCode: WELCOME_PROVIDER_CODE,
+        description: "Kayıt hoş geldin bakiyesi",
+      },
+    });
+
+    return wallet.balance;
   });
-
-  await recordPayment({
-    userId,
-    amount: WELCOME_BALANCE_TL,
-    currency: "TRY",
-    status: "success",
-    provider: "internal",
-    providerStatusCode: WELCOME_PROVIDER_CODE,
-    description: "Kayıt hoş geldin bakiyesi",
-  });
-
-  return wallet.balance;
 }
 
 export async function decrementUserWalletBalance(
@@ -226,7 +257,7 @@ export async function decrementUserWalletBalance(
 export async function creditUserWallet(
   userId: string,
   amount: number,
-  options?: { markPaidTopUp?: boolean },
+  options?: CreditUserWalletOptions,
 ): Promise<number> {
   await getOrCreateUserWallet(userId);
 
@@ -235,7 +266,17 @@ export async function creditUserWallet(
     data: { balance: { increment: amount } },
   });
 
-  if (options?.markPaidTopUp) {
+  if (options?.paymentMeta) {
+    await recordPayment({
+      userId,
+      amount,
+      currency: options.paymentMeta.currency ?? "TRY",
+      status: "success",
+      provider: options.paymentMeta.provider,
+      providerStatusCode: options.paymentMeta.providerStatusCode,
+      description: options.paymentMeta.description,
+    });
+  } else if (options?.markPaidTopUp) {
     await recordPayment({
       userId,
       amount,

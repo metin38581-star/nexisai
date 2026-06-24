@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { DEFAULT_WALLET_TOPUP_TL } from "@/lib/wallet-constants";
+import { useAuth } from "@/context/AuthContext";
+import { buildAuthFetchInit } from "@/lib/auth-headers";
 
 interface WalletTopUpModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ export default function WalletTopUpModal({
   onClose,
   onSuccess,
 }: WalletTopUpModalProps) {
+  const { accessToken } = useAuth();
   const [topUpAmount, setTopUpAmount] = useState(String(DEFAULT_WALLET_TOPUP_TL));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -25,22 +28,35 @@ export default function WalletTopUpModal({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setErrorMessage(null);
+
+    if (!accessToken) {
+      setErrorMessage("Bakiye yüklemek için oturum açmanız gerekiyor.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: Number(topUpAmount),
-          operation: "topup",
+      const response = await fetch(
+        "/api/wallet",
+        buildAuthFetchInit(accessToken, {
+          method: "POST",
+          body: JSON.stringify({
+            amount: Number(topUpAmount),
+            operation: "topup",
+          }),
         }),
-      });
+      );
 
       const result = await response.json();
 
       if (!response.ok) {
         setErrorMessage(result.error ?? "Bakiye yüklenemedi.");
+        return;
+      }
+
+      if (result.requiresPayment && result.paymentPageUrl) {
+        window.location.href = result.paymentPageUrl as string;
         return;
       }
 
@@ -69,7 +85,7 @@ export default function WalletTopUpModal({
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-zinc-300">
-              Yüklenecek Miktar ($)
+              Yüklenecek Miktar (₺)
             </label>
             <input
               type="number"

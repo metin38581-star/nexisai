@@ -2,6 +2,8 @@ import type { GeoMicroIntent } from "@/types/geo-intent";
 import {
   buildGeoArticlePrompt,
   buildGeoFallbackArticleHtml,
+  buildIntentArticleHtml,
+  buildIntentPostTitle,
   buildSelectedIntentArticlesPrompt,
   buildZeroJargonRules,
 } from "@/lib/geo-prompt";
@@ -377,7 +379,27 @@ export async function generateIntentArticlesForSelections(
       }),
     );
 
-    return results.filter((item): item is GeneratedIntentArticle => item !== null);
+    return results.map((item, index) => {
+      if (item) {
+        return item;
+      }
+
+      const pair = pairs[index];
+      if (!pair) {
+        return null;
+      }
+
+      return {
+        baslik: buildIntentPostTitle(sehir, sektor, index, pair.question),
+        html: buildIntentArticleHtml(
+          pair.question,
+          pair.simulatedAnswer,
+          markaAdi,
+          sehir,
+          sektor,
+        ),
+      };
+    }).filter((item): item is GeneratedIntentArticle => item !== null);
   } catch (error) {
     console.error("[GEO_MOTORU_SECILI_HATA]:", error);
     return [];

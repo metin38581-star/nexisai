@@ -307,7 +307,6 @@ function AnalysisDashboardContent({
   const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const analysisInFlightRef = useRef(false);
-  const growthLoopTriggeredRef = useRef<string | null>(null);
   const dashboardBootstrapRef = useRef<string | null>(null);
   const pendingDistributionRef = useRef<{
     count: number;
@@ -366,8 +365,15 @@ function AnalysisDashboardContent({
   }, [accessToken]);
 
   const runRadarScan = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
     try {
-      const response = await fetch("/api/campaign/check-radar");
+      const response = await fetch(
+        "/api/campaign/check-radar",
+        buildAuthFetchInit(accessToken),
+      );
       if (response.ok) {
         const report = (await response.json()) as {
           scanLogs?: Array<{ status: string; message: string }>;
@@ -392,7 +398,7 @@ function AnalysisDashboardContent({
       // Radar arka planda sessizce çalışır.
     }
     await fetchCampaigns({ silent: true });
-  }, [fetchCampaigns]);
+  }, [accessToken, fetchCampaigns]);
 
   const fetchCampaignsRef = useRef(fetchCampaigns);
   const runRadarScanRef = useRef(runRadarScan);
@@ -714,19 +720,6 @@ function AnalysisDashboardContent({
   }, [runAnalysis]);
 
   useEffect(() => {
-    if (!activeCampaignId) {
-      return;
-    }
-
-    if (growthLoopTriggeredRef.current === activeCampaignId) {
-      return;
-    }
-
-    growthLoopTriggeredRef.current = activeCampaignId;
-    void fetch("/api/cron/growth-loop", { method: "POST" }).catch(() => undefined);
-  }, [activeCampaignId]);
-
-  useEffect(() => {
     setSessionReady(true);
   }, []);
 
@@ -749,7 +742,7 @@ function AnalysisDashboardContent({
         return;
       }
 
-      if (!isLoggedIn || !userEmail) {
+      if (!isLoggedIn || !accessToken) {
         onRequireAuth?.(data);
         return;
       }
@@ -757,7 +750,7 @@ function AnalysisDashboardContent({
       onPendingCampaignHandledRef.current?.();
       startCampaignAnalysis(data);
     },
-    [startCampaignAnalysis, isLoading, isLoggedIn, userEmail, onRequireAuth],
+    [startCampaignAnalysis, isLoading, isLoggedIn, accessToken, onRequireAuth],
   );
 
   const handleDraftApplied = useCallback(() => {

@@ -181,7 +181,12 @@ export async function initializeIyzicoCheckout(
 
 export async function completeIyzicoCheckout(
   token: string,
-): Promise<{ checkoutId: string; userId: string; amount: number } | null> {
+): Promise<{
+  checkoutId: string;
+  userId: string;
+  amount: number;
+  alreadyCredited: boolean;
+} | null> {
   const config = getIyzicoConfig();
   if (!config) {
     return null;
@@ -191,14 +196,17 @@ export async function completeIyzicoCheckout(
     where: { token },
   });
 
-  if (!checkout || checkout.status === "success") {
-    return checkout?.status === "success"
-      ? {
-          checkoutId: checkout.id,
-          userId: checkout.userId,
-          amount: checkout.amount,
-        }
-      : null;
+  if (!checkout) {
+    return null;
+  }
+
+  if (checkout.status === "success") {
+    return {
+      checkoutId: checkout.id,
+      userId: checkout.userId,
+      amount: checkout.amount,
+      alreadyCredited: true,
+    };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -248,6 +256,7 @@ export async function completeIyzicoCheckout(
     checkoutId: checkout.id,
     userId: checkout.userId,
     amount: checkout.amount,
+    alreadyCredited: false,
   };
 }
 

@@ -35,6 +35,7 @@ import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
 import { recordPayment } from "@/lib/payment-store";
+import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -443,18 +444,47 @@ export async function POST(request: Request) {
         campaignId: yeniKampanya.id,
       });
 
-      const growthQuestions = questionPairsForBaits.map((pair) => pair.question);
-      if (growthQuestions.length > 0) {
-        await createCampaignGrowthLoop(
-          yeniKampanya.id,
-          activeUserId,
-          growthQuestions,
-        );
-      }
+      const growthQuestions = buildFixedVisibilityQuestionList(trimmedSehir);
+      await createCampaignGrowthLoop(
+        yeniKampanya.id,
+        activeUserId,
+        growthQuestions,
+      );
     } catch (dbError) {
       console.error(
         "[KRİTİK VERİTABANI HATASI]: Veri tabanına yazılırken bir hata oluştu:",
         dbError,
+      );
+
+      if (
+        dbError instanceof Error &&
+        dbError.message === "INSUFFICIENT_BALANCE"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Yetersiz bakiye. Kampanya kaydedilemedi.",
+          },
+          { status: 402 },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Kampanya kaydedilemedi. Lütfen tekrar deneyin.",
+        },
+        { status: 500 },
+      );
+    }
+
+    if (persistedBaits.length === 0 || !persistedCampaignId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Kampanya içerikleri kaydedilemedi.",
+        },
+        { status: 500 },
       );
     }
 

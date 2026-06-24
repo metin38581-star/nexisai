@@ -95,7 +95,6 @@ export async function getCampaignGrowthLoop(campaignId: string) {
       data: {
         questionScores: updatedScores as unknown as Prisma.InputJsonValue,
         scoresUpdatedAt: new Date(),
-        emailSentAt: loop.emailSentAt ?? new Date(),
       },
     });
   }

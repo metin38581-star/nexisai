@@ -128,18 +128,18 @@ export async function POST(request: Request) {
       });
     }
 
+    if (process.env.NODE_ENV === "production" || useIyzico) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Bakiye yüklemesi için ödeme altyapısı yapılandırılmamış.",
+        },
+        { status: 503 },
+      );
+    }
+
     const balance = await creditUserWallet(activeUserId, amount, {
       markPaidTopUp: true,
-    });
-
-    await recordPayment({
-      userId: activeUserId,
-      amount,
-      currency: "TRY",
-      status: "success",
-      provider: "internal",
-      providerStatusCode: "WALLET_TOPUP",
-      description: "Cüzdan bakiye yüklemesi",
     });
 
     return NextResponse.json({

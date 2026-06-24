@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { completeIyzicoCheckout, getCheckoutById } from "@/lib/iyzico-client";
 import { creditUserWallet } from "@/lib/user-wallet-service";
-import { recordPayment } from "@/lib/payment-store";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 
 function redirectToDashboard(status: "success" | "failed", checkoutId?: string) {
@@ -34,19 +33,17 @@ export async function POST(request: Request) {
       return redirectToDashboard("failed");
     }
 
-    await creditUserWallet(completed.userId, completed.amount, {
-      markPaidTopUp: true,
-    });
-
-    await recordPayment({
-      userId: completed.userId,
-      amount: completed.amount,
-      currency: "TRY",
-      status: "success",
-      provider: "iyzico",
-      providerStatusCode: "CHECKOUT_SUCCESS",
-      description: "iyzico cüzdan yüklemesi",
-    });
+    if (!completed.alreadyCredited) {
+      await creditUserWallet(completed.userId, completed.amount, {
+        markPaidTopUp: true,
+        paymentMeta: {
+          provider: "iyzico",
+          providerStatusCode: "CHECKOUT_SUCCESS",
+          description: "iyzico cüzdan yüklemesi",
+          currency: "TRY",
+        },
+      });
+    }
 
     const checkout = await getCheckoutById(completed.checkoutId);
     const draft = checkout?.campaignDraft as Record<string, unknown> | null;
