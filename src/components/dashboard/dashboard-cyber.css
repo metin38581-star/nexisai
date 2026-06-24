@@ -33,8 +33,6 @@
 }
 
 .dashboard-cyber .dc-holo-panel {
-  transform-style: preserve-3d;
-  transition: transform 0.08s ease-out;
   border-radius: 1rem;
   padding: 1px;
   background: linear-gradient(
