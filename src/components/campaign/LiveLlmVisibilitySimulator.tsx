@@ -7,7 +7,6 @@ import {
   buildFixedVisibilityAnswer,
   buildFixedVisibilityQuestion,
   resolveVisibilityBrand,
-  resolveVisibilityCity,
   type FixedVisibilityQuestionVariant,
 } from "@/lib/fixed-visibility-simulation";
 import type { GeoMicroIntent } from "@/types/geo-intent";
@@ -50,7 +49,7 @@ function highlightBrand(
   return (
     <>
       {before}
-      <span className="rounded bg-violet-500/30 px-1 py-0.5 font-medium text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.35)]">
+      <span className="rounded bg-violet-500/30 px-1 py-0.5 font-bold text-violet-100 shadow-[0_0_12px_rgba(139,92,246,0.35)]">
         {brandVisible}
       </span>
       {after}
@@ -72,10 +71,9 @@ export default function LiveLlmVisibilitySimulator({
   const [phase, setPhase] = useState<"idle" | "question" | "answer">("idle");
   const timerRef = useRef<number | null>(null);
 
-  const city = resolveVisibilityCity(selectedCity);
   const brand = resolveVisibilityBrand(brandName);
-  const question = buildFixedVisibilityQuestion(city, questionVariant);
-  const answer = buildFixedVisibilityAnswer(city, brand);
+  const question = buildFixedVisibilityQuestion(selectedCity, questionVariant);
+  const answer = buildFixedVisibilityAnswer(selectedCity, brandName);
   const isActive = intent !== null;
 
   const clearTimer = useCallback(() => {
