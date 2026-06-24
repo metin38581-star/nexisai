@@ -35,6 +35,7 @@ export default function DashboardPage() {
       userEmail: string | null;
       userId: string;
       accessToken: string;
+      refreshToken?: string;
     }) => {
       login(payload);
       setShowAuthModal(false);

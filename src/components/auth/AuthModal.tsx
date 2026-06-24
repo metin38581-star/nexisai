@@ -22,6 +22,7 @@ interface AuthModalProps {
     userEmail: string | null;
     userId: string;
     accessToken: string;
+    refreshToken?: string;
   }) => void;
   authMode: AuthViewMode;
   onAuthModeChange: (mode: AuthViewMode) => void;
@@ -44,6 +45,7 @@ interface AuthSessionResponse {
     userName: string;
   };
   accessToken?: string;
+  refreshToken?: string;
   welcomeBalance?: number;
 }
 
@@ -278,13 +280,16 @@ export default function AuthModal({
       }
 
       if (isRegister) {
-        const granted =
-          typeof authResult.welcomeBalance === "number"
-            ? `${authResult.welcomeBalance.toLocaleString("tr-TR")} ₺`
-            : formatWelcomeBalanceMessage();
-        toast.success(
-          `Hesabınız doğrulandı! ${granted} hediye bakiyeniz tanımlandı. 🎁`,
-        );
+        if (
+          typeof authResult.welcomeBalance === "number" &&
+          authResult.welcomeBalance > 0
+        ) {
+          toast.success(
+            `Hesabınız doğrulandı! ${authResult.welcomeBalance.toLocaleString("tr-TR")} ₺ hediye bakiyeniz tanımlandı. 🎁`,
+          );
+        } else {
+          toast.success("Hesabınız doğrulandı! Hoş geldiniz. 🎁");
+        }
         if (OTP_BYPASS_ENABLED) {
           router.push("/dashboard");
         }
@@ -295,6 +300,7 @@ export default function AuthModal({
         userEmail: user.email?.trim() || email.trim() || null,
         userId: user.id,
         accessToken,
+        refreshToken: authResult.refreshToken,
       });
       setFullName("");
       setEmail("");

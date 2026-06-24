@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { buildAuthFetchInit } from "@/lib/auth-headers";
 import RegisterWalletModal3D from "@/components/wallet/RegisterWalletModal3D";
 
 interface CyberWalletBarProps {
@@ -19,14 +20,26 @@ function formatBalance(value: number): string {
 export default function CyberWalletBar({
   refreshToken = 0,
 }: CyberWalletBarProps) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, accessToken, isAuthReady } = useAuth();
   const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchBalance = useCallback(async () => {
+    if (!isAuthReady) {
+      return;
+    }
+
+    if (!isLoggedIn || !accessToken) {
+      setBalance(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      const response = await fetch("/api/wallet");
+      const response = await fetch("/api/wallet", buildAuthFetchInit(accessToken));
       if (!response.ok) {
         return;
       }
@@ -37,7 +50,7 @@ export default function CyberWalletBar({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [accessToken, isAuthReady, isLoggedIn]);
 
   useEffect(() => {
     void fetchBalance();
@@ -57,9 +70,11 @@ export default function CyberWalletBar({
           <p className="relative mt-0.5 text-sm font-bold">
             <span className="text-zinc-300">Cüzdan Bakiyesi: </span>
             <span className="text-emerald-300 drop-shadow-[0_0_10px_rgba(52,211,153,0.85)]">
-              {isLoading || balance === null
-                ? "— ₺"
-                : `${formatBalance(balance)} ₺`}
+              {!isLoggedIn
+                ? "Giriş gerekli"
+                : isLoading || balance === null
+                  ? "— ₺"
+                  : `${formatBalance(balance)} ₺`}
             </span>
           </p>
         </div>

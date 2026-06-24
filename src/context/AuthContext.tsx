@@ -11,12 +11,14 @@ import {
 import type { User } from "@supabase/supabase-js";
 import type { SubscriptionPlanId, UserSession } from "@/types/user";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { syncSupabaseBrowserSession } from "@/lib/sync-supabase-browser-session";
 
 interface AuthLoginPayload {
   userName: string;
   userEmail: string | null;
   userId: string;
   accessToken: string;
+  refreshToken?: string | null;
 }
 
 interface AuthContextValue extends UserSession {
@@ -178,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       accessToken: payload.accessToken,
       isAuthReady: true,
     }));
+    void syncSupabaseBrowserSession(payload.accessToken, payload.refreshToken);
   }, []);
 
   const logout = useCallback(() => {

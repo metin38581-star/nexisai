@@ -205,6 +205,7 @@ export async function POST(request: Request) {
           ),
         },
         accessToken: session.access_token,
+        refreshToken: session.refresh_token,
         ...(welcomeBalance !== undefined ? { welcomeBalance } : {}),
       });
     }
@@ -221,6 +222,7 @@ export async function POST(request: Request) {
         ),
       },
       accessToken: session.access_token,
+      refreshToken: session.refresh_token,
     });
   } catch (error) {
     return handleApiRouteError(error, "Oturum işlemi sırasında bir hata oluştu.");

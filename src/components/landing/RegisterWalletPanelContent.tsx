@@ -142,6 +142,7 @@ export default function RegisterWalletPanelContent({
         error?: string;
         user?: { id: string; email: string; userName: string };
         accessToken?: string;
+        refreshToken?: string;
         welcomeBalance?: number;
       };
 
@@ -155,13 +156,16 @@ export default function RegisterWalletPanelContent({
         userEmail: result.user.email,
         userId: result.user.id,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       });
 
-      const granted =
-        typeof result.welcomeBalance === "number"
-          ? `${result.welcomeBalance.toLocaleString("tr-TR")} ₺`
-          : formatWelcomeBalanceMessage();
-      toast.success(`Hesabınız doğrulandı! ${granted} hediye bakiyeniz tanımlandı. 🎁`);
+      if (typeof result.welcomeBalance === "number" && result.welcomeBalance > 0) {
+        toast.success(
+          `Hesabınız doğrulandı! ${result.welcomeBalance.toLocaleString("tr-TR")} ₺ hediye bakiyeniz tanımlandı. 🎁`,
+        );
+      } else {
+        toast.success("Hesabınız doğrulandı! Hoş geldiniz. 🎁");
+      }
       onClose();
       router.push("/dashboard");
     } catch {

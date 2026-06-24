@@ -55,6 +55,13 @@ async function reconcileLegacyWelcomeBalance(userId: string): Promise<void> {
     return;
   }
 
+  if (grantedTotal > 0 && wallet.balance < grantedTotal) {
+    await prisma.wallet.update({
+      where: { id: userId },
+      data: { balance: { increment: grantedTotal - wallet.balance } },
+    });
+  }
+
   if (grantedTotal > 0 && grantedTotal < WELCOME_BALANCE_TL) {
     const deficit = WELCOME_BALANCE_TL - grantedTotal;
 
@@ -75,7 +82,10 @@ async function reconcileLegacyWelcomeBalance(userId: string): Promise<void> {
     return;
   }
 
-  if (grantedTotal > 0 || wallet.balance >= WELCOME_BALANCE_TL) {
+  const refreshed =
+    (await prisma.wallet.findUnique({ where: { id: userId } })) ?? wallet;
+
+  if (grantedTotal > 0 || refreshed.balance >= WELCOME_BALANCE_TL) {
     return;
   }
 

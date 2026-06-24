@@ -34,8 +34,8 @@ export async function GET(request: Request) {
 
     if (!wallet.welcomeGranted) {
       try {
-        const balance = await grantWelcomeBalance(activeUserId);
-        wallet = { ...wallet, balance, welcomeGranted: true };
+        await grantWelcomeBalance(activeUserId);
+        wallet = await getOrCreateUserWallet(activeUserId);
       } catch (welcomeError) {
         console.error("[WALLET_GET]: Hoş geldin bakiyesi tanımlanamadı:", welcomeError);
       }
