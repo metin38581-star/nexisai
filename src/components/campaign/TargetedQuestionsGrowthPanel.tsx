@@ -1,16 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Sparkles, X } from "lucide-react";
 
 import LiveLlmVisibilitySimulator from "@/components/campaign/LiveLlmVisibilitySimulator";
 import type { CampaignGrowthLoopResponse } from "@/types/growth-loop";
 import type { GeoMicroIntent } from "@/types/geo-intent";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
+import {
+  buildFixedVisibilityIntent,
+  buildFixedVisibilityQuestion,
+  FIXED_VISIBILITY_QUESTION_VARIANTS,
+  type FixedVisibilityQuestionVariant,
+} from "@/lib/fixed-visibility-simulation";
 
 interface TargetedQuestionsGrowthPanelProps {
   campaignId: string | null;
   brandName: string;
+  selectedCity?: string | null;
   accessToken: string | null;
 }
 
@@ -20,20 +27,10 @@ const LLM_LOGOS = [
   { name: "Perplexity", src: "/logos/perplexity.svg", alt: "Perplexity" },
 ];
 
-function buildIntentFromQuestion(
-  question: string,
-  brandName: string,
-): GeoMicroIntent {
-  return {
-    id: `growth-${question.slice(0, 24)}`,
-    question,
-    simulatedAnswer: `${question} sorusuna verilen yanıtlarda ${brandName} öne çıkan işletmeler arasında yer almaktadır. Bölgedeki kullanıcı yorumları ve güncel veri sinyalleri ${brandName} markasını güvenilir bir seçenek olarak önermektedir.`,
-  };
-}
-
 export default function TargetedQuestionsGrowthPanel({
   campaignId,
   brandName,
+  selectedCity,
   accessToken,
 }: TargetedQuestionsGrowthPanelProps) {
   const [growthLoop, setGrowthLoop] =
@@ -41,6 +38,8 @@ export default function TargetedQuestionsGrowthPanel({
   const [selectedIntent, setSelectedIntent] = useState<GeoMicroIntent | null>(
     null,
   );
+  const [selectedVariant, setSelectedVariant] =
+    useState<FixedVisibilityQuestionVariant>("best-clinic");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -77,11 +76,32 @@ export default function TargetedQuestionsGrowthPanel({
     return () => window.clearInterval(interval);
   }, [fetchGrowthLoop]);
 
+  const fixedQuestionRows = useMemo(() => {
+    const scoreEntries = growthLoop?.questionScores ?? [];
+
+    return FIXED_VISIBILITY_QUESTION_VARIANTS.map((variant, index) => {
+      const scoreEntry = scoreEntries[index];
+
+      return {
+        variant,
+        question: buildFixedVisibilityQuestion(selectedCity, variant),
+        initialScore: scoreEntry?.initialScore ?? 0,
+        currentScore: scoreEntry?.currentScore ?? 0,
+      };
+    });
+  }, [growthLoop?.questionScores, selectedCity]);
+
+  const openSimulation = (variant: FixedVisibilityQuestionVariant) => {
+    setSelectedVariant(variant);
+    setSelectedIntent(
+      buildFixedVisibilityIntent(selectedCity, brandName, variant),
+    );
+    setIsModalOpen(true);
+  };
+
   if (!campaignId) {
     return null;
   }
-
-  const questions = growthLoop?.questionScores ?? [];
 
   return (
     <>
@@ -108,11 +128,11 @@ export default function TargetedQuestionsGrowthPanel({
           İşte bu sorulardaki anlık durumunuz:
         </p>
 
-        {isLoading && questions.length === 0 ? (
+        {isLoading && !growthLoop ? (
           <p className="mt-4 text-sm text-zinc-500">Sorular yükleniyor...</p>
         ) : (
           <ul className="mt-5 space-y-4">
-            {questions.map((entry) => {
+            {fixedQuestionRows.map((entry) => {
               const displayScore = growthLoop?.scoresUpdated
                 ? entry.currentScore
                 : entry.initialScore;
@@ -122,7 +142,7 @@ export default function TargetedQuestionsGrowthPanel({
 
               return (
                 <li
-                  key={entry.question}
+                  key={entry.variant}
                   className="rounded-xl border border-white/5 bg-zinc-900/50 p-4"
                 >
                   <p className="text-sm font-medium text-white">
@@ -133,12 +153,7 @@ export default function TargetedQuestionsGrowthPanel({
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedIntent(
-                        buildIntentFromQuestion(entry.question, brandName),
-                      );
-                      setIsModalOpen(true);
-                    }}
+                    onClick={() => openSimulation(entry.variant)}
                     className="mt-3 inline-flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20"
                   >
                     <Eye className="h-3.5 w-3.5" />
@@ -171,6 +186,8 @@ export default function TargetedQuestionsGrowthPanel({
               <LiveLlmVisibilitySimulator
                 intent={selectedIntent}
                 brandName={brandName}
+                selectedCity={selectedCity}
+                questionVariant={selectedVariant}
               />
               <p className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-100">
                 Bu sadece küçük bir veri ağının sonucudur. Yapay zekalarda

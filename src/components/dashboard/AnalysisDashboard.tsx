@@ -873,6 +873,7 @@ function AnalysisDashboardContent({
             <TargetedQuestionsGrowthPanel
               campaignId={activeCampaignId}
               brandName={session.markaAdi}
+              selectedCity={session.sehir}
               accessToken={accessToken}
             />
           </div>

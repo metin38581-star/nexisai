@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Sparkles } from "lucide-react";
 
+import {
+  buildFixedVisibilityAnswer,
+  buildFixedVisibilityQuestion,
+  resolveVisibilityBrand,
+  resolveVisibilityCity,
+  type FixedVisibilityQuestionVariant,
+} from "@/lib/fixed-visibility-simulation";
 import type { GeoMicroIntent } from "@/types/geo-intent";
 
 const TYPING_INTERVAL_MS = 16;
@@ -10,6 +17,8 @@ const TYPING_INTERVAL_MS = 16;
 interface LiveLlmVisibilitySimulatorProps {
   intent: GeoMicroIntent | null;
   brandName: string;
+  selectedCity?: string | null;
+  questionVariant?: FixedVisibilityQuestionVariant;
 }
 
 function highlightBrand(
@@ -55,11 +64,19 @@ function highlightBrand(
 export default function LiveLlmVisibilitySimulator({
   intent,
   brandName,
+  selectedCity,
+  questionVariant = "best-clinic",
 }: LiveLlmVisibilitySimulatorProps) {
   const [typedQuestion, setTypedQuestion] = useState("");
   const [typedAnswer, setTypedAnswer] = useState("");
   const [phase, setPhase] = useState<"idle" | "question" | "answer">("idle");
   const timerRef = useRef<number | null>(null);
+
+  const city = resolveVisibilityCity(selectedCity);
+  const brand = resolveVisibilityBrand(brandName);
+  const question = buildFixedVisibilityQuestion(city, questionVariant);
+  const answer = buildFixedVisibilityAnswer(city, brand);
+  const isActive = intent !== null;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -71,7 +88,7 @@ export default function LiveLlmVisibilitySimulator({
   useEffect(() => {
     clearTimer();
 
-    if (!intent) {
+    if (!isActive) {
       setTypedQuestion("");
       setTypedAnswer("");
       setPhase("idle");
@@ -82,8 +99,6 @@ export default function LiveLlmVisibilitySimulator({
     setTypedAnswer("");
     setPhase("question");
 
-    const question = intent.question;
-    const answer = intent.simulatedAnswer;
     let qIndex = 0;
 
     timerRef.current = window.setInterval(() => {
@@ -105,7 +120,7 @@ export default function LiveLlmVisibilitySimulator({
     }, TYPING_INTERVAL_MS);
 
     return clearTimer;
-  }, [intent, clearTimer]);
+  }, [answer, clearTimer, isActive, question]);
 
   return (
     <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-2xl border border-emerald-500/20 bg-zinc-950/80 shadow-[0_0_32px_rgba(16,185,129,0.08)]">
@@ -118,7 +133,7 @@ export default function LiveLlmVisibilitySimulator({
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {!intent ? (
+        {!isActive ? (
           <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center">
             <Bot className="mb-3 h-10 w-10 text-zinc-600" />
             <p className="text-sm text-zinc-500">
@@ -147,9 +162,9 @@ export default function LiveLlmVisibilitySimulator({
               <p className="text-sm leading-relaxed text-zinc-300">
                 {highlightBrand(
                   typedAnswer,
-                  brandName,
+                  brand,
                   typedAnswer.length,
-                  typedAnswer.length >= intent.simulatedAnswer.length,
+                  typedAnswer.length >= answer.length,
                 )}
               </p>
             </div>
