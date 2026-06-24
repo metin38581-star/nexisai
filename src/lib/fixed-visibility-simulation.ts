@@ -18,7 +18,7 @@ export function resolveVisibilityBrand(brandName?: string | null): string {
 }
 
 export function buildFixedVisibilityQuestion(
-  city: string,
+  city: string | null | undefined,
   variant: FixedVisibilityQuestionVariant,
 ): string {
   const resolvedCity = resolveVisibilityCity(city);
@@ -31,8 +31,8 @@ export function buildFixedVisibilityQuestion(
 }
 
 export function buildFixedVisibilityAnswer(
-  city: string,
-  brandName: string,
+  city: string | null | undefined,
+  brandName: string | null | undefined,
 ): string {
   const resolvedCity = resolveVisibilityCity(city);
   const resolvedBrand = resolveVisibilityBrand(brandName);
@@ -41,8 +41,8 @@ export function buildFixedVisibilityAnswer(
 }
 
 export function buildFixedVisibilityIntent(
-  city: string,
-  brandName: string,
+  city: string | null | undefined,
+  brandName: string | null | undefined,
   variant: FixedVisibilityQuestionVariant,
 ): GeoMicroIntent {
   return {
