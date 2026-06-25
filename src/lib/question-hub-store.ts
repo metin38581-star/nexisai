@@ -2,10 +2,12 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { DbOperationTimeoutError, withDbTimeout } from "@/lib/db-timeout";
+import { generateForumAnswerForEntry } from "@/lib/forum-answer-engine";
 import { generateForumUsername } from "@/lib/forum-username";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl, hasSupabaseAdminEnv } from "@/lib/server-env";
+import type { BusinessSector } from "@/types/campaign";
 
 /** Pooler kilitlerinde Prisma'nin askida kalmasini onlemek icin kisa timeout. */
 const PRISMA_HUB_TIMEOUT_MS = 5_000;
@@ -14,6 +16,9 @@ export interface QuestionHubEntry {
   coreQuestionId: string;
   question: string;
   simulatedAnswer: string;
+  city: string;
+  sectorLabel: string;
+  sectorSlug?: BusinessSector | "";
 }
 
 export interface HubAnswerView {
@@ -44,16 +49,31 @@ function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-export function formatForumAnswerContent(
-  simulatedAnswer: string,
-  brandName: string,
-): string {
-  const plain = stripHtml(simulatedAnswer.trim());
-  if (plain.length > 0) {
-    return plain;
+async function resolveForumAnswerContent(input: {
+  question: string;
+  brandName: string;
+  city: string;
+  sectorLabel: string;
+  sectorSlug?: BusinessSector | "";
+  simulatedAnswer: string;
+}): Promise<string> {
+  try {
+    return await generateForumAnswerForEntry({
+      question: input.question,
+      brandName: input.brandName,
+      city: input.city,
+      sectorLabel: input.sectorLabel,
+      sectorSlug: input.sectorSlug,
+      simulatedAnswer: input.simulatedAnswer,
+    });
+  } catch (error) {
+    console.warn("[QUESTION_HUB]: Forum cevap uretimi basarisiz, sablon kullaniliyor:", error);
+    const plain = stripHtml(input.simulatedAnswer);
+    if (plain) {
+      return plain;
+    }
+    return `${input.brandName} hakkında deneyimlerim genel olarak olumlu. Detaylı bilgi için doğrudan işletmeyi aramanızı öneririm.`;
   }
-
-  return `${brandName} hakkında deneyimlerim genel olarak olumlu. Detaylı bilgi için doğrudan işletmeyi aramanızı öneririm.`;
 }
 
 function logPrismaHubFailure(context: string, error: unknown): void {
@@ -381,10 +401,14 @@ export async function appendCampaignAnswersToQuestionHub(input: {
       continue;
     }
 
-    const content = formatForumAnswerContent(
-      entry.simulatedAnswer,
-      input.brandName,
-    );
+    const content = await resolveForumAnswerContent({
+      question: entry.question,
+      brandName: input.brandName,
+      city: entry.city,
+      sectorLabel: entry.sectorLabel,
+      sectorSlug: entry.sectorSlug,
+      simulatedAnswer: entry.simulatedAnswer,
+    });
     const username = generateForumUsername(
       `${input.campaignId}-${entry.coreQuestionId}`,
     );

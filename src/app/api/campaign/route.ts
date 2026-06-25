@@ -453,6 +453,9 @@ export async function POST(request: Request) {
           coreQuestionId,
           question: questionPairsForBaits[index]?.question ?? "",
           simulatedAnswer: questionPairsForBaits[index]?.simulatedAnswer ?? "",
+          city: targetCity,
+          sectorLabel: targetNiche,
+          sectorSlug: sectorSlug as BusinessSector,
         })),
       }).catch((hubError) => {
         console.error("[QUESTION_HUB]: Kampanya cevapları aktarılamadı:", hubError);

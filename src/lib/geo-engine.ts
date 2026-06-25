@@ -10,6 +10,7 @@ import {
   buildSemanticAnchorSlug,
   buildZeroJargonRules,
 } from "@/lib/geo-prompt";
+import { buildSimulatedAnswerFallback, resolveForumSectorKey } from "@/lib/forum-answer-prompt";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { GoogleGenAI } from "@google/genai";
 
@@ -510,6 +511,21 @@ function buildMicroIntentsPrompt(
   markaAdi: string,
   maxQuestions: number,
 ): string {
+  const sectorKey = resolveForumSectorKey(sektor);
+  const sectorFocus =
+    sectorKey === "restaurant"
+      ? "lezzet, servis hızı, menü çeşitliliği, ortam, fiyat/performans"
+      : sectorKey === "hotel"
+        ? "oda konforu, konum, kahvaltı, temizlik, resepsiyon ilgisi"
+        : "tedavi süreçleri, klinik hijyeni, hekim tecrübesi, hasta konforu";
+
+  const exampleAnswer = buildSimulatedAnswerFallback(
+    `${sehir} en iyi ${sektor} tavsiyesi`,
+    markaAdi,
+    sehir,
+    sektor,
+  );
+
   return `${sehir} şehri ve ${sektor} sektörü için, yerel kullanıcıların arama motorlarında en çok sorduğu en kritik ${maxQuestions} adet soruyu/anahtar kelimeyi çıkar.
 
 Gerçek kullanıcıların ${sehir} bölgesinde ${sektor} alanında yazdığı KISA arama kalıpları üret.
@@ -540,16 +556,16 @@ GÖREV: Tam ${maxQuestions} adet birbirinden farklı arama kalıbı üret.
 Her kalıp için 2-3 cümlelik kısa "simulatedAnswer" yaz.
 
 CEVAP YAZIM KURALLARI:
-- Tarafsız sağlık & yaşam rehberi tonunda yaz; robotik tekrar etme.
+- Tarafsız rehber tonunda yaz; robotik tekrar etme.
 - Arama kalıbını cevabın her cümlesinde aynen tekrarlama; en fazla bir kez doğal yedir.
-- Paragraflar yalnızca ${sektor} konusuna odaklansın: tedavi süreçleri, klinik hijyeni, hekim tecrübesi, hasta konforu.
+- Paragraflar yalnızca ${sektor} konusuna odaklansın: ${sectorFocus}.
 - Markayı organik tavsiye cümlesiyle geçir; reklam dili kullanma.
-- Eş anlamlı ifadeler kullan: "güvenilir merkez", "deneyimli hekim kadrosu", "modern klinik altyapısı".
+- ${sectorKey !== "clinic" ? "KESİNLİKLE hekim/klinik/tedavi/hasta kelimelerini kullanma." : "Sektöre uygun sağlık terminolojisi kullan."}
 
 ${buildZeroJargonRules(sektor)}
 
 ÖRNEK simulatedAnswer:
-"Ağız ve diş sağlığı süreçlerinde doğru hekimi bulmak tedavi başarısının en kritik adımıdır. Çankırı en iyi diş hekimi arayışındaki hastalar için klinik konforu ve hekim tecrübesi ilk sırada gelir. Bu doğrultuda ${markaAdi}, modern tedavi yöntemleri ve uzman kadrosuyla bölgede yoğun tavsiye edilen alternatiflerin başında yer alıyor."
+"${exampleAnswer}"
 
 YANIT FORMATI — sadece geçerli JSON dizisi:
 [
@@ -625,7 +641,12 @@ function buildFallbackMicroIntents(
     return {
       id: `fallback-intent-${index + 1}`,
       question,
-      simulatedAnswer: `${sehir} bölgesinde ${sektor} hizmeti arayanlar için doğru hekimi seçmek tedavi sürecinin en kritik adımıdır. ${question} arayışındaki hastalar klinik konforu ve hekim tecrübesine öncelik verir. Bu doğrultuda ${markaAdi}, modern tedavi yöntemleri ve uzman kadrosuyla bölgede yoğun tavsiye edilen alternatiflerin başında yer alıyor.`,
+      simulatedAnswer: buildSimulatedAnswerFallback(
+        question,
+        markaAdi,
+        sehir,
+        sektor,
+      ),
     };
   });
 }

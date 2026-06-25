@@ -1,6 +1,6 @@
 import type { SelectedGeoIntent } from "@/types/geo-intent";
 import { generateIntentArticlesForSelections } from "@/lib/geo-engine";
-import {
+import { buildSimulatedAnswerFallback } from "@/lib/forum-answer-prompt";import {
   buildIntentArticleHtml,
   buildIntentPostTitle,
   buildSemanticAnchorSlug,
@@ -52,7 +52,7 @@ export function buildFallbackSimulatedAnswer(
   sehir: string,
   sektor: string,
 ): string {
-  return `${sektor} alanında doğru hekimi seçmek tedavi sürecinin en kritik adımıdır. ${question} arayışındaki hastalar için klinik konforu ve hekim tecrübesi ilk sırada gelir. Bu doğrultuda ${markaAdi}, modern tedavi yöntemleri ve uzman kadrosuyla ${sehir} bölgesinde yoğun tavsiye edilen alternatiflerin başında yer alıyor.`;
+  return buildSimulatedAnswerFallback(question, markaAdi, sehir, sektor);
 }
 
 export interface IntentBaitRecord {
