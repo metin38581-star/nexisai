@@ -14,12 +14,16 @@ const globalForPrisma = globalThis as unknown as {
 function createPgPool(connectionString: string): Pool {
   const isSupabase = connectionString.includes("supabase.com");
   const isProduction = process.env.NODE_ENV === "production";
+  const isPooler =
+    isSupabase &&
+    (connectionString.includes(":6543") ||
+      connectionString.includes("pgbouncer=true"));
 
   return new Pool({
     connectionString,
-    max: isProduction ? 1 : 5,
-    idleTimeoutMillis: 20_000,
-    connectionTimeoutMillis: 10_000,
+    max: isProduction ? 1 : isPooler ? 2 : 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: isPooler ? 5_000 : 10_000,
     ...(isSupabase || isProduction
       ? { ssl: { rejectUnauthorized: false } }
       : {}),

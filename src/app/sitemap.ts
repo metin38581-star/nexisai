@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { prisma } from "@/lib/db";
+import { fetchAllQuestionHubSlugs } from "@/lib/question-hub-store";
 
 const SITE_ORIGIN =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
@@ -36,7 +37,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   try {
-    const baits = await fetchPublishedBaitEntries();
+    const [baits, forumHubs] = await Promise.all([
+      fetchPublishedBaitEntries(),
+      fetchAllQuestionHubSlugs(),
+    ]);
 
     const articleRoutes: MetadataRoute.Sitemap = baits.map((bait) => ({
       url: `${SITE_ORIGIN}/p/${encodeURIComponent(bait.slug)}`,
@@ -45,9 +49,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }));
 
-    return [...staticRoutes, ...articleRoutes];
+    const forumRoutes: MetadataRoute.Sitemap = forumHubs.map((hub) => ({
+      url: `${SITE_ORIGIN}/forum/${encodeURIComponent(hub.slug)}`,
+      lastModified: hub.createdAt,
+      changeFrequency: "weekly",
+      priority: 0.75,
+    }));
+
+    return [...staticRoutes, ...articleRoutes, ...forumRoutes];
   } catch (error) {
-    console.error("[SITEMAP]: Bait slug listesi alınamadı:", error);
+    console.error("[SITEMAP]: Slug listesi alınamadı:", error);
     return staticRoutes;
   }
 }

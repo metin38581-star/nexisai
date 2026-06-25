@@ -99,6 +99,7 @@ model Campaign {
   payments      Payment[]
   radarLogs     CampaignRadarLog[]
   growthLoop    CampaignGrowthLoop?
+  hubAnswers    HubAnswer[]
 }
 
 model MarketIntelligence {
@@ -167,4 +168,33 @@ model Payment {
   campaign           Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 
   @@map("Payment")
+}
+
+model QuestionHub {
+  id             String      @id @default(cuid())
+  slug           String      @unique
+  question       String
+  coreQuestionId String?     @map("core_question_id")
+  answers        HubAnswer[]
+  createdAt      DateTime    @default(now())
+
+  @@index([coreQuestionId])
+  @@map("QuestionHub")
+}
+
+model HubAnswer {
+  id           String      @id @default(cuid())
+  questionId   String      @map("question_id")
+  questionHub  QuestionHub @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  campaignId   String      @map("campaign_id")
+  campaign     Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  username     String
+  content      String
+  upvotes      Int         @default(0)
+  isFeatured   Boolean     @default(false) @map("is_featured")
+  createdAt    DateTime    @default(now())
+
+  @@index([questionId, isFeatured, createdAt])
+  @@index([campaignId])
+  @@map("HubAnswer")
 }

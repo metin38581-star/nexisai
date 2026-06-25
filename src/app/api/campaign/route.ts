@@ -34,6 +34,7 @@ import { applyDistributionPlatforms } from "@/lib/distribution-platform";
 import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
+import { appendCampaignAnswersToQuestionHub } from "@/lib/question-hub-store";
 import { recordPayment } from "@/lib/payment-store";
 import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
 import {
@@ -444,6 +445,18 @@ export async function POST(request: Request) {
         questionPairsForBaits,
         persistedBaits,
       );
+
+      void appendCampaignAnswersToQuestionHub({
+        campaignId: yeniKampanya.id,
+        brandName: targetBrand,
+        entries: selectedQuestionIds.map((coreQuestionId, index) => ({
+          coreQuestionId,
+          question: questionPairsForBaits[index]?.question ?? "",
+          simulatedAnswer: questionPairsForBaits[index]?.simulatedAnswer ?? "",
+        })),
+      }).catch((hubError) => {
+        console.error("[QUESTION_HUB]: Kampanya cevapları aktarılamadı:", hubError);
+      });
 
       console.log(
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk`,

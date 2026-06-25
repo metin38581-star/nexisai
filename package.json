@@ -7,7 +7,9 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:kill-stale": "powershell -ExecutionPolicy Bypass -File scripts/kill-stale-db-processes.ps1",
+    "db:ensure-question-hub": "node scripts/ensure-question-hub-tables.mjs"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.12.0",
