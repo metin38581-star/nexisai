@@ -16,6 +16,7 @@ import {
   MAX_CAMPAIGN_DAILY_BUDGET,
   CAMPAIGN_BUDGET_STEP,
   MIN_CAMPAIGN_DAYS,
+  DEFAULT_CAMPAIGN_DAYS,
   clampCampaignDailyBudget,
   clampCampaignDays,
 } from "@/lib/campaign-form-utils";
@@ -36,7 +37,7 @@ const initialForm: CampaignFormData = {
   sector: "",
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
-  campaignDays: 7,
+  campaignDays: DEFAULT_CAMPAIGN_DAYS,
   selectedQuestionIds: [],
 };
 

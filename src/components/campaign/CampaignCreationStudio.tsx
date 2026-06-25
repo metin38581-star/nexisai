@@ -16,6 +16,7 @@ import {
   MAX_CAMPAIGN_DAILY_BUDGET,
   CAMPAIGN_BUDGET_STEP,
   MIN_CAMPAIGN_DAYS,
+  DEFAULT_CAMPAIGN_DAYS,
   clampCampaignDailyBudget,
   clampCampaignDays,
 } from "@/lib/campaign-form-utils";
@@ -49,7 +50,7 @@ const initialForm: CampaignFormData = {
   sector: "",
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
-  campaignDays: 7,
+  campaignDays: DEFAULT_CAMPAIGN_DAYS,
   selectedQuestionIds: [],
 };
 
@@ -63,7 +64,7 @@ export default function CampaignCreationStudio({
 }: CampaignCreationStudioProps) {
   const [form, setForm] = useState<CampaignFormData>(initialForm);
   const [budgetPreview, setBudgetPreview] = useState(MIN_CAMPAIGN_DAILY_BUDGET);
-  const [daysPreview, setDaysPreview] = useState(7);
+  const [daysPreview, setDaysPreview] = useState(DEFAULT_CAMPAIGN_DAYS);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);

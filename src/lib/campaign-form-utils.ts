@@ -8,6 +8,7 @@ export const MIN_CAMPAIGN_DAILY_BUDGET = 100;
 export const MAX_CAMPAIGN_DAILY_BUDGET = 3000;
 export const CAMPAIGN_BUDGET_STEP = 100;
 export const MIN_CAMPAIGN_DAYS = 3;
+export const DEFAULT_CAMPAIGN_DAYS = MIN_CAMPAIGN_DAYS;
 
 export function clampCampaignDailyBudget(value: number): number {
   if (!Number.isFinite(value)) {
