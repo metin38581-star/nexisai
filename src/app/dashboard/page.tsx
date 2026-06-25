@@ -49,6 +49,7 @@ function PaymentResumeHandler({
       campaignDays: Number.isFinite(campaignDays)
         ? campaignDays
         : MIN_CAMPAIGN_DAYS,
+      selectedQuestionIds: [],
     });
 
     toast.success(

@@ -525,10 +525,13 @@ function AnalysisDashboardContent({
               },
               body: JSON.stringify({
                 companyName: payload.markaAdi,
-                sector: payload.sektor,
+                sector: payload.sectorSlug,
+                sektor: payload.sektor,
                 city: payload.sehir,
                 budget: payload.gunlukButce,
                 campaignDays: payload.gunSayisi,
+                sectorSlug: payload.sectorSlug,
+                selectedQuestionIds: payload.selectedQuestionIds,
               }),
             }),
           );

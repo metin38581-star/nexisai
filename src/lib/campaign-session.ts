@@ -9,6 +9,8 @@ export interface CampaignSessionPayload {
   sehir: string;
   gunlukButce: number;
   gunSayisi: number;
+  sectorSlug: CampaignFormData["sector"];
+  selectedQuestionIds: string[];
   withTahsilat?: boolean;
 }
 
@@ -26,6 +28,8 @@ export function buildCampaignSession(
     sehir: data.city ? getCityLabel(data.city) : "",
     gunlukButce: data.dailyBudget,
     gunSayisi: data.campaignDays,
+    sectorSlug: data.sector,
+    selectedQuestionIds: data.selectedQuestionIds,
     withTahsilat: options?.withTahsilat,
   };
 }

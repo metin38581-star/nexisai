@@ -9,11 +9,15 @@ export interface ContentVolumePlan {
   description: string;
 }
 
-/** Günlük bütçeye göre otonom yayınlanacak içerik hacmi. */
+/** Günlük bütçeye göre seçilen soru sayısı kadar içerik üretilir. */
 export function resolveContentVolumePlan(
   dailyBudget: number,
+  poolSize = 30,
 ): ContentVolumePlan {
-  const autonomousTargetCount = resolveMaxQuestionsFromDailyBudget(dailyBudget);
+  const autonomousTargetCount = resolveMaxQuestionsFromDailyBudget(
+    dailyBudget,
+    poolSize,
+  );
   const tier = resolveBudgetOperationTier(dailyBudget);
 
   return {

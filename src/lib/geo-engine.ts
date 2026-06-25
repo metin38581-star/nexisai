@@ -2,11 +2,15 @@ import type { GeoMicroIntent } from "@/types/geo-intent";
 import {
   buildGeoArticlePrompt,
   buildGeoFallbackArticleHtml,
+  buildArticleContentWithKizlarSoruyor,
+  buildFallbackKizlarSoruyorContent,
   buildIntentArticleHtml,
   buildIntentPostTitle,
   buildSelectedIntentArticlesPrompt,
+  buildSemanticAnchorSlug,
   buildZeroJargonRules,
 } from "@/lib/geo-prompt";
+import { buildHubArticleUrl } from "@/lib/hub-url";
 import { GoogleGenAI } from "@google/genai";
 
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
@@ -261,7 +265,21 @@ export interface GeneratedIntentArticle {
   html: string;
 }
 
-function parseIntentArticlesFromResponse(raw: string): GeneratedIntentArticle[] {
+interface RawGeneratedIntentArticle extends GeneratedIntentArticle {
+  ks_soru?: string;
+  ks_cevap?: string;
+}
+
+function finalizeGeneratedArticle(
+  article: RawGeneratedIntentArticle,
+): GeneratedIntentArticle {
+  return {
+    baslik: article.baslik,
+    html: buildArticleContentWithKizlarSoruyor(article.html, article),
+  };
+}
+
+function parseIntentArticlesFromResponse(raw: string): RawGeneratedIntentArticle[] {
   const trimmed = raw.trim();
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const jsonText = fenceMatch ? fenceMatch[1].trim() : trimmed;
@@ -277,17 +295,28 @@ function parseIntentArticlesFromResponse(raw: string): GeneratedIntentArticle[] 
         return null;
       }
 
-      const record = item as { baslik?: string; html?: string };
+      const record = item as {
+        baslik?: string;
+        html?: string;
+        ks_soru?: string;
+        ks_cevap?: string;
+      };
       const baslik = record.baslik?.trim();
       const html = record.html?.trim();
+      const ks_soru = record.ks_soru?.trim();
+      const ks_cevap = record.ks_cevap?.trim();
 
       if (!baslik || !html || !html.includes("<h1")) {
         return null;
       }
 
-      return { baslik, html };
+      return {
+        baslik,
+        html,
+        ...(ks_soru && ks_cevap ? { ks_soru, ks_cevap } : {}),
+      };
     })
-    .filter((item): item is GeneratedIntentArticle => item !== null);
+    .filter((item): item is RawGeneratedIntentArticle => item !== null);
 }
 
 async function generateSingleIntentArticle(
@@ -295,7 +324,8 @@ async function generateSingleIntentArticle(
   sehir: string,
   sektor: string,
   markaAdi: string,
-): Promise<GeneratedIntentArticle | null> {
+  articleUrl: string,
+): Promise<RawGeneratedIntentArticle | null> {
   const apiKey = resolveApiKey();
   if (!apiKey) {
     return null;
@@ -311,7 +341,7 @@ async function generateSingleIntentArticle(
     ai.models.generateContent({
       model,
       contents: buildSelectedIntentArticlesPrompt(
-        [pair],
+        [{ ...pair, articleUrl }],
         sehir,
         sektor,
         markaAdi,
@@ -355,15 +385,38 @@ export async function generateIntentArticlesForSelections(
 
     const results = await Promise.all(
       pairs.map(async (pair, index) => {
+        const slug = buildSemanticAnchorSlug(
+          sehir,
+          sektor,
+          pair.question,
+          markaAdi,
+          index,
+        );
+        const articleUrl = buildHubArticleUrl(slug);
+
         try {
           const article = await generateSingleIntentArticle(
             pair,
             sehir,
             sektor,
             markaAdi,
+            articleUrl,
           );
           if (article) {
-            return article;
+            const withKs =
+              article.ks_soru && article.ks_cevap
+                ? article
+                : {
+                    ...article,
+                    ...buildFallbackKizlarSoruyorContent(
+                      pair.question,
+                      markaAdi,
+                      sehir,
+                      articleUrl,
+                    ),
+                  };
+
+            return finalizeGeneratedArticle(withKs);
           }
           console.warn(
             `[GEO_MOTORU]: Soru ${index + 1} için LLM yanıtı eksik, fallback kullanılacak`,
@@ -389,7 +442,22 @@ export async function generateIntentArticlesForSelections(
         return null;
       }
 
-      return {
+      const slug = buildSemanticAnchorSlug(
+        sehir,
+        sektor,
+        pair.question,
+        markaAdi,
+        index,
+      );
+      const articleUrl = buildHubArticleUrl(slug);
+      const fallbackKs = buildFallbackKizlarSoruyorContent(
+        pair.question,
+        markaAdi,
+        sehir,
+        articleUrl,
+      );
+
+      return finalizeGeneratedArticle({
         baslik: buildIntentPostTitle(sehir, sektor, index, pair.question),
         html: buildIntentArticleHtml(
           pair.question,
@@ -398,7 +466,8 @@ export async function generateIntentArticlesForSelections(
           sehir,
           sektor,
         ),
-      };
+        ...fallbackKs,
+      });
     }).filter((item): item is GeneratedIntentArticle => item !== null);
   } catch (error) {
     console.error("[GEO_MOTORU_SECILI_HATA]:", error);

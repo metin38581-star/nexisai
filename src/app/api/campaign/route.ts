@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
+import type { BusinessSector } from "@/types/campaign";
 import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
 import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
@@ -28,7 +29,6 @@ import {
   buildBaitRecordsFromSelectedQuestionsAsync,
   type SelectedQuestionPair,
 } from "@/lib/selected-questions";
-import { generateMicroIntents } from "@/lib/geo-engine";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
 import { applyDistributionPlatforms } from "@/lib/distribution-platform";
 import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
@@ -36,6 +36,11 @@ import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
 import { recordPayment } from "@/lib/payment-store";
 import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
+import {
+  buildCoreQuestionPairs,
+  getCoreQuestionPoolSize,
+  validateCoreQuestionSelection,
+} from "@/lib/core-questions";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -106,23 +111,20 @@ function buildFallbackMakaleler(count: number): string[] {
   );
 }
 
-async function resolveAutonomousQuestionPairs(
+async function resolveSelectedCoreQuestionPairs(
+  selectedQuestionIds: string[],
+  sectorSlug: BusinessSector,
   sehir: string,
   sektor: string,
   markaAdi: string,
-  maxQuestions: number,
 ): Promise<SelectedQuestionPair[]> {
-  const intents = await generateMicroIntents(
+  return buildCoreQuestionPairs(
+    selectedQuestionIds,
+    sectorSlug,
     sehir,
-    sektor,
     markaAdi,
-    maxQuestions,
+    sektor,
   );
-
-  return intents.slice(0, maxQuestions).map((intent) => ({
-    question: intent.question,
-    simulatedAnswer: intent.simulatedAnswer,
-  }));
 }
 
 export async function POST(request: Request) {
@@ -136,6 +138,8 @@ export async function POST(request: Request) {
       sehir,
       gunlukButce,
       gunSayisi,
+      sectorSlug,
+      selectedQuestionIds,
     } = normalizeCampaignApiRequest(body);
     const toplamMaliyet = gunlukButce * gunSayisi;
 
@@ -287,22 +291,40 @@ export async function POST(request: Request) {
       );
     }
 
-    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce);
-    const makaleSayisi = maxQuestions;
+    const poolSize = getCoreQuestionPoolSize(sectorSlug);
+    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce, poolSize);
+    const selectionValidation = validateCoreQuestionSelection({
+      budget: gunlukButce,
+      sectorSlug,
+      selectedIds: selectedQuestionIds,
+    });
+
+    if (!selectionValidation.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: selectionValidation.error ?? "Geçersiz soru seçimi.",
+        },
+        { status: selectionValidation.statusCode ?? 400 },
+      );
+    }
+
+    const makaleSayisi = selectedQuestionIds.length;
 
     const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
 
-    const autonomousQuestionPairs = await resolveAutonomousQuestionPairs(
+    const selectedQuestionPairs = await resolveSelectedCoreQuestionPairs(
+      selectedQuestionIds,
+      sectorSlug as BusinessSector,
       trimmedSehir,
       trimmedSektor,
       trimmedMarka,
-      maxQuestions,
     );
 
     console.log(
-      "[OTONOM GEO MOTORU]: Üretilecek soru/makale ->",
-      autonomousQuestionPairs.length,
-      "/ hedef",
+      "[KEMIK SORU MOTORU]: Üretilecek soru/makale ->",
+      selectedQuestionPairs.length,
+      "/ seçilen",
       makaleSayisi,
       `(maxQuestions=${maxQuestions})`,
     );
@@ -326,7 +348,7 @@ export async function POST(request: Request) {
     });
 
     const pazarAnalizSkoru = llmResult.yapayZekaGorunurlukOrani;
-    const questionPairsForBaits = autonomousQuestionPairs;
+    const questionPairsForBaits = selectedQuestionPairs;
 
     let persistedBaits: Array<{
       id: string;
@@ -509,12 +531,28 @@ export async function POST(request: Request) {
     }));
 
     const terminalLogs = buildDynamicTerminalLogs(
-      { markaAdi, sektor, sehir, gunlukButce, gunSayisi },
+      {
+        markaAdi,
+        sektor,
+        sehir,
+        gunlukButce,
+        gunSayisi,
+        sectorSlug,
+        selectedQuestionIds,
+      },
       llmResult,
       baitDeployment,
     );
     const metrics = calculateDynamicMetrics(
-      { markaAdi, sektor, sehir, gunlukButce, gunSayisi },
+      {
+        markaAdi,
+        sektor,
+        sehir,
+        gunlukButce,
+        gunSayisi,
+        sectorSlug,
+        selectedQuestionIds,
+      },
       llmResult,
     );
 

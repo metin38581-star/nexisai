@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
@@ -20,20 +20,26 @@ import {
   clampCampaignDays,
 } from "@/lib/campaign-form-utils";
 import {
-  resolveAutonomousCampaignButtonLabel,
+  resolveCampaignLaunchButtonLabel,
   resolveIntentSoftCap,
 } from "@/lib/intent-soft-cap";
 import { resolveContentVolumePlan } from "@/lib/content-volume";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 import CyberScanField from "@/components/campaign/CyberScanField";
+import CoreQuestionsPanel from "@/components/campaign/CoreQuestionsPanel";
 import OrbitRingIcon from "@/components/campaign/OrbitRingIcon";
 import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
+import {
+  getCoreQuestionPoolSize,
+  isCoreQuestionSectorSupported,
+  pickDefaultCoreQuestionIds,
+  resolveMaxSelection,
+} from "@/lib/core-questions";
 import "@/components/campaign/budget-operation-tier.css";
 
 interface CampaignCreationStudioProps {
   onSubmit: (data: CampaignFormData) => void;
   isLoading: boolean;
-  /** Giriş sonrası formu doldurmak için — kampanya başlatmaz. */
   draftForm?: CampaignFormData | null;
   onDraftApplied?: () => void;
 }
@@ -44,6 +50,7 @@ const initialForm: CampaignFormData = {
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
   campaignDays: 7,
+  selectedQuestionIds: [],
 };
 
 const inputClass = "dc-cyber-input";
@@ -63,6 +70,8 @@ export default function CampaignCreationStudio({
   const lastAppliedDraftRef = useRef<string | null>(null);
 
   const isSubmitLocked = submitting || isLoading;
+  const poolSize = getCoreQuestionPoolSize(form.sector);
+  const maxSelection = resolveMaxSelection(budgetPreview, form.sector);
 
   useEffect(() => {
     if (!isLoading) {
@@ -97,13 +106,17 @@ export default function CampaignCreationStudio({
   }, [form.campaignDays]);
 
   const softCapResult = useMemo(
-    () => resolveIntentSoftCap({ dailyBudget: budgetPreview }),
-    [budgetPreview],
+    () =>
+      resolveIntentSoftCap({
+        dailyBudget: budgetPreview,
+        poolSize: poolSize || 30,
+      }),
+    [budgetPreview, poolSize],
   );
 
   const contentVolumePlan = useMemo(
-    () => resolveContentVolumePlan(budgetPreview),
-    [budgetPreview],
+    () => resolveContentVolumePlan(budgetPreview, poolSize || 30),
+    [budgetPreview, poolSize],
   );
 
   const budgetTier = useMemo(
@@ -112,8 +125,13 @@ export default function CampaignCreationStudio({
   );
 
   const submitButtonLabel = useMemo(
-    () => resolveAutonomousCampaignButtonLabel(budgetPreview),
-    [budgetPreview],
+    () =>
+      resolveCampaignLaunchButtonLabel(
+        budgetPreview,
+        form.selectedQuestionIds.length,
+        maxSelection,
+      ),
+    [budgetPreview, form.selectedQuestionIds.length, maxSelection],
   );
 
   const updateField = <K extends keyof CampaignFormData>(
@@ -123,13 +141,48 @@ export default function CampaignCreationStudio({
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleSelectionChange = useCallback((selectedQuestionIds: string[]) => {
+    setForm((prev) => ({ ...prev, selectedQuestionIds }));
+  }, []);
+
+  useEffect(() => {
+    if (!isCoreQuestionSectorSupported(form.sector)) {
+      return;
+    }
+
+    setForm((prev) => {
+      const nextMax = resolveMaxSelection(prev.dailyBudget, prev.sector);
+      if (nextMax === 0) {
+        return prev.selectedQuestionIds.length === 0
+          ? prev
+          : { ...prev, selectedQuestionIds: [] };
+      }
+
+      const trimmed = prev.selectedQuestionIds.slice(0, nextMax);
+      if (trimmed.length > 0) {
+        return trimmed.length === prev.selectedQuestionIds.length
+          ? prev
+          : { ...prev, selectedQuestionIds: trimmed };
+      }
+
+      const defaults = pickDefaultCoreQuestionIds(prev.sector, prev.dailyBudget);
+      return defaults.length === prev.selectedQuestionIds.length &&
+        defaults.every((id, index) => id === prev.selectedQuestionIds[index])
+        ? prev
+        : { ...prev, selectedQuestionIds: defaults };
+    });
+  }, [form.sector, form.dailyBudget]);
+
   const isFormReadyToSubmit =
     form.businessName.trim().length > 0 &&
     form.sector.length > 0 &&
     form.city.length > 0 &&
     form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
     form.dailyBudget <= MAX_CAMPAIGN_DAILY_BUDGET &&
-    form.campaignDays >= MIN_CAMPAIGN_DAYS;
+    form.campaignDays >= MIN_CAMPAIGN_DAYS &&
+    isCoreQuestionSectorSupported(form.sector) &&
+    form.selectedQuestionIds.length > 0 &&
+    form.selectedQuestionIds.length <= maxSelection;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -139,9 +192,28 @@ export default function CampaignCreationStudio({
       return;
     }
 
+    if (!isCoreQuestionSectorSupported(form.sector)) {
+      setFormError(
+        "Kemik soru havuzu yalnızca Diş Kliniği, Otel ve Restoran sektörlerinde kullanılabilir.",
+      );
+      return;
+    }
+
+    if (form.selectedQuestionIds.length === 0) {
+      setFormError("En az bir kemik soru seçmelisiniz.");
+      return;
+    }
+
+    if (form.selectedQuestionIds.length > maxSelection) {
+      setFormError(
+        `Bütçeniz en fazla ${maxSelection} soru seçmenize izin veriyor.`,
+      );
+      return;
+    }
+
     if (!isFormReadyToSubmit) {
       setFormError(
-        "İşletme adı, sektör, şehir ve günlük bütçe alanlarını doldurun.",
+        "İşletme adı, sektör, şehir, bütçe ve soru seçimlerini tamamlayın.",
       );
       return;
     }
@@ -154,6 +226,7 @@ export default function CampaignCreationStudio({
       city: form.city,
       dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
       campaignDays: clampCampaignDays(form.campaignDays),
+      selectedQuestionIds: form.selectedQuestionIds,
     });
   };
 
@@ -162,14 +235,15 @@ export default function CampaignCreationStudio({
       <div className="mb-6">
         <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
           <Sparkles className="h-3.5 w-3.5" />
-          Otonom GEO Kampanya Motoru
+          Kemik Soru Kampanya Motoru
         </div>
         <h2 className="text-lg font-semibold text-white sm:text-xl">
           GEO Kampanya Oluşturma Odası
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-          Bilgilerinizi girin ve başlatın. Hedef belirleme, makale üretimi ve
-          yayın tamamen arka planda otomatik işler — seçim veya tıklama gerekmez.
+          30 kemik soru havuzundan hedeflerinizi seçin. Bütçe barını kaydırdıkça
+          seçim limitiniz anında yükselir; onayladığınız sorular işletme adınızla
+          birlikte yayın hattına gönderilir.
         </p>
       </div>
 
@@ -253,10 +327,19 @@ export default function CampaignCreationStudio({
           />
         </div>
 
-        <AutonomousAnalysisInfoCard
+        <CoreQuestionsPanel
+          sector={form.sector}
+          city={form.city}
+          dailyBudget={budgetPreview}
+          selectedIds={form.selectedQuestionIds}
+          onSelectionChange={handleSelectionChange}
+        />
+
+        <CampaignBudgetInfoCard
           tier={budgetTier}
           tierLabel={softCapResult.tierLabel}
           targetCount={softCapResult.maxQuestions}
+          selectedCount={form.selectedQuestionIds.length}
           analysisDescription={softCapResult.analysisDescription}
           contentDescription={contentVolumePlan.description}
           previewDays={daysPreview}
@@ -295,10 +378,11 @@ export default function CampaignCreationStudio({
   );
 }
 
-function AutonomousAnalysisInfoCard({
+function CampaignBudgetInfoCard({
   tier,
   tierLabel,
   targetCount,
+  selectedCount,
   analysisDescription,
   contentDescription,
   previewDays,
@@ -306,6 +390,7 @@ function AutonomousAnalysisInfoCard({
   tier: ReturnType<typeof resolveBudgetOperationTier>;
   tierLabel: string;
   targetCount: number;
+  selectedCount: number;
   analysisDescription: string;
   contentDescription: string;
   previewDays: number;
@@ -320,7 +405,7 @@ function AutonomousAnalysisInfoCard({
         </OrbitRingIcon>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
-            Otonom Yapay Zeka Pazar Analizi
+            Dinamik Bütçe & Soru Limiti
           </p>
           <p className="mt-2 text-sm leading-relaxed text-zinc-300">
             {analysisDescription}
@@ -330,7 +415,7 @@ function AutonomousAnalysisInfoCard({
               {tierLabel}
             </span>
             <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[11px] font-semibold text-violet-200">
-              {targetCount} otonom hedef
+              {selectedCount}/{targetCount} soru seçildi
             </span>
             <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-3 py-1 text-[11px] text-zinc-400">
               {contentDescription}
@@ -343,9 +428,9 @@ function AutonomousAnalysisInfoCard({
             </span>
           </div>
           <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
-            Hedef sorular arka planda belirlenir; liste veya seçim ekranı
-            gösterilmez. Kampanya başladığında sistem sektörünüzdeki en kritik
-            aramaları otomatik tespit eder ve makaleleri üretir.
+            Seçtiğiniz kemik sorular makale başlıklarına dönüştürülür ve mevcut
+            webhook / Make.com dağıtım hattına işletme adınızla birlikte
+            gönderilir.
           </p>
         </div>
       </div>

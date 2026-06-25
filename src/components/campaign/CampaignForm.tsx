@@ -37,6 +37,7 @@ const initialForm: CampaignFormData = {
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
   campaignDays: 7,
+  selectedQuestionIds: [],
 };
 
 const inputClass =
@@ -89,6 +90,7 @@ export default function CampaignForm({
       city: form.city,
       dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
       campaignDays: clampCampaignDays(form.campaignDays),
+      selectedQuestionIds: [],
     });
   };
 

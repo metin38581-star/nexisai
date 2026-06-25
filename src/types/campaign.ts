@@ -17,6 +17,7 @@ export interface CampaignFormData {
   city: CampaignFormCity;
   dailyBudget: number;
   campaignDays: number;
+  selectedQuestionIds: string[];
 }
 
 export interface CampaignApiRequest {
@@ -25,6 +26,8 @@ export interface CampaignApiRequest {
   city?: string;
   budget?: number;
   campaignDays?: number;
+  selectedQuestionIds?: string[];
+  sectorSlug?: string;
   /** @deprecated Türkçe alan adları — geriye dönük uyumluluk */
   markaAdi?: string;
   sektor?: string;

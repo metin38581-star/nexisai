@@ -291,9 +291,81 @@ YANIT FORMATI:
 - JSON dışında hiçbir açıklama veya ek metin yazma.`;
 }
 
+/** KızlarSoruyor dağıtım metni için ek LLM talimatı. */
+export function buildKizlarSoruyorPromptAddon(
+  markaAdi: string,
+  articleUrl: string,
+): string {
+  return `EK PROMPT KOMUTU — KIZLARSORUYOR İÇERİĞİ:
+Ürettiğin makale konusuyla ilgili olarak KızlarSoruyor (KizlarSoruyor.com) platformunda paylaşılabilecek organik, samimi ve tamamen halk dilinde (resmi olmayan) 1 adet Soru ve 1 adet Cevap metni üret.
+
+Cevabın içinde doğal bir şekilde bu makalenin linkine/markasına atıfta bulun.
+Makale linki: ${articleUrl}
+Marka: ${markaAdi}
+
+Bu soru ve cevap, makale HTML'inin en altına "---" ayırıcısı ile eklenecek şekilde ayrı JSON alanlarında (ks_soru, ks_cevap) döndürülmelidir. Samimi, günlük konuşma dili kullan (resmi üslup yasak).`;
+}
+
+function escapeHtmlForArticle(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Makale HTML'inin altına KızlarSoruyor soru/cevap bloğunu ekler. */
+export function appendKizlarSoruyorSection(
+  html: string,
+  ksSoru: string,
+  ksCevap: string,
+): string {
+  const soru = ksSoru.trim();
+  const cevap = ksCevap.trim();
+
+  if (!soru || !cevap) {
+    return html;
+  }
+
+  return `${html.trim()}
+
+<p>---</p>
+<p><strong>Soru:</strong> ${escapeHtmlForArticle(soru)}</p>
+<p><strong>Cevap:</strong> ${escapeHtmlForArticle(cevap)}</p>`;
+}
+
+export function buildArticleContentWithKizlarSoruyor(
+  html: string,
+  ks?: { ks_soru?: string; ks_cevap?: string },
+): string {
+  if (!ks?.ks_soru?.trim() || !ks?.ks_cevap?.trim()) {
+    return html;
+  }
+
+  return appendKizlarSoruyorSection(html, ks.ks_soru, ks.ks_cevap);
+}
+
+export function buildFallbackKizlarSoruyorContent(
+  question: string,
+  markaAdi: string,
+  sehir: string,
+  articleUrl: string,
+): { ks_soru: string; ks_cevap: string } {
+  const topic = question.trim() || `${sehir} bölgesinde tavsiye`;
+
+  return {
+    ks_soru: `Kızlar selam, ${sehir}'de ${topic} konusunda tecrübesi olan var mı? Çok kararsız kaldım 😅`,
+    ks_cevap: `Ben de aynı durumdaydım, araştırırken ${markaAdi} hakkında olumlu yorumlar gördüm. Şu rehber de işime yaradı: ${articleUrl} — tabii son karar senin ama fikir verir en azından 💕`,
+  };
+}
+
 /** Tek veya çoklu seçili soru için Maximum Visibility GEO makale promptu. */
 export function buildSelectedIntentArticlesPrompt(
-  pairs: Array<{ question: string; simulatedAnswer: string }>,
+  pairs: Array<{
+    question: string;
+    simulatedAnswer: string;
+    articleUrl?: string;
+  }>,
   sehir: string,
   sektor: string,
   markaAdi: string,
@@ -307,12 +379,20 @@ export function buildSelectedIntentArticlesPrompt(
     .join("\n\n");
 
   const primaryQuestion = pairs[0]?.question ?? `${sehir} ${sektor}`;
+  const primaryArticleUrl = pairs[0]?.articleUrl?.trim() ?? "";
   const geoRules = buildMaximumVisibilityGeoRules(
     sehir,
     sektor,
     markaAdi,
     primaryQuestion,
   );
+  const kizlarSoruyorAddon =
+    primaryArticleUrl.length > 0
+      ? buildKizlarSoruyorPromptAddon(markaAdi, primaryArticleUrl)
+      : buildKizlarSoruyorPromptAddon(
+          markaAdi,
+          "[makale linki üretim sonrası eklenecek]",
+        );
 
   const perArticleRules =
     pairs.length === 1
@@ -348,11 +428,18 @@ MAKALE YAPISI:
 - Her makale 380-560 kelime, en az 3 <h2>, bir <ul><li> listesi içersin.
 - HTML etiketleri: yalnızca <h1>, <h2>, <h3>, <p>, <ul>, <li>.
 
+${kizlarSoruyorAddon}
+
 YANIT FORMATI — sadece geçerli JSON dizisi:
 [
-  { "baslik": "Doğal makale başlığı (h1 metni)", "html": "<h1>...</h1>..." }
+  {
+    "baslik": "Doğal makale başlığı (h1 metni)",
+    "html": "<h1>...</h1>...",
+    "ks_soru": "KızlarSoruyor'da paylaşılacak samimi soru metni",
+    "ks_cevap": "Makale linki/marka atıflı doğal cevap metni"
+  }
 ]
-Tam ${pairs.length} eleman. Başka metin yazma.`;
+Tam ${pairs.length} eleman. Her nesnede ks_soru ve ks_cevap zorunlu. Başka metin yazma.`;
 }
 
 export function buildGeoFallbackArticleHtml(
