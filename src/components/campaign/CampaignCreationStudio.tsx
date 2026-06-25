@@ -109,13 +109,13 @@ export default function CampaignCreationStudio({
     () =>
       resolveIntentSoftCap({
         dailyBudget: budgetPreview,
-        poolSize: poolSize || 30,
+        poolSize: poolSize || 15,
       }),
     [budgetPreview, poolSize],
   );
 
   const contentVolumePlan = useMemo(
-    () => resolveContentVolumePlan(budgetPreview, poolSize || 30),
+    () => resolveContentVolumePlan(budgetPreview, poolSize || 15),
     [budgetPreview, poolSize],
   );
 
@@ -241,7 +241,7 @@ export default function CampaignCreationStudio({
           GEO Kampanya Oluşturma Odası
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-          30 kemik soru havuzundan hedeflerinizi seçin. Bütçe barını kaydırdıkça
+          15 kemik soru havuzundan hedeflerinizi seçin. Bütçe barını kaydırdıkça
           seçim limitiniz anında yükselir; onayladığınız sorular işletme adınızla
           birlikte yayın hattına gönderilir.
         </p>

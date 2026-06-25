@@ -1,671 +1,302 @@
 export type CoreQuestionSector = "hotel" | "clinic" | "restaurant";
 
-export type QuestionTier = "gold" | "pool";
-
 export interface QuestionTemplate {
   id: string;
   sector: CoreQuestionSector;
   template: string;
-  /** İlk 2 altın soru: sabit GEO/SEO hedefli; kalan 28 havuz sorusu. */
-  tier: QuestionTier;
+  isGold: boolean;
 }
 
 export const GOLD_QUESTIONS_PER_SECTOR = 2;
-export const POOL_QUESTIONS_PER_SECTOR = 28;
-export const QUESTIONS_PER_SECTOR =
-  GOLD_QUESTIONS_PER_SECTOR + POOL_QUESTIONS_PER_SECTOR;
+export const QUESTIONS_PER_SECTOR = 15;
 
-const CLINIC_QUESTIONS: QuestionTemplate[] = [
+export const CORE_QUESTIONS: QuestionTemplate[] = [
+  // --- DİŞ KLİNİĞİ SEKTÖRÜ (CLINIC) ---
   {
-    id: "c_gold_1",
+    id: "c_g1",
     sector: "clinic",
-    tier: "gold",
     template: "[Şehir]'deki en iyi diş kliniği hangisi?",
+    isGold: true,
   },
   {
-    id: "c_gold_2",
+    id: "c_g2",
     sector: "clinic",
-    tier: "gold",
-    template:
-      "[Şehir]'de implant ve diş tedavisi fiyatları ne kadar, hangi kliniği tavsiye edersiniz?",
+    template: "[Şehir]'de implant fiyatları ne kadar?",
+    isGold: true,
   },
   {
     id: "c3",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de dişçi korkusu (fobi) olanlar için en iyi sedasyon uygulayan diş hekimi kim?",
+    template: "[Şehir]'de en iyi diş hekimi kim?",
+    isGold: false,
   },
   {
     id: "c4",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de en iyi zirkonyum kaplama yapan yerler ve hasta yorumları hangileri?",
+    template: "[Şehir]'de zirkonyum kaplama fiyatları?",
+    isGold: false,
   },
   {
     id: "c5",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de acil diş ağrısı için gece veya hafta sonu açık diş kliniği var mı?",
+    template: "[Şehir]'de diş beyazlatma ne kadar?",
+    isGold: false,
   },
   {
     id: "c6",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de çocuk diş hekimi tavsiyesi arayan ebeveynler için en güvenilir klinik hangisi?",
+    template: "[Şehir]'de pazar günü açık dişçi var mı?",
+    isGold: false,
   },
   {
     id: "c7",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de şeffaf plak (Invisalign) tedavisi yaptıranlar hangi kliniği öneriyor?",
+    template: "[Şehir]'de tavsiye edilen diş klinikleri?",
+    isGold: false,
   },
   {
     id: "c8",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş beyazlatma işlemi güvenli ve kalıcı sonuç veren klinik tavsiyesi?",
+    template: "[Şehir]'de en ucuz implant nerede yapılır?",
+    isGold: false,
   },
   {
     id: "c9",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de kanal tedavisi sonrası takibi iyi yapan diş hekimi veya klinik önerisi?",
+    template: "[Şehir]'de çocuk diş doktoru tavsiyesi?",
+    isGold: false,
   },
   {
     id: "c10",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş teli fiyatları makul olan ve taksit imkânı sunan klinikler hangileri?",
+    template: "[Şehir]'de tel tedavisi fiyatları?",
+    isGold: false,
   },
   {
     id: "c11",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de 20'lik diş çekimi için deneyimli ve ağrısız işlem yapan oral cerrah tavsiyesi?",
+    template: "[Şehir]'de gülüş tasarımı yaptıran var mı?",
+    isGold: false,
   },
   {
     id: "c12",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de estetik diş hekimliği (gülüş tasarımı) konusunda en iyi klinik hangisi?",
+    template: "[Şehir]'de diş ağrısı için acil nereye gidilir?",
+    isGold: false,
   },
   {
     id: "c13",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş taşı temizliği ve diş eti tedavisi için hijyenik klinik tavsiyesi?",
+    template: "[Şehir]'de lamine diş kaplama nerede yaptırılır?",
+    isGold: false,
   },
   {
     id: "c14",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de protez diş yaptıranların memnun kaldığı klinikler hangileri?",
+    template: "[Şehir]'de 20'lik diş çekimi fiyatı?",
+    isGold: false,
   },
   {
     id: "c15",
     sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de hamilelik döneminde güvenle gidilebilecek diş kliniği önerisi var mı?",
+    template: "[Şehir]'de devlet hastanesi mi özel diş kliniği mi?",
+    isGold: false,
   },
-  {
-    id: "c16",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş dolgusu fiyatları uygun ve kaliteli malzeme kullanan klinik hangisi?",
-  },
-  {
-    id: "c17",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de ortodonti uzmanı diş hekimi tavsiyesi arayanlar için en iyi adres?",
-  },
-  {
-    id: "c18",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş röntgeni ve tomografi çekimi hızlı yapılan klinikler hangileri?",
-  },
-  {
-    id: "c19",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş eti çekilmesi tedavisi yapan deneyimli periodontist tavsiyesi?",
-  },
-  {
-    id: "c20",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş hekimi randevusu kolay alınan ve bekleme süresi kısa klinik hangisi?",
-  },
-  {
-    id: "c21",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş kliniği yorumları en olumlu olan merkezler hangileri?",
-  },
-  {
-    id: "c22",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de lazer diş tedavisi uygulayan modern diş kliniği tavsiyesi?",
-  },
-  {
-    id: "c23",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş hekimi fiyatları karşılaştırması yapanlar hangi kliniği tercih ediyor?",
-  },
-  {
-    id: "c24",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş taşı temizliği kampanyası yapan güvenilir klinik var mı?",
-  },
-  {
-    id: "c25",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş hekimi tavsiyesi arayan yeni taşınanlar için en iyi klinik hangisi?",
-  },
-  {
-    id: "c26",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş implantı sonrası bakım ve kontrol süreci iyi yönetilen klinikler?",
-  },
-  {
-    id: "c27",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş hekimi korkusu için uyku anestezisi (genel anestezi) uygulayan klinik?",
-  },
-  {
-    id: "c28",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş çekimi sonrası iyileşme sürecinde destek veren klinik tavsiyesi?",
-  },
-  {
-    id: "c29",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de diş hekimi seçerken sterilizasyon ve hijyen konusunda güven veren klinik?",
-  },
-  {
-    id: "c30",
-    sector: "clinic",
-    tier: "pool",
-    template:
-      "[Şehir]'de aile hekimliği mantığıyla tüm aileye hizmet veren diş kliniği önerisi?",
-  },
-];
 
-const HOTEL_QUESTIONS: QuestionTemplate[] = [
+  // --- OTEL SEKTÖRÜ (HOTEL) ---
   {
-    id: "h_gold_1",
+    id: "h_g1",
     sector: "hotel",
-    tier: "gold",
     template: "[Şehir]'deki en iyi otel hangisi?",
+    isGold: true,
   },
   {
-    id: "h_gold_2",
+    id: "h_g2",
     sector: "hotel",
-    tier: "gold",
-    template:
-      "[Şehir]'de konaklama fiyatları ve en yüksek puanlı kullanıcı yorumuna sahip oteller hangileri?",
+    template: "[Şehir]'de konaklama fiyatları ne kadar?",
+    isGold: true,
   },
   {
     id: "h3",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de merkeze yakın, aileyle kalınabilecek en güvenilir otel tavsiyesi hangisi?",
+    template: "[Şehir] merkezdeki otel tavsiyeleri?",
+    isGold: false,
   },
   {
     id: "h4",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de kahvaltı dahil fiyat-performans oteli öneren var mı?",
+    template: "[Şehir]'de temiz otel önerisi?",
+    isGold: false,
   },
   {
     id: "h5",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de spa ve wellness imkânı olan lüks otel tavsiyesi?",
+    template: "[Şehir]'de en ucuz oteller hangileri?",
+    isGold: false,
   },
   {
     id: "h6",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de havalimanına yakın konaklama için en pratik otel hangisi?",
+    template: "[Şehir]'deki 5 yıldızlı oteller?",
+    isGold: false,
   },
   {
     id: "h7",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de evcil hayvan kabul eden pet friendly otel var mı?",
+    template: "[Şehir]'de kalınacak yerler nereler?",
+    isGold: false,
   },
   {
     id: "h8",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de balayı çiftleri için romantik otel ve suit tavsiyesi?",
+    template: "[Şehir]'de aileyle kalınacak güvenli otel?",
+    isGold: false,
   },
   {
     id: "h9",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de iş seyahati için sessiz ve hızlı Wi-Fi sunan otel önerisi?",
+    template: "[Şehir] otelleri ve kullanıcı yorumları?",
+    isGold: false,
   },
   {
     id: "h10",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de deniz manzaralı otel arayanlar için en iyi seçenekler hangileri?",
+    template: "[Şehir]'de butik otel tavsiyesi?",
+    isGold: false,
   },
   {
     id: "h11",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de termal otel ve kaplıca deneyimi için güvenilir tesis tavsiyesi?",
+    template: "[Şehir]'de kahvaltı dahil uygun oteller?",
+    isGold: false,
   },
   {
     id: "h12",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de çocuklu aileler için oyun alanı ve aquapark olan otel hangisi?",
+    template: "[Şehir] otogara yakın oteller?",
+    isGold: false,
   },
   {
     id: "h13",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de ucuz ama temiz hostel veya pansiyon tavsiyesi arayanlar için?",
+    template: "[Şehir] havalimanına yakın oteller?",
+    isGold: false,
   },
   {
     id: "h14",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de otel fiyatları uygun olan ve iptal politikası esnek tesisler?",
+    template: "[Şehir]'de havuzlu otel önerileri?",
+    isGold: false,
   },
   {
     id: "h15",
     sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de tarihi merkezde konaklama için en iyi otel hangisi?",
+    template: "[Şehir]'de en popüler konaklama yerleri?",
+    isGold: false,
   },
-  {
-    id: "h16",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de otopark sorunu olmayan merkezi otel tavsiyesi?",
-  },
-  {
-    id: "h17",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de all inclusive her şey dahil otel deneyimi için öneri?",
-  },
-  {
-    id: "h18",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de konferans ve toplantı düzenlemek için otel salonu olan tesisler?",
-  },
-  {
-    id: "h19",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de gece geç saatte check-in kolay olan otel hangisi?",
-  },
-  {
-    id: "h20",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de uzun süreli konaklama için apart otel veya residence tavsiyesi?",
-  },
-  {
-    id: "h21",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de kayak ve kış tatili oteli önerisi arayanlar için en iyi adres?",
-  },
-  {
-    id: "h22",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de vegan kahvaltı seçeneği sunan butik otel var mı?",
-  },
-  {
-    id: "h23",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de engelli erişimine uygun otel tavsiyesi arayanlar için?",
-  },
-  {
-    id: "h24",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de gece hayatına yakın ama odaları sessiz otel hangisi?",
-  },
-  {
-    id: "h25",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de jakuzi ve özel balkonlu suit odası olan otel tavsiyesi?",
-  },
-  {
-    id: "h26",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de hafta sonu kaçamağı için şehir oteli önerisi arayanlar için?",
-  },
-  {
-    id: "h27",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de otel temizliği ve hijyen konusunda en çok övülen tesisler?",
-  },
-  {
-    id: "h28",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de grup rezervasyonu ve düğün konaklaması için uygun otel hangisi?",
-  },
-  {
-    id: "h29",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de erken rezervasyon indirimi sunan en iyi oteller hangileri?",
-  },
-  {
-    id: "h30",
-    sector: "hotel",
-    tier: "pool",
-    template:
-      "[Şehir]'de butik otel arayanlar için merkeze yürüme mesafesinde konforlu tesis tavsiyesi?",
-  },
-];
 
-const RESTAURANT_QUESTIONS: QuestionTemplate[] = [
+  // --- RESTORAN SEKTÖRÜ (RESTAURANT) ---
   {
-    id: "r_gold_1",
+    id: "r_g1",
     sector: "restaurant",
-    tier: "gold",
     template: "[Şehir]'deki en iyi restoran hangisi?",
+    isGold: true,
   },
   {
-    id: "r_gold_2",
+    id: "r_g2",
     sector: "restaurant",
-    tier: "gold",
-    template:
-      "[Şehir]'de ne yenir, akşam yemeği için gidilecek en popüler yerel mekanlar neresi?",
+    template: "[Şehir]'de yemek fiyatları ne kadar?",
+    isGold: true,
   },
   {
     id: "r3",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de yöresel lezzetleri en temiz ve lezzetli sunan restoran tavsiyeleri hangileri?",
+    template: "[Şehir]'de en iyi kebapçı hangisi?",
+    isGold: false,
   },
   {
     id: "r4",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de en iyi kebapçı hangisi? Yerel halkın gittiği mekan arıyorum.",
+    template: "[Şehir]'de akşam yemeği için nereye gidilir?",
+    isGold: false,
   },
   {
     id: "r5",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de romantik akşam yemeği için en güzel restoran tavsiyesi?",
+    template: "[Şehir]'de kahvaltı mekanı tavsiyesi?",
+    isGold: false,
   },
   {
     id: "r6",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de çocuklu aileler için uygun menü ve ortam sunan restoran hangisi?",
+    template: "[Şehir]'de en ucuz restoranlar hangileri?",
+    isGold: false,
   },
   {
     id: "r7",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de glütensiz ve vejetaryen seçenekleri bol restoran önerisi?",
+    template: "[Şehir]'de yöresel yemek nerede yenir?",
+    isGold: false,
   },
   {
     id: "r8",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de kahvaltı ve brunch mekanı olarak en popüler yer hangisi?",
+    template: "[Şehir]'de balık restoranı tavsiyesi?",
+    isGold: false,
   },
   {
     id: "r9",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de doğum günü kutlaması için özel masa düzenleyen restoran tavsiyesi?",
+    template: "[Şehir]'de çocuklu aile restoranı?",
+    isGold: false,
   },
   {
     id: "r10",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de deniz ürünleri ve balık restoranı arayanlar için en iyi adres?",
+    template: "[Şehir] restoran yorumları en iyiler?",
+    isGold: false,
   },
   {
     id: "r11",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de fiyat-performans açısından en iyi lokanta ve esnaf lokantası hangisi?",
+    template: "[Şehir]'de paket servis restoran tavsiyesi?",
+    isGold: false,
   },
   {
     id: "r12",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de gece geç saate kadar açık restoran veya cafe tavsiyesi?",
+    template: "[Şehir]'de romantik restoran hangisi?",
+    isGold: false,
   },
   {
     id: "r13",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de pizza ve İtalyan mutfağı için en lezzetli restoran hangisi?",
+    template: "[Şehir]'de gece açık restoran var mı?",
+    isGold: false,
   },
   {
     id: "r14",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de sushi ve Uzak Doğu mutfağı sunan kaliteli restoran önerisi?",
+    template: "[Şehir]'de en popüler cafe hangisi?",
+    isGold: false,
   },
   {
     id: "r15",
     sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de teras manzaralı restoran arayanlar için en iyi mekanlar?",
+    template: "[Şehir]'de esnaf lokantası tavsiyesi?",
+    isGold: false,
   },
-  {
-    id: "r16",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de vegan restoran ve bitki bazlı menü sunan cafe tavsiyesi?",
-  },
-  {
-    id: "r17",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de iş yemeği için sessiz ve profesyonel ortam sunan restoran?",
-  },
-  {
-    id: "r18",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de kahve ve tatlı konusunda en çok önerilen cafe hangisi?",
-  },
-  {
-    id: "r19",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de et mangal ve steakhouse tavsiyesi arayanlar için en iyi seçenek?",
-  },
-  {
-    id: "r20",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de sokak lezzetleri ve sokak yemekleri için en popüler duraklar?",
-  },
-  {
-    id: "r21",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de iftar ve toplu yemek organizasyonu yapan restoran tavsiyesi?",
-  },
-  {
-    id: "r22",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de restoran yorumları en yüksek puanlı mekanlar hangileri?",
-  },
-  {
-    id: "r23",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de paket servis ve hızlı teslimat yapan en iyi restoran hangisi?",
-  },
-  {
-    id: "r24",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de kahvaltı tabağı ve börek için en meşhur mekan tavsiyesi?",
-  },
-  {
-    id: "r25",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de ocakbaşı ve mangal keyfi için en iyi restoran önerisi?",
-  },
-  {
-    id: "r26",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de düğün yemeği ve catering hizmeti veren restoran tavsiyesi?",
-  },
-  {
-    id: "r27",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de alkolsüz aile restoranı arayanlar için güvenilir mekan?",
-  },
-  {
-    id: "r28",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de meze çeşitleri bol rakı balık restoranı hangisi?",
-  },
-  {
-    id: "r29",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de restoran rezervasyonu kolay alınan ve servisi hızlı mekanlar?",
-  },
-  {
-    id: "r30",
-    sector: "restaurant",
-    tier: "pool",
-    template:
-      "[Şehir]'de öğle yemeği menüsü uygun fiyatlı işyeri yakını restoran hangisi?",
-  },
-];
-
-export const CORE_QUESTIONS: QuestionTemplate[] = [
-  ...CLINIC_QUESTIONS,
-  ...HOTEL_QUESTIONS,
-  ...RESTAURANT_QUESTIONS,
 ];
 
 export function isGoldCoreQuestion(question: QuestionTemplate): boolean {
-  return question.tier === "gold";
+  return question.isGold;
 }
 
 export function getGoldCoreQuestions(
   sector: CoreQuestionSector,
 ): QuestionTemplate[] {
   return CORE_QUESTIONS.filter(
-    (question) => question.sector === sector && question.tier === "gold",
+    (question) => question.sector === sector && question.isGold,
   );
 }
 
@@ -673,7 +304,7 @@ export function getPoolCoreQuestions(
   sector: CoreQuestionSector,
 ): QuestionTemplate[] {
   return CORE_QUESTIONS.filter(
-    (question) => question.sector === sector && question.tier === "pool",
+    (question) => question.sector === sector && !question.isGold,
   );
 }
 
@@ -683,40 +314,63 @@ export const MAX_CAMPAIGN_BUDGET_LIMIT = 3000;
 /** Altın GEO soruları için minimum günlük bütçe (TL). */
 export const GOLD_QUESTION_BUDGET_THRESHOLD = 1000;
 
+/** Tüm 15 sorunun seçilebildiği minimum günlük bütçe (TL). */
+export const FULL_SELECTION_BUDGET_THRESHOLD = 1500;
+
 export function isGoldQuestionId(id: string): boolean {
-  return id.includes("_gold_");
+  const question = CORE_QUESTIONS.find((item) => item.id === id);
+  return question?.isGold ?? false;
 }
 
 export function isGoldQuestionBudgetUnlocked(budget: number): boolean {
   return budget >= GOLD_QUESTION_BUDGET_THRESHOLD;
 }
 
-/** 100 TL → 2 soru, 1000 TL → 30 soru, 1200 TL → 38 soru, 3000 TL → 100 soru. */
+/**
+ * 100 TL → 1 soru, 1.000 TL → 10 soru, 1.200 TL → 12 soru, 1.500 TL+ → 15 soru.
+ */
 export function calculateMaxQuestions(budget: number): number {
   if (budget < MIN_CAMPAIGN_BUDGET) {
     return 0;
   }
 
-  if (budget <= 1000) {
-    return Math.floor(2 + ((budget - 100) * (30 - 2)) / (1000 - 100));
+  if (budget >= FULL_SELECTION_BUDGET_THRESHOLD) {
+    return QUESTIONS_PER_SECTOR;
   }
 
-  return Math.floor(30 + ((budget - 1000) * (100 - 30)) / (3000 - 1000));
+  if (budget >= GOLD_QUESTION_BUDGET_THRESHOLD) {
+    return Math.floor(
+      10 + ((budget - GOLD_QUESTION_BUDGET_THRESHOLD) * (QUESTIONS_PER_SECTOR - 10)) /
+        (FULL_SELECTION_BUDGET_THRESHOLD - GOLD_QUESTION_BUDGET_THRESHOLD),
+    );
+  }
+
+  return Math.floor(
+    1 + ((budget - MIN_CAMPAIGN_BUDGET) * (10 - 1)) /
+      (GOLD_QUESTION_BUDGET_THRESHOLD - MIN_CAMPAIGN_BUDGET),
+  );
 }
 
 export function resolveBudgetUnlockHint(budget: number): string {
   const current = calculateMaxQuestions(budget);
 
-  if (budget >= MAX_CAMPAIGN_BUDGET_LIMIT) {
-    return "Maksimum soru limitine ulaştınız — tüm kemik soru havuzu açık.";
+  if (budget >= FULL_SELECTION_BUDGET_THRESHOLD) {
+    return "Tüm 15 kemik soru seçilebilir — maksimum kapsama aktif.";
   }
 
-  const nextBudget =
-    budget <= 1000
-      ? Math.min(budget + 50, 1000)
-      : Math.min(budget + 100, MAX_CAMPAIGN_BUDGET_LIMIT);
-  const next = calculateMaxQuestions(nextBudget);
+  if (budget >= GOLD_QUESTION_BUDGET_THRESHOLD) {
+    const toFull = FULL_SELECTION_BUDGET_THRESHOLD - budget;
+    const atFull = calculateMaxQuestions(FULL_SELECTION_BUDGET_THRESHOLD);
+    return `+${toFull} TL ile ${atFull - current} soru daha — tüm listeyi açın.`;
+  }
 
+  const toGold = GOLD_QUESTION_BUDGET_THRESHOLD - budget;
+  if (toGold > 0) {
+    return `${toGold} TL'de altın sorular açılır · şu an ${current} soru seçilebilir.`;
+  }
+
+  const nextBudget = Math.min(budget + 50, GOLD_QUESTION_BUDGET_THRESHOLD);
+  const next = calculateMaxQuestions(nextBudget);
   if (next > current) {
     return `+${nextBudget - budget} TL ile ${next - current} soru daha seçebilirsiniz.`;
   }

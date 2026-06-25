@@ -129,7 +129,7 @@ export default function CoreQuestionsPanel({
         </p>
         <p className="mt-2 text-xs leading-relaxed text-amber-100/70">
           Şu an Diş Kliniği, Otel & Konaklama ve Restoran & Kafe sektörleri için
-          30&apos;ar adet önceden tanımlı soru sunuluyor. Lütfen desteklenen
+          15&apos;er adet kısa kemik soru sunuluyor. Lütfen desteklenen
           sektörlerden birini seçin.
         </p>
       </div>
@@ -148,7 +148,7 @@ export default function CoreQuestionsPanel({
         <div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200">
             <Sparkles className="h-3.5 w-3.5" />
-            30 Kemik Soru Havuzu
+            15 Kemik Soru Havuzu
           </div>
           <h3 className="text-base font-semibold text-white">
             Hedef Sorularınızı Seçin
@@ -156,7 +156,7 @@ export default function CoreQuestionsPanel({
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-400">
             Altın GEO soruları yüksek dönüşüm hedefler —{" "}
             {GOLD_QUESTION_BUDGET_THRESHOLD.toLocaleString("tr-TR")} TL ve üzeri
-            bütçede aktifleşir. Kalan 28 soru sektörel havuzdan gelir.
+            bütçede aktifleşir. Toplam 15 kısa ve net arama sorusu.
           </p>
         </div>
 
@@ -195,7 +195,7 @@ export default function CoreQuestionsPanel({
       <div className="grid max-h-[420px] grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2">
         {questions.map((question) => {
           const isSelected = selectedIds.includes(question.id);
-          const isGold = isGoldQuestionId(question.id);
+          const isGold = question.isGold;
           const isGoldBudgetLocked = isGold && !goldBudgetUnlocked;
           const isSelectionLimitLocked =
             !isSelected && selectedIds.length >= maxSelection && maxSelection > 0;

@@ -12,7 +12,7 @@ export interface ContentVolumePlan {
 /** Günlük bütçeye göre seçilen soru sayısı kadar içerik üretilir. */
 export function resolveContentVolumePlan(
   dailyBudget: number,
-  poolSize = 30,
+  poolSize = 15,
 ): ContentVolumePlan {
   const autonomousTargetCount = resolveMaxQuestionsFromDailyBudget(
     dailyBudget,

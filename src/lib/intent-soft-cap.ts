@@ -1,13 +1,16 @@
 import {
   calculateMaxQuestions,
+  FULL_SELECTION_BUDGET_THRESHOLD,
+  GOLD_QUESTION_BUDGET_THRESHOLD,
   MAX_CAMPAIGN_BUDGET_LIMIT,
   MIN_CAMPAIGN_BUDGET,
+  QUESTIONS_PER_SECTOR,
 } from "@/constants/campaign";
 
 /** Kampanya bütçesine +50 ekleyerek kilidi açılan ek anahtar kelime slotu maliyeti ($). */
 export const INTENT_UNLOCK_BUDGET_COST = 50;
 
-export const MAX_GEO_INTENTS = 100;
+export const MAX_GEO_INTENTS = QUESTIONS_PER_SECTOR;
 
 export interface IntentSoftCapInput {
   dailyBudget: number;
@@ -29,7 +32,7 @@ export interface IntentSoftCapResult {
 /** Günlük bütçeye göre kemik soru seçim limiti. */
 export function resolveMaxQuestionsFromDailyBudget(
   dailyBudget: number,
-  poolSize = 30,
+  poolSize = QUESTIONS_PER_SECTOR,
 ): number {
   if (dailyBudget < MIN_CAMPAIGN_BUDGET) {
     return 0;
@@ -43,19 +46,16 @@ export function resolveMarketAnalysisDepthDescription(
   dailyBudget: number,
   maxQuestions: number,
 ): string {
-  if (dailyBudget >= 2500) {
-    return `Tam Spektrum: ${maxQuestions} kemik soru ile yapay zeka arama motorlarında maksimum kapsama — tüm havuz aktif.`;
+  if (dailyBudget >= FULL_SELECTION_BUDGET_THRESHOLD) {
+    return `Tam Liste: ${maxQuestions}/15 kemik soru — yapay zeka arama motorlarında maksimum kapsama.`;
   }
-  if (dailyBudget >= 1200) {
-    return `Genişletilmiş Operasyon: ${maxQuestions} hedef soru ile çok kanallı GEO baskınlığı kuruluyor.`;
+  if (dailyBudget >= GOLD_QUESTION_BUDGET_THRESHOLD) {
+    return `Altın Soru Modu: ${maxQuestions} hedef seçilebilir — 1.500 TL'de tüm liste açılır.`;
   }
-  if (dailyBudget >= 600) {
-    return `Gelişmiş Operasyon: ${maxQuestions} kritik soru ile semantik görünürlük genişletiliyor.`;
-  }
-  if (dailyBudget >= 300) {
+  if (dailyBudget >= 500) {
     return `Büyüme Modu: ${maxQuestions} soru seçilebilir — bütçe artışıyla limit anında yükselir.`;
   }
-  return `Başlangıç Paketi: ${maxQuestions} soru seçilebilir — bütçe barını kaydırarak limiti artırın.`;
+  return `Başlangıç: ${maxQuestions} soru seçilebilir — bütçe barını kaydırarak limiti artırın.`;
 }
 
 /** Kampanya başlat butonu metni — seçilen soru limitine göre. */
@@ -64,13 +64,13 @@ export function resolveCampaignLaunchButtonLabel(
   selectedCount: number,
   maxQuestions: number,
 ): string {
-  if (dailyBudget >= 2500) {
-    return `🚀 ${selectedCount} Soru ile Tam Spektrum Kampanyayı Başlat`;
+  if (dailyBudget >= FULL_SELECTION_BUDGET_THRESHOLD) {
+    return `🚀 ${selectedCount}/15 Soru ile Tam Liste Kampanyayı Başlat`;
   }
-  if (dailyBudget >= 1200) {
-    return `🔥 ${selectedCount}/${maxQuestions} Soru ile Genişletilmiş GEO Başlat`;
+  if (dailyBudget >= GOLD_QUESTION_BUDGET_THRESHOLD) {
+    return `🔥 ${selectedCount}/${maxQuestions} Soru ile Altın GEO Kampanyayı Başlat`;
   }
-  if (dailyBudget >= 600) {
+  if (dailyBudget >= 500) {
     return `${selectedCount}/${maxQuestions} Soru ile Gelişmiş Kampanyayı Başlat`;
   }
   return `${selectedCount}/${maxQuestions} Kemik Soru ile Kampanyayı Başlat`;
@@ -85,20 +85,20 @@ export function resolveAutonomousCampaignButtonLabel(dailyBudget: number): strin
 export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapResult {
   const dailyBudget = Math.max(0, input.dailyBudget);
   const bonusUnlocks = input.bonusUnlocks ?? 0;
-  const poolSize = input.poolSize ?? 30;
+  const poolSize = input.poolSize ?? QUESTIONS_PER_SECTOR;
   const maxQuestions = resolveMaxQuestionsFromDailyBudget(dailyBudget, poolSize);
   const softCap = Math.min(MAX_GEO_INTENTS, maxQuestions + bonusUnlocks);
 
   let tier: IntentSoftCapResult["tier"];
   let tierLabel: string;
 
-  if (dailyBudget >= 2500) {
+  if (dailyBudget >= FULL_SELECTION_BUDGET_THRESHOLD) {
     tier = "quantum";
-    tierLabel = "Tam Spektrum Modu";
-  } else if (dailyBudget >= 1200) {
+    tierLabel = "Tam Liste Modu";
+  } else if (dailyBudget >= GOLD_QUESTION_BUDGET_THRESHOLD) {
     tier = "domination";
-    tierLabel = "Genişletilmiş Operasyon";
-  } else if (dailyBudget >= 600) {
+    tierLabel = "Altın Soru Modu";
+  } else if (dailyBudget >= 500) {
     tier = "advanced";
     tierLabel = "Gelişmiş Operasyon Modu";
   } else {
@@ -121,7 +121,7 @@ export function resolveIntentSoftCap(input: IntentSoftCapInput): IntentSoftCapRe
 
 export function resolveSoftCapAfterBudgetIncrease(
   currentDailyBudget: number,
-  poolSize = 30,
+  poolSize = QUESTIONS_PER_SECTOR,
   increase = INTENT_UNLOCK_BUDGET_COST,
 ): number {
   return resolveMaxQuestionsFromDailyBudget(
@@ -140,7 +140,7 @@ export function canSelectMoreIntents(
 export function resolveSelectedQuestionLimit(
   dailyBudget: number,
   bonusUnlocks = 0,
-  poolSize = 30,
+  poolSize = QUESTIONS_PER_SECTOR,
 ): number {
   return Math.min(
     MAX_GEO_INTENTS,

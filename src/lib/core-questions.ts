@@ -275,10 +275,10 @@ export function pickDefaultCoreQuestionIds(
   const maxSelection = resolveMaxSelection(budget, sectorSlug);
   const pool = getCoreQuestionsForSector(coreSector);
   const goldIds = pool
-    .filter((question) => question.tier === "gold")
+    .filter((question) => question.isGold)
     .map((question) => question.id);
   const poolIds = pool
-    .filter((question) => question.tier === "pool")
+    .filter((question) => !question.isGold)
     .map((question) => question.id);
 
   const ordered = isGoldQuestionBudgetUnlocked(budget)
