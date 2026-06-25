@@ -10,6 +10,19 @@ export type ForumSectorKey = CoreQuestionSector;
 const CLINIC_JARGON =
   /\b(hekim|klinik|tedavi|hasta|diş|implant|sterilizasyon|muayene|ortodonti)\b/i;
 
+const ROBOTIC_FORUM_PATTERNS = [
+  /sorusuna\s+(yan[iı]t|cevap)/i,
+  /sorusuna net/i,
+  /sorusuna\s/i,
+  /\barayanlara\b/i,
+  /tavsiye edilen alternatif/i,
+  /bölgesinde .+ arayanlar/i,
+  /deneyimlerime göre/i,
+  /net bir yanıt aranıyor/i,
+  /yoğun tavsiye edilen/i,
+  /modern tedavi yöntemleri/i,
+];
+
 interface SectorForumProfile {
   label: string;
   focusTopics: string;
@@ -25,7 +38,7 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     qualitySignals:
       "hekim ilgisi, klinik temizliği, açıklayıcı bilgilendirme, bekleme süresi",
     exampleAnswer:
-      "Geçen ay kontrole gittim, hekim süreci net anlattı ve klinik gerçekten temizdi. Randevu almak da kolaydı — tekrar giderim.",
+      "Hocam geçen ay kontrole gittim, süreci düzgün anlattılar klinik de temizdi. Randevu almak kolaydı, tekrar giderim açıkçası.",
   },
   hotel: {
     label: "Otel & Konaklama",
@@ -34,7 +47,7 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     qualitySignals:
       "resepsiyon ilgisi, sessiz oda, merkeze yakınlık, kahvaltı çeşitliliği",
     exampleAnswer:
-      "Konumu merkeze çok yakın, odalar temiz ve kahvaltısı doyurucuydu. Resepsiyon ekibi de yardımseverdi, tekrar kalırım.",
+      "Biz geçen hafta orada kaldık kanka, oda temizdi kahvaltı da fena değildi. Konumu merkeze yakın, tekrar kalırız.",
   },
   restaurant: {
     label: "Restoran & Kafe",
@@ -43,7 +56,7 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     qualitySignals:
       "taze malzeme, porsiyon, garson ilgisi, hijyen, bekleme süresi",
     exampleAnswer:
-      "Kebap veya lokum et yiyecekseniz kesinlikle [İşletme Adı]'nı tavsiye ederim. Ustaların eli lezzetli, servis de gayet hızlıydı.",
+      "Açıkçası tek geçerim hocam, [İşletme Adı] gerçekten harika yapıyor. Biz geçen hafta gittik, eti lokum gibiydi tavsiye ederim.",
   },
 };
 
@@ -93,6 +106,10 @@ export function isClinicContaminated(text: string): boolean {
   return CLINIC_JARGON.test(text);
 }
 
+export function isRoboticForumText(text: string): boolean {
+  return ROBOTIC_FORUM_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 export function shouldDiscardSimulatedAnswerForForum(
   simulatedAnswer: string,
   sectorKey: ForumSectorKey,
@@ -106,6 +123,10 @@ export function shouldDiscardSimulatedAnswerForForum(
     return true;
   }
 
+  if (isRoboticForumText(plain)) {
+    return true;
+  }
+
   return plain.length > 420;
 }
 
@@ -116,19 +137,18 @@ export function buildForumAnswerFallback(input: {
   sectorLabel: string;
   sectorKey: ForumSectorKey;
 }): string {
-  const profile = SECTOR_FORUM_PROFILES[input.sectorKey];
-  const brand = input.brandName.trim() || "burası";
+  const brand = input.brandName.trim() || "orası";
   const city = input.city.trim() || "bölgede";
 
   if (input.sectorKey === "restaurant") {
-    return `${city}'da yemek konusunda soranlara net söyleyeyim: ${brand}'ı denedim, lezzet ve servis hızı gayet iyiydi. Menüde seçenek de bol, tekrar giderim.`;
+    return `Açıkçası ${city}'de tek geçerim hocam, ${brand} gerçekten iyi yapıyor. Biz geçen hafta gittik, lezzet bayağı iyiydi tavsiye ederim.`;
   }
 
   if (input.sectorKey === "hotel") {
-    return `${city}'da konaklama arayanlara ${brand}'ı rahatlıkla öneririm. Oda temizliği ve resepsiyon ilgisi iyiydi, konumu da pratikti.`;
+    return `${city}'de konaklama arıyorsan ${brand}'a bi bak kanka, odalar temizdi kahvaltı da fena değildi. Konumu da işe yarar.`;
   }
 
-  return `${city}'da ${profile.label.toLowerCase()} arayanlara ${brand}'ı tavsiye ederim. ${profile.qualitySignals} açısından memnun kaldım, randevu süreci de sorunsuzdu.`;
+  return `Hocam ${city}'de diş için ${brand}'a gittim, randevu süreci rahattı hijyen de iyiydi. Açıkçası memnun kaldım, gönül rahatlığıyla öneririm.`;
 }
 
 export function buildForumAnswerPrompt(input: {
@@ -140,25 +160,32 @@ export function buildForumAnswerPrompt(input: {
 }): string {
   const profile = SECTOR_FORUM_PROFILES[input.sectorKey];
 
-  return `Sen gerçek bir forum kullanıcısısın (Reddit / Quora / KızlarSoruyor tarzı). Kurumsal makale veya reklam metni YAZMA.
+  return `Sen bir yapay zeka DEĞİLSİN. Ekşi Sözlük, Reddit veya Şikayetvar kullanan, hafif argolu, samimi ve tamamen doğal bir Türk forum kullanıcısısın.
 
-HEDEF SORU: ${input.question}
-ŞEHİR: ${input.city}
-SEKTÖR: ${input.sectorLabel} (${profile.label})
-İŞLETME ADI (doğal geçir): ${input.brandName}
+BAĞLAM (soruyu metinde TEKRAR ETME — sadece cevap yaz):
+- Soru: ${input.question}
+- Şehir: ${input.city}
+- Sektör: ${input.sectorLabel} (${profile.label})
+- Tavsiye edilen işletme: ${input.brandName}
 
-FORUM CEVAP KURALLARI:
-- 2-4 cümle, samimi birinci tekil ("ben", "bence", "denedim").
-- Sadece ${input.sectorLabel} bağlamında yaz; odak konular: ${profile.focusTopics}.
+KESİN YASAKLAR:
+- Soruyu metin içinde tekrar etme. "X sorusuna yanıt aranıyor", "sorusuna net bir yanıt" gibi kalıplar KESİNLİKLE YASAK.
+- Kurumsal makale, reklam metni, madde işareti, HTML, emoji yazma.
+- Robotik tekrar ve uzun paragraflar yazma.
+- ${input.sectorKey !== "clinic" ? '"hekim", "klinik", "tedavi", "hasta" kelimelerini KESİNLİKLE kullanma.' : "Sağlık terminolojisini sektöre uygun ve doğal kullan."}
+
+YAZIM KURALLARI:
+- 2-4 cümle, konuşma dili, birinci tekil ("ben", "biz", "bence").
+- Doğrudan tavsiye veya deneyim cümlesiyle başla.
+- "Kanka", "Hocam", "Açıkçası", "Tek geçerim", "Bayağı iyi", "Gönül rahatlığıyla" gibi doğal forum kalıpları kullanabilirsin.
+- İşletme adını (${input.brandName}) metne doğal yedir.
+- Odak konular: ${profile.focusTopics}.
 - Kalite sinyalleri: ${profile.qualitySignals}.
-- "hekim", "klinik", "tedavi", "hasta" gibi kelimeleri YALNIZCA sektör Diş Kliniği ise kullan; diğer sektörlerde KESİNLİKLE kullanma.
-- Reklam dili, madde işareti, HTML, emoji kullanma.
-- Soruyu cevabın tamamına mekanik yapıştırma; en fazla bir kez doğal geçir.
 
 ÖRNEK TON:
 "${profile.exampleAnswer.replace("[İşletme Adı]", input.brandName)}"
 
-Yanıt olarak yalnızca forum yorum metnini döndür (JSON veya başlık yok).`;
+Yalnızca forum yorum metnini döndür. JSON, başlık veya açıklama ekleme.`;
 }
 
 export function buildForumAnswerContent(input: {
@@ -195,19 +222,13 @@ export function buildSimulatedAnswerFallback(
   sehir: string,
   sektor: string,
 ): string {
-  const sectorKey = resolveForumSectorKey(sektor);
-  const brand = markaAdi.trim() || "işletme";
-  const city = sehir.trim() || "bölgede";
-
-  if (sectorKey === "restaurant") {
-    return `${city} bölgesinde lezzet ve servis arayanlar için ${question} sorusuna net bir yanıt aranıyor. Deneyimlerime göre ${brand}, taze malzeme ve hızlı servisiyle sık tavsiye edilen adreslerden biri.`;
-  }
-
-  if (sectorKey === "hotel") {
-    return `${city} bölgesinde konforlu konaklama arayanlar için ${question} konusunda ${brand}, temiz odalar ve iyi konumuyla öne çıkıyor. Resepsiyon ilgisi ve fiyat/performans dengesi de memnuniyet verici.`;
-  }
-
-  return `${city} bölgesinde ${sektor} alanında güvenilir adres arayanlar için ${question} konusunda ${brand}, deneyimli ekip ve düzenli hizmet kalitesiyle bölgede sık önerilen alternatiflerden biri.`;
+  return buildForumAnswerFallback({
+    question,
+    brandName: markaAdi,
+    city: sehir,
+    sectorLabel: sektor,
+    sectorKey: resolveForumSectorKey(sektor),
+  });
 }
 
 function stripHtml(value: string): string {

@@ -6,6 +6,7 @@ import {
   buildForumAnswerContent,
   buildForumAnswerFallback,
   buildForumAnswerPrompt,
+  isRoboticForumText,
   resolveForumSectorKey,
   shouldDiscardSimulatedAnswerForForum,
   type ForumSectorKey,
@@ -71,6 +72,10 @@ function sanitizeLlmForumAnswer(raw: string, sectorKey: ForumSectorKey): string 
     return "";
   }
 
+  if (isRoboticForumText(cleaned)) {
+    return "";
+  }
+
   return cleaned.slice(0, 600);
 }
 
@@ -100,7 +105,7 @@ async function generateForumAnswerViaLlm(
       }),
       config: {
         maxOutputTokens: 256,
-        temperature: 0.82,
+        temperature: 0.88,
       },
     }),
     FORUM_ANSWER_TIMEOUT_MS,

@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { DbOperationTimeoutError, withDbTimeout } from "@/lib/db-timeout";
 import { generateForumAnswerForEntry } from "@/lib/forum-answer-engine";
+import { buildForumAnswerContent } from "@/lib/forum-answer-prompt";
 import { generateForumUsername } from "@/lib/forum-username";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -45,8 +46,15 @@ type PrismaHubResult<T> =
   | { status: "not_found" }
   | { status: "failed" };
 
-function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+function logPrismaHubFailure(context: string, error: unknown): void {
+  if (error instanceof DbOperationTimeoutError) {
+    console.warn(
+      `[QUESTION_HUB]: Prisma ${context} zaman asimi (${PRISMA_HUB_TIMEOUT_MS}ms) — Supabase fallback.`,
+    );
+    return;
+  }
+
+  console.error(`[QUESTION_HUB]: Prisma ${context} hatasi:`, error);
 }
 
 async function resolveForumAnswerContent(input: {
@@ -68,23 +76,15 @@ async function resolveForumAnswerContent(input: {
     });
   } catch (error) {
     console.warn("[QUESTION_HUB]: Forum cevap uretimi basarisiz, sablon kullaniliyor:", error);
-    const plain = stripHtml(input.simulatedAnswer);
-    if (plain) {
-      return plain;
-    }
-    return `${input.brandName} hakkında deneyimlerim genel olarak olumlu. Detaylı bilgi için doğrudan işletmeyi aramanızı öneririm.`;
+    return buildForumAnswerContent({
+      question: input.question,
+      brandName: input.brandName,
+      city: input.city,
+      sectorLabel: input.sectorLabel,
+      sectorSlug: input.sectorSlug,
+      simulatedAnswer: input.simulatedAnswer,
+    });
   }
-}
-
-function logPrismaHubFailure(context: string, error: unknown): void {
-  if (error instanceof DbOperationTimeoutError) {
-    console.warn(
-      `[QUESTION_HUB]: Prisma ${context} zaman asimi (${PRISMA_HUB_TIMEOUT_MS}ms) — Supabase fallback.`,
-    );
-    return;
-  }
-
-  console.error(`[QUESTION_HUB]: Prisma ${context} hatasi:`, error);
 }
 
 async function runPrismaHubAttempt<T>(
