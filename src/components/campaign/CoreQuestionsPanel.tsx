@@ -128,9 +128,10 @@ export default function CoreQuestionsPanel({
           Kemik soru havuzu bu sektör için henüz hazır değil
         </p>
         <p className="mt-2 text-xs leading-relaxed text-amber-100/70">
-          Şu an Diş Kliniği, Otel & Konaklama ve Restoran & Kafe sektörleri için
-          15&apos;er adet kısa kemik soru sunuluyor. Lütfen desteklenen
-          sektörlerden birini seçin.
+          Kemik soru havuzu Diş Kliniği, Otel, Restoran, Güzellik & Estetik,
+          Avukatlık & Hukuk, Evden Eve Nakliyat, Halı Yıkama, Oto Servis &
+          Ekspertiz ve Sürücü Kursu için 15&apos;er adet kısa soru sunuyor.
+          Lütfen desteklenen sektörlerden birini seçin.
         </p>
       </div>
     );

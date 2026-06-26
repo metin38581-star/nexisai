@@ -69,12 +69,34 @@ const SECTOR_MICRO_INTENTS: Record<string, string[]> = {
     "LGS hazırlık merkezi",
     "online ders platformu",
   ],
-  "oto-servis": [
+  "oto-servis-ekspertiz": [
     "güvenilir oto servis",
     "periyodik bakım fiyatları",
     "kaporta boya usta tavsiye",
     "elektrik arıza servisi",
     "orijinal parça değişimi",
+    "ekspertiz raporu fiyat",
+  ],
+  "evden-eve-nakliyat": [
+    "güvenilir evden eve nakliyat",
+    "asansörlü taşıma fiyatları",
+    "sigortalı nakliyat firması",
+    "şehirler arası taşıma",
+    "mobilya sökme takma hizmeti",
+  ],
+  "hali-yikama": [
+    "halı yıkama fiyatları",
+    "yerinde halı yıkama",
+    "koltuk yıkama hizmeti",
+    "stor perde yıkama",
+    "antika halı yıkama",
+  ],
+  "surucu-kursu": [
+    "ehliyet kursu fiyatları",
+    "B sınıfı ehliyet kursu",
+    "direksiyon dersi tavsiye",
+    "otomatik vites ehliyet kursu",
+    "motosiklet ehliyet kursu",
   ],
   "hukuk-danismanlik": [
     "boşanma avukatı tavsiye",

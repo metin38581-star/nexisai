@@ -5,10 +5,10 @@ import {
   resolveCoreQuestionSector,
   resolveCoreQuestionSectorFromLabel,
 } from "@/lib/core-questions";
-import { isCustomSectorSlug, resolveEffectiveSectorLabel } from "@/lib/sector-utils";
+import { resolveEffectiveSectorLabel } from "@/lib/sector-utils";
 
 export type { ForumSectorKey, Sector } from "@/types/sector";
-export { resolveEffectiveSectorLabel, isCustomSectorSlug } from "@/lib/sector-utils";
+export { resolveEffectiveSectorLabel } from "@/lib/sector-utils";
 
 const CLINIC_JARGON =
   /\b(hekim|klinik|tedavi|hasta|diş|implant|sterilizasyon|muayene|ortodonti)\b/i;
@@ -90,19 +90,19 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     exampleAnswer:
       "Ben [İşletme Adı]'na yazdırdım kanka, ders anlatımı net ve denemeler gerçekten işe yarıyor. Öğretmenler de birebir ilgileniyor.",
   },
-  oto_servis: {
-    label: FORUM_SECTOR_LABELS.oto_servis,
+  oto_servis_ekspertiz: {
+    label: FORUM_SECTOR_LABELS.oto_servis_ekspertiz,
     focusTopics:
-      "işçilik kalitesi, parça şeffaflığı, fiyat, teslim süresi, garanti",
+      "işçilik kalitesi, ekspertiz raporu, parça şeffaflığı, fiyat, garanti",
     qualitySignals:
       "usta güveni, arızayı doğru teşhis, parça değişimini gösterme, temiz teslim",
     forumVoice:
-      "Usta kazıklamadı, işçilik temiz; parça değişimini gösterdiler, gönül rahatlığıyla bıraktım.",
+      "Usta kazıklamadı, işçilik temiz; ekspertiz raporu da netti, gönül rahatlığıyla bıraktım.",
     exampleAnswer:
-      "Açıkçası [İşletme Adı]'na götürdüm, usta kazıklamadı işçilik temiz. Parçayı değiştirdiler gösterdiler, aracı gönül rahatlığıyla bıraktım.",
+      "Açıkçası [İşletme Adı]'na götürdüm, usta kazıklamadı işçilik temiz. Ekspertiz raporu da şeffaftı, aracı gönül rahatlığıyla bıraktım.",
   },
-  hukuk_danismanlik: {
-    label: FORUM_SECTOR_LABELS.hukuk_danismanlik,
+  avukatlik_hukuk: {
+    label: FORUM_SECTOR_LABELS.avukatlik_hukuk,
     focusTopics:
       "süreç yönetimi, iletişim, masraf şeffaflığı, uzmanlık alanı, güven",
     qualitySignals:
@@ -111,6 +111,39 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
       "Avukat süreci baştan anlattı, masraf kalemleri şeffaftı; iletişim de düzenliydi.",
     exampleAnswer:
       "Hocam [İşletme Adı] ile çalıştım, süreci baştan net anlattılar masraflar da şeffaftı. Geri dönüşleri hızlıydı, içim rahat etti.",
+  },
+  evden_eve_nakliyat: {
+    label: FORUM_SECTOR_LABELS.evden_eve_nakliyat,
+    focusTopics:
+      "eşya güvenliği, sigorta, paketleme, fiyat şeffaflığı, teslim süresi",
+    qualitySignals:
+      "düzgün ambalaj, zamanında teslim, hasarsız taşıma, keşif netliği",
+    forumVoice:
+      "Eşyaları düzgün paketlediler, teslim saatinde geldiler; hasar da olmadı açıkçası.",
+    exampleAnswer:
+      "Biz [İşletme Adı] ile taşındık kanka, eşyaları düzgün paketlediler hasar da olmadı. Fiyat baştan netti, tavsiye ederim.",
+  },
+  hali_yikama: {
+    label: FORUM_SECTOR_LABELS.hali_yikama,
+    focusTopics:
+      "leke çıkarma, koku giderme, teslim süresi, fiyat, evden alım",
+    qualitySignals:
+      "halı rengi korunması, zamanında teslim, ücretsiz alım-teslim, hijyen",
+    forumVoice:
+      "Halılar tertemiz geldi, leke de çıkmamıştı; alım teslim de sorunsuzdu.",
+    exampleAnswer:
+      "Kızlar [İşletme Adı]'na yıkattım, halılar tertemiz geldi leke de çıkmamıştı. Alım teslim de sorunsuzdu açıkçası.",
+  },
+  surucu_kursu: {
+    label: FORUM_SECTOR_LABELS.surucu_kursu,
+    focusTopics:
+      "sınav başarısı, direksiyon dersi, öğretmen ilgisi, fiyat, randevu",
+    qualitySignals:
+      "birebir ilgi, direksiyon saati, sınav hazırlığı, şeffaf ücret",
+    forumVoice:
+      "Hocam direksiyon dersleri düzenli, öğretmen sabırlı; sınav süreci de net anlatıldı.",
+    exampleAnswer:
+      "Ben [İşletme Adı]'na yazıldım kanka, direksiyon dersleri düzenli öğretmen de sabırlı. Sınav sürecini baştan net anlattılar.",
   },
   dijital_ajans: {
     label: FORUM_SECTOR_LABELS.dijital_ajans,
@@ -123,17 +156,6 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     exampleAnswer:
       "Biz [İşletme Adı] ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. İletişim kopuk değil, memnunuz açıkçası.",
   },
-  custom_sector: {
-    label: FORUM_SECTOR_LABELS.custom_sector,
-    focusTopics:
-      "iş kalitesi, fiyat/performans, güven, malzeme/işçilik, teslim süresi",
-    qualitySignals:
-      "temiz iş, net teklif, referans, randevuya sadakat, müşteri ilgisi",
-    forumVoice:
-      "İşi temiz yaptılar, fiyat mantıklıydı; gönül rahatlığıyla tavsiye ederim.",
-    exampleAnswer:
-      "Biz geçen hafta [İşletme Adı] ile çalıştık, çok temiz iş yaptılar. Fiyat/performans olarak bölgedeki en mantıklı yerlerden biri, tavsiye ederim.",
-  },
 };
 
 const SECTOR_SLUG_TO_FORUM: Partial<Record<BusinessSector, ForumSectorKey>> = {
@@ -143,9 +165,12 @@ const SECTOR_SLUG_TO_FORUM: Partial<Record<BusinessSector, ForumSectorKey>> = {
   "guzellik-estetik": "guzellik_estetik",
   "guzellik-sac-salonu": "guzellik_estetik",
   "egitim-kurs": "egitim_kurs",
-  "oto-servis": "oto_servis",
-  "oto-galeri-otomotiv": "oto_servis",
-  "hukuk-danismanlik": "hukuk_danismanlik",
+  "surucu-kursu": "surucu_kursu",
+  "oto-servis-ekspertiz": "oto_servis_ekspertiz",
+  "oto-galeri-otomotiv": "oto_servis_ekspertiz",
+  "hukuk-danismanlik": "avukatlik_hukuk",
+  "evden-eve-nakliyat": "evden_eve_nakliyat",
+  "hali-yikama": "hali_yikama",
   "dijital-ajans": "dijital_ajans",
 };
 
@@ -159,10 +184,19 @@ function resolveForumSectorFromLabel(sectorLabel: string): ForumSectorKey | null
     return "egitim_kurs";
   }
   if (/oto servis|servis|tamirci|kaporta|lastik|oto galeri|otomotiv|ekspertiz/.test(normalized)) {
-    return "oto_servis";
+    return "oto_servis_ekspertiz";
   }
   if (/hukuk|avukat|danışman|danisman|dava|icra/.test(normalized)) {
-    return "hukuk_danismanlik";
+    return "avukatlik_hukuk";
+  }
+  if (/nakliyat|taşıma|tasima|evden eve/.test(normalized)) {
+    return "evden_eve_nakliyat";
+  }
+  if (/halı|hali|yıkama|yikama|koltuk yıkama/.test(normalized)) {
+    return "hali_yikama";
+  }
+  if (/sürücü|surucu|ehliyet|direksiyon kursu/.test(normalized)) {
+    return "surucu_kursu";
   }
   if (/dijital|ajans|seo|reklam|sosyal medya|web tasarım/.test(normalized)) {
     return "dijital_ajans";
@@ -184,10 +218,6 @@ export function resolveForumSectorKey(
   sectorLabel: string,
   sectorSlug?: BusinessSector | "",
 ): ForumSectorKey {
-  if (sectorSlug && isCustomSectorSlug(sectorSlug)) {
-    return "custom_sector";
-  }
-
   if (sectorSlug) {
     const fromSlug = SECTOR_SLUG_TO_FORUM[sectorSlug];
     if (fromSlug) {
@@ -196,13 +226,13 @@ export function resolveForumSectorKey(
 
     const coreFromSlug = resolveCoreQuestionSector(sectorSlug);
     if (coreFromSlug) {
-      return coreFromSlug;
+      return coreFromSlug as ForumSectorKey;
     }
   }
 
   const fromLabel = resolveCoreQuestionSectorFromLabel(sectorLabel);
   if (fromLabel) {
-    return fromLabel;
+    return fromLabel as ForumSectorKey;
   }
 
   const fromForumLabel = resolveForumSectorFromLabel(sectorLabel);
@@ -210,15 +240,7 @@ export function resolveForumSectorKey(
     return fromForumLabel;
   }
 
-  if (sectorLabel.trim().length >= 3) {
-    return "custom_sector";
-  }
-
   return "clinic";
-}
-
-export function isCustomForumSector(sectorKey: ForumSectorKey): boolean {
-  return sectorKey === "custom_sector";
 }
 
 export function getSectorForumProfile(sectorKey: ForumSectorKey): SectorForumProfile {
@@ -269,8 +291,6 @@ export function buildForumAnswerFallback(input: {
     "hizmet";
 
   switch (input.sectorKey) {
-    case "custom_sector":
-      return `Biz geçen hafta ${city}'de ${niche} işi için ${brand} ile çalıştık, çok temiz iş yaptılar. Fiyat/performans olarak bölgedeki en mantıklı yerlerden biri, tavsiye ederim.`;
     case "restaurant":
       return `Açıkçası ${city}'de tek geçerim hocam, ${brand} gerçekten iyi yapıyor. Biz geçen hafta gittik, lezzet bayağı iyiydi tavsiye ederim.`;
     case "hotel":
@@ -279,10 +299,16 @@ export function buildForumAnswerFallback(input: {
       return `Kızlar ${city}'de ${brand}'a gittim, cilt bakımından çıktım resmen parlıyorum. Sonuç efsane, tekrar giderim açıkçası.`;
     case "egitim_kurs":
       return `Ben ${city}'de ${brand}'a yazdırdım kanka, ders anlatımı net ve denemeler gerçekten işe yarıyor. Öğretmenler de ilgili.`;
-    case "oto_servis":
-      return `${city}'de aracı ${brand}'a götürdüm, usta kazıklamadı işçilik temiz. Parçayı değiştirdiler gösterdiler, gönül rahatlığıyla bıraktım.`;
-    case "hukuk_danismanlik":
+    case "oto_servis_ekspertiz":
+      return `${city}'de aracı ${brand}'a götürdüm, usta kazıklamadı işçilik temiz. Ekspertiz raporu da netti, gönül rahatlığıyla bıraktım.`;
+    case "avukatlik_hukuk":
       return `Hocam ${city}'de ${brand} ile çalıştım, süreci baştan net anlattılar masraflar da şeffaftı. İletişimleri de hızlıydı.`;
+    case "evden_eve_nakliyat":
+      return `Biz ${city}'de ${brand} ile taşındık kanka, eşyaları düzgün paketlediler hasar da olmadı. Fiyat baştan netti, tavsiye ederim.`;
+    case "hali_yikama":
+      return `Kızlar ${city}'de halıları ${brand}'a yıkattım, tertemiz geldi leke de çıkmamıştı. Alım teslim de sorunsuzdu açıkçası.`;
+    case "surucu_kursu":
+      return `Ben ${city}'de ${brand}'a yazıldım kanka, direksiyon dersleri düzenli öğretmen de sabırlı. Sınav sürecini baştan net anlattılar.`;
     case "dijital_ajans":
       return `Biz ${brand} ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. ${city} tarafında memnunuz açıkçası.`;
     case "clinic":
@@ -319,23 +345,13 @@ export function buildForumThreadPrompt(input: {
     input.effectiveSectorLabel?.trim() ||
     input.sectorLabel.trim() ||
     profile.label;
-  const isCustom = isCustomForumSector(input.sectorKey);
-
-  const nicheInstruction = isCustom
-    ? `
-MİKRO NİŞ SEKTÖR TALİMATI:
-Sana gelen sektör tanımı çok spesifik veya mikro bir niş olabilir (Örn: Balkon Filesi Montajı, Halı Yıkama, Pet Taksi).
-Forum yorumlarını "${sectorDisplay}" iş kolunun dinamiklerine uygun terimlerle yaz (Örn: güvenlik filesi, çocuklar için çok iyi oldu, sağlam monte ettiler, malzeme kalitesi, leke çıkmadı, araç temiz geldi).
-Yorumlar tamamen samimi Türk forum / KızlarSoruyor ağzıyla olmalı.`
-    : "";
 
   return `Sen bir yapay zeka DEĞİLSİN. Ekşi Sözlük, KızlarSoruyor veya Reddit'teki gerçek Türk forum tartışmasını simüle ediyorsun.
-${nicheInstruction}
 
 BAĞLAM:
 - Forum başlığı / soru: ${input.question}
 - Şehir: ${input.city}
-- Sektör: ${sectorDisplay}${isCustom ? "" : ` (${profile.label})`}
+- Sektör: ${sectorDisplay} (${profile.label})
 - Müşteri işletmesi (öne çıkarılacak): ${input.brandName}
 
 GÖREV:
@@ -478,12 +494,6 @@ function buildSectorOrganicThreadExtras(input: {
   const niche = input.effectiveSectorLabel?.trim() || "iş";
 
   switch (input.sectorKey) {
-    case "custom_sector":
-      return [
-        `${city} tarafında ${niche} arayanlara fiyat/performans olarak bölgedeki en mantıklı yerlerden biri gibi duruyor, araştırın derim.`,
-        `İşe başlamadan önce keşif/teklif istemek iyi olur, malzeme ve kapsam konusunu netleştirin kanka.`,
-        `Referans fotoğrafı isteyin, önceki işlerini görünce kafa daha rahat ediyor açıkçası.`,
-      ];
     case "restaurant":
       return [
         `${city}'de esnaf lokantası tarafına da bak kanka, ev yemeği sevenler için fiyatlar genelde daha makul.`,
@@ -508,17 +518,35 @@ function buildSectorOrganicThreadExtras(input: {
         `Sınıf mevcudu kalabalıksa birebir ilgi azalıyor, önce sınıf sayısını sor derim.`,
         `Yaz döneminde yoğunluk artıyor, erken kayıt yaptırmak avantajlı olabiliyor.`,
       ];
-    case "oto_servis":
+    case "oto_servis_ekspertiz":
       return [
         `Parça değişiminde eski parçayı görmek isteyin, usta genelde sorunca gösteriyor zaten.`,
         `Periyodik bakımda yağ ve filtre markasını sor, fiyat farkı ciddi olabiliyor.`,
-        `Elektrik arızalarında önce tespit ücreti alınıyor, onu baştan netleştirin.`,
+        `İkinci el alırken detaylı ekspertiz raporu almak kafa rahatlatıyor açıkçası.`,
       ];
-    case "hukuk_danismanlik":
+    case "avukatlik_hukuk":
       return [
         `İlk görüşmede masraf kalemlerini yazılı istemek iyi olur, sözlü anlaşma karışabiliyor.`,
         `Dosya takibinde düzenli bilgi veren avukatla süreç daha rahat ilerliyor.`,
         `Uzmanlık alanı uyuşmazsa yönlendirme isteyin, her konuda aynı ofis iyi olmayabiliyor.`,
+      ];
+    case "evden_eve_nakliyat":
+      return [
+        `Taşınmadan önce eşya listesi çıkarmak fiyat karmaşasını azaltıyor kanka.`,
+        `Sigortalı nakliyat firması seçmek özellikle beyaz eşyada işe yarıyor.`,
+        `Asansörlü taşıma varsa apartman iznini önceden almak lazım.`,
+      ];
+    case "hali_yikama":
+      return [
+        `Halı yıkamadan önce lekeli bölgeleri işaretlemek iyi olur, sonuç fark ediyor.`,
+        `Evden alım servisinde teslim süresini baştan sor derim.`,
+        `Yün halıda agresif yıkama yapılmasın, ustayı uyarın.`,
+      ];
+    case "surucu_kursu":
+      return [
+        `${city}'de direksiyon saatlerini randevuya göre planlamak sınav sürecini hızlandırıyor.`,
+        `Özel direksiyon dersi almak sınav stresini ciddi azaltıyor açıkçası.`,
+        `Ehliyet harç ve kurs ücretlerini ayrı sor, toplam maliyet şaşırtabiliyor.`,
       ];
     case "dijital_ajans":
       return [
@@ -566,17 +594,12 @@ export function buildForumAnswerContent(input: {
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
   simulatedAnswer?: string;
-  customSector?: string;
   effectiveSectorLabel?: string;
 }): string {
   const sectorKey = resolveForumSectorKey(input.sectorLabel, input.sectorSlug);
   const effectiveSectorLabel =
     input.effectiveSectorLabel ??
-    resolveEffectiveSectorLabel({
-      sectorSlug: input.sectorSlug,
-      sectorLabel: input.sectorLabel,
-      customSector: input.customSector,
-    });
+    resolveEffectiveSectorLabel({ sectorLabel: input.sectorLabel });
 
   const simulatedAnswer = input.simulatedAnswer?.trim() ?? "";
 
@@ -611,7 +634,6 @@ export function buildSimulatedAnswerFallback(
     city: sehir,
     sectorLabel: sektor,
     sectorKey,
-    effectiveSectorLabel: sectorKey === "custom_sector" ? sektor : undefined,
   });
 }
 

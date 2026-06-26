@@ -18,7 +18,6 @@ export interface QuestionHubEntry {
   city: string;
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
-  customSector?: string;
 }
 
 export interface HubAnswerView {
@@ -62,7 +61,6 @@ async function resolveForumThreadForEntry(input: {
   city: string;
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
-  customSector?: string;
   simulatedAnswer: string;
   seedKey: string;
 }): Promise<ForumThreadComment[]> {
@@ -72,7 +70,6 @@ async function resolveForumThreadForEntry(input: {
     city: input.city,
     sectorLabel: input.sectorLabel,
     sectorSlug: input.sectorSlug,
-    customSector: input.customSector,
     simulatedAnswer: input.simulatedAnswer,
     seedKey: input.seedKey,
   });
@@ -449,7 +446,6 @@ export async function appendCampaignAnswersToQuestionHub(input: {
         city: entry.city,
         sectorLabel: entry.sectorLabel,
         sectorSlug: entry.sectorSlug,
-        customSector: entry.customSector,
         simulatedAnswer: entry.simulatedAnswer,
         seedKey,
       });

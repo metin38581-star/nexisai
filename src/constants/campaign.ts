@@ -1,4 +1,15 @@
-export type CoreQuestionSector = "hotel" | "clinic" | "restaurant";
+import { EXTENDED_SECTOR_QUESTIONS } from "@/constants/sector-data";
+
+export type CoreQuestionSector =
+  | "hotel"
+  | "clinic"
+  | "restaurant"
+  | "guzellik_estetik"
+  | "avukatlik_hukuk"
+  | "evden_eve_nakliyat"
+  | "hali_yikama"
+  | "oto_servis_ekspertiz"
+  | "surucu_kursu";
 
 export interface QuestionTemplate {
   id: string;
@@ -286,6 +297,7 @@ export const CORE_QUESTIONS: QuestionTemplate[] = [
     template: "[Şehir]'de esnaf lokantası tavsiyesi?",
     isGold: false,
   },
+  ...EXTENDED_SECTOR_QUESTIONS,
 ];
 
 export function isGoldCoreQuestion(question: QuestionTemplate): boolean {

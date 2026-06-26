@@ -1,9 +1,7 @@
 import type { CampaignApiRequest } from "@/types/campaign";
-import type { CustomAnchorQuestion } from "@/types/campaign";
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import type { BusinessSector } from "@/types/campaign";
 import { DEFAULT_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
-import { isCustomSectorSlug } from "@/lib/sector-utils";
 
 export interface NormalizedCampaignApiRequest {
   markaAdi: string;
@@ -12,8 +10,6 @@ export interface NormalizedCampaignApiRequest {
   gunlukButce: number;
   gunSayisi: number;
   sectorSlug: BusinessSector | "";
-  customSector?: string;
-  customAnchorQuestions: CustomAnchorQuestion[];
   selectedQuestionIds: string[];
 }
 
@@ -42,15 +38,6 @@ function resolveSectorLabel(
   body: CampaignApiRequest,
   sectorSlug: BusinessSector | "",
 ): string {
-  if (isCustomSectorSlug(sectorSlug)) {
-    return (
-      body.customSector?.trim() ||
-      body.sektor?.trim() ||
-      body.sector?.trim() ||
-      ""
-    );
-  }
-
   if (body.sektor?.trim()) {
     return body.sektor.trim();
   }
@@ -65,32 +52,6 @@ function resolveSectorLabel(
   return (body.sector ?? "").trim();
 }
 
-function normalizeCustomAnchorQuestions(
-  body: CampaignApiRequest,
-): CustomAnchorQuestion[] {
-  if (!Array.isArray(body.customAnchorQuestions)) {
-    return [];
-  }
-
-  return body.customAnchorQuestions
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-
-      const id = typeof item.id === "string" ? item.id.trim() : "";
-      const template =
-        typeof item.template === "string" ? item.template.trim() : "";
-
-      if (!id || !template) {
-        return null;
-      }
-
-      return { id, template };
-    })
-    .filter((item): item is CustomAnchorQuestion => item !== null);
-}
-
 export function normalizeCampaignApiRequest(
   body: CampaignApiRequest,
 ): NormalizedCampaignApiRequest {
@@ -100,9 +61,6 @@ export function normalizeCampaignApiRequest(
       )
     : [];
   const sectorSlug = resolveSectorSlug(body);
-  const customSector = isCustomSectorSlug(sectorSlug)
-    ? resolveSectorLabel(body, sectorSlug)
-    : undefined;
 
   return {
     markaAdi: (body.companyName ?? body.markaAdi ?? "").trim(),
@@ -111,8 +69,6 @@ export function normalizeCampaignApiRequest(
     gunlukButce: Number(body.budget ?? body.gunlukButce) || 10,
     gunSayisi: Number(body.campaignDays ?? body.gunSayisi) || DEFAULT_CAMPAIGN_DAYS,
     sectorSlug,
-    customSector,
-    customAnchorQuestions: normalizeCustomAnchorQuestions(body),
     selectedQuestionIds,
   };
 }

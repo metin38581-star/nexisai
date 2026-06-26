@@ -39,13 +39,9 @@ import { recordPayment } from "@/lib/payment-store";
 import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
 import {
   buildCoreQuestionPairs,
-  buildCustomAnchorQuestionPairs,
   getCoreQuestionPoolSize,
   validateCoreQuestionSelection,
-  validateCustomAnchorQuestionSelection,
 } from "@/lib/core-questions";
-import { isCustomSectorSlug } from "@/lib/sector-utils";
-import { QUESTIONS_PER_SECTOR } from "@/constants/campaign";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -144,11 +140,8 @@ export async function POST(request: Request) {
       gunlukButce,
       gunSayisi,
       sectorSlug,
-      customSector,
-      customAnchorQuestions,
       selectedQuestionIds,
     } = normalizeCampaignApiRequest(body);
-    const isCustomSector = isCustomSectorSlug(sectorSlug);
     const toplamMaliyet = gunlukButce * gunSayisi;
 
     const budgetParams = resolveCampaignBudgetParams(gunlukButce);
@@ -165,22 +158,7 @@ export async function POST(request: Request) {
 
     if (!sektor) {
       return NextResponse.json(
-        {
-          success: false,
-          error: isCustomSector
-            ? "Özel sektör adını yazmanız gerekiyor."
-            : "Sektör bilgisi zorunludur.",
-        },
-        { status: 400 },
-      );
-    }
-
-    if (isCustomSector && (!customSector || customSector.length < 3)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Özel sektör adı en az 3 karakter olmalıdır.",
-        },
+        { success: false, error: "Sektör bilgisi zorunludur." },
         { status: 400 },
       );
     }
@@ -314,104 +292,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const poolSize = isCustomSector
-      ? QUESTIONS_PER_SECTOR
-      : getCoreQuestionPoolSize(sectorSlug);
+    const poolSize = getCoreQuestionPoolSize(sectorSlug);
     const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce, poolSize);
+    const selectionValidation = validateCoreQuestionSelection({
+      budget: gunlukButce,
+      sectorSlug,
+      selectedIds: selectedQuestionIds,
+    });
 
-    if (!isCustomSector) {
-      const selectionValidation = validateCoreQuestionSelection({
-        budget: gunlukButce,
-        sectorSlug,
-        selectedIds: selectedQuestionIds,
-      });
-
-      if (!selectionValidation.ok) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: selectionValidation.error ?? "Geçersiz soru seçimi.",
-          },
-          { status: selectionValidation.statusCode ?? 400 },
-        );
-      }
-    } else {
-      const selectionValidation = validateCustomAnchorQuestionSelection({
-        budget: gunlukButce,
-        selectedIds: selectedQuestionIds,
-        anchorQuestions: customAnchorQuestions,
-      });
-
-      if (!selectionValidation.ok) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: selectionValidation.error ?? "Geçersiz niş soru seçimi.",
-          },
-          { status: selectionValidation.statusCode ?? 400 },
-        );
-      }
+    if (!selectionValidation.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: selectionValidation.error ?? "Geçersiz soru seçimi.",
+        },
+        { status: selectionValidation.statusCode ?? 400 },
+      );
     }
 
-    let selectedQuestionPairs: SelectedQuestionPair[];
-    let hubEntries: QuestionHubEntry[];
-    let makaleSayisi: number;
+    const makaleSayisi = selectedQuestionIds.length;
 
-    if (isCustomSector) {
-      selectedQuestionPairs = buildCustomAnchorQuestionPairs(
-        selectedQuestionIds,
-        customAnchorQuestions,
-        trimmedSehir,
-        trimmedMarka,
-        trimmedSektor,
-      );
-      makaleSayisi = selectedQuestionPairs.length;
-      hubEntries = selectedQuestionIds.map((coreQuestionId, index) => ({
+    const selectedQuestionPairs = await resolveSelectedCoreQuestionPairs(
+      selectedQuestionIds,
+      sectorSlug as BusinessSector,
+      trimmedSehir,
+      trimmedSektor,
+      trimmedMarka,
+    );
+
+    const hubEntries: QuestionHubEntry[] = selectedQuestionIds.map(
+      (coreQuestionId, index) => ({
         coreQuestionId,
         question: selectedQuestionPairs[index]?.question ?? "",
         simulatedAnswer: selectedQuestionPairs[index]?.simulatedAnswer ?? "",
         city: trimmedSehir,
         sectorLabel: trimmedSektor,
         sectorSlug: sectorSlug as BusinessSector,
-        customSector: customSector ?? trimmedSektor,
-      }));
+      }),
+    );
 
-      console.log(
-        "[NİŞ SEKTÖR MOTORU]: Seçilen kemik soru ->",
-        makaleSayisi,
-        `(havuz=${QUESTIONS_PER_SECTOR}, sektor="${trimmedSektor}")`,
-      );
-    } else {
-      makaleSayisi = selectedQuestionIds.length;
-
-      selectedQuestionPairs = await resolveSelectedCoreQuestionPairs(
-        selectedQuestionIds,
-        sectorSlug as BusinessSector,
-        trimmedSehir,
-        trimmedSektor,
-        trimmedMarka,
-      );
-
-      hubEntries = selectedQuestionIds.map((coreQuestionId, index) => ({
-        coreQuestionId,
-        question: selectedQuestionPairs[index]?.question ?? "",
-        simulatedAnswer: selectedQuestionPairs[index]?.simulatedAnswer ?? "",
-        city: trimmedSehir,
-        sectorLabel: trimmedSektor,
-        sectorSlug: sectorSlug as BusinessSector,
-      }));
-    }
     const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
 
-    if (!isCustomSector) {
-      console.log(
-        "[KEMIK SORU MOTORU]: Üretilecek soru/makale ->",
-        selectedQuestionPairs.length,
-        "/ seçilen",
-        makaleSayisi,
-        `(maxQuestions=${maxQuestions})`,
-      );
-    }
+    console.log(
+      "[KEMIK SORU MOTORU]: Üretilecek soru/makale ->",
+      selectedQuestionPairs.length,
+      "/ seçilen",
+      makaleSayisi,
+      `(maxQuestions=${maxQuestions})`,
+    );
     const [llmResult, baitDeployment] = await Promise.all([
       queryLlmInquiry(
         trimmedSehir,
@@ -630,8 +558,6 @@ export async function POST(request: Request) {
         gunlukButce,
         gunSayisi,
         sectorSlug,
-        customSector,
-        customAnchorQuestions,
         selectedQuestionIds,
       },
       llmResult,
@@ -645,8 +571,6 @@ export async function POST(request: Request) {
         gunlukButce,
         gunSayisi,
         sectorSlug,
-        customSector,
-        customAnchorQuestions,
         selectedQuestionIds,
       },
       llmResult,

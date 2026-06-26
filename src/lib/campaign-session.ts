@@ -1,6 +1,5 @@
-import type { CampaignFormData, CustomAnchorQuestion } from "@/types/campaign";
+import type { CampaignFormData } from "@/types/campaign";
 import { getCityLabel, SECTOR_OPTIONS } from "@/lib/constants";
-import { isCustomSectorSlug } from "@/lib/sector-utils";
 
 const SESSION_KEY = "nexisai-campaign-session";
 
@@ -11,8 +10,6 @@ export interface CampaignSessionPayload {
   gunlukButce: number;
   gunSayisi: number;
   sectorSlug: CampaignFormData["sector"];
-  customSector?: string;
-  customAnchorQuestions?: CustomAnchorQuestion[];
   selectedQuestionIds: string[];
   withTahsilat?: boolean;
 }
@@ -21,12 +18,9 @@ export function buildCampaignSession(
   data: CampaignFormData,
   options?: { withTahsilat?: boolean },
 ): CampaignSessionPayload {
-  const isCustom = isCustomSectorSlug(data.sector);
-  const customSector = data.customSector?.trim();
-  const sektorLabel = isCustom
-    ? customSector ?? ""
-    : (SECTOR_OPTIONS.find((option) => option.value === data.sector)?.label ??
-      data.sector);
+  const sektorLabel =
+    SECTOR_OPTIONS.find((option) => option.value === data.sector)?.label ??
+    data.sector;
 
   return {
     markaAdi: data.businessName.trim(),
@@ -35,8 +29,6 @@ export function buildCampaignSession(
     gunlukButce: data.dailyBudget,
     gunSayisi: data.campaignDays,
     sectorSlug: data.sector,
-    customSector: isCustom ? customSector : undefined,
-    customAnchorQuestions: isCustom ? data.customAnchorQuestions : undefined,
     selectedQuestionIds: data.selectedQuestionIds,
     withTahsilat: options?.withTahsilat,
   };

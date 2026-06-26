@@ -1,5 +1,4 @@
 import type { BusinessSector } from "@/types/campaign";
-import { CUSTOM_SECTOR_SLUG } from "@/lib/sector-utils";
 
 export {
   TURKEY_CITY_OPTIONS,
@@ -8,18 +7,18 @@ export {
   type TurkishCitySlug,
 } from "@/lib/turkey-cities";
 
-export { CUSTOM_SECTOR_SLUG };
-
 export const SECTOR_OPTIONS: { value: BusinessSector; label: string }[] = [
-  { value: "otel-konaklama", label: "Otel & Konaklama" },
   { value: "dis-klinigi-saglik", label: "Diş Kliniği & Sağlık" },
+  { value: "otel-konaklama", label: "Otel & Konaklama" },
   { value: "restoran-kafe", label: "Restoran & Kafe" },
   { value: "guzellik-estetik", label: "Güzellik & Estetik" },
+  { value: "hukuk-danismanlik", label: "Avukatlık & Hukuk" },
+  { value: "evden-eve-nakliyat", label: "Evden Eve Nakliyat" },
+  { value: "hali-yikama", label: "Halı Yıkama" },
+  { value: "oto-servis-ekspertiz", label: "Oto Servis & Ekspertiz" },
+  { value: "surucu-kursu", label: "Sürücü Kursu" },
   { value: "egitim-kurs", label: "Eğitim & Kurs" },
-  { value: "oto-servis", label: "Oto Servis" },
-  { value: "hukuk-danismanlik", label: "Hukuk & Danışmanlık" },
   { value: "dijital-ajans", label: "Dijital Ajans" },
-  { value: CUSTOM_SECTOR_SLUG, label: "Listede Yok (Kendim Yazacağım)" },
   { value: "oto-galeri-otomotiv", label: "Oto Galeri & Otomotiv" },
   { value: "guzellik-sac-salonu", label: "Güzellik & Saç Salonu" },
   { value: "e-ticaret-giyim", label: "E-Ticaret & Giyim" },
@@ -40,14 +39,16 @@ export const SECTOR_SEARCH_QUERIES: Record<BusinessSector, string> = {
   "dis-klinigi-saglik": "en iyi diş kliniği",
   "restoran-kafe": "en iyi restoran",
   "guzellik-estetik": "en iyi güzellik merkezi",
-  "egitim-kurs": "en iyi kurs merkezi",
-  "oto-servis": "en iyi oto servis",
   "hukuk-danismanlik": "en iyi avukat",
+  "evden-eve-nakliyat": "en iyi evden eve nakliyat",
+  "hali-yikama": "en iyi halı yıkama",
+  "oto-servis-ekspertiz": "en iyi oto servis",
+  "surucu-kursu": "en iyi sürücü kursu",
+  "egitim-kurs": "en iyi kurs merkezi",
   "dijital-ajans": "en iyi dijital ajans",
   "oto-galeri-otomotiv": "en iyi oto galeri",
   "guzellik-sac-salonu": "en iyi güzellik salonu",
   "e-ticaret-giyim": "en iyi giyim mağazası",
-  "custom-sector": "en iyi hizmet",
 };
 
 export const SUPPORT_EMAIL = "support@nexisai.com";

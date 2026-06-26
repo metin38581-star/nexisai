@@ -24,16 +24,13 @@ export interface ForumAnswerInput {
   city: string;
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
-  customSector?: string;
   simulatedAnswer?: string;
   seedKey?: string;
 }
 
 function resolveEntrySectorLabel(input: ForumAnswerInput): string {
   return resolveEffectiveSectorLabel({
-    sectorSlug: input.sectorSlug,
     sectorLabel: input.sectorLabel,
-    customSector: input.customSector,
   });
 }
 

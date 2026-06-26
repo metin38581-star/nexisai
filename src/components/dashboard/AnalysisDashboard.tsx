@@ -531,8 +531,6 @@ function AnalysisDashboardContent({
                 budget: payload.gunlukButce,
                 campaignDays: payload.gunSayisi,
                 sectorSlug: payload.sectorSlug,
-                customSector: payload.customSector,
-                customAnchorQuestions: payload.customAnchorQuestions,
                 selectedQuestionIds: payload.selectedQuestionIds,
               }),
             }),
