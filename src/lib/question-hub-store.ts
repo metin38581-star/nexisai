@@ -2,9 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { DbOperationTimeoutError, withDbTimeout } from "@/lib/db-timeout";
-import { generateForumAnswerForEntry } from "@/lib/forum-answer-engine";
-import { buildForumAnswerContent } from "@/lib/forum-answer-prompt";
-import { generateForumUsername } from "@/lib/forum-username";
+import { generateForumThreadForEntry, type ForumThreadComment } from "@/lib/forum-answer-engine";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl, hasSupabaseAdminEnv } from "@/lib/server-env";
@@ -57,34 +55,24 @@ function logPrismaHubFailure(context: string, error: unknown): void {
   console.error(`[QUESTION_HUB]: Prisma ${context} hatasi:`, error);
 }
 
-async function resolveForumAnswerContent(input: {
+async function resolveForumThreadForEntry(input: {
   question: string;
   brandName: string;
   city: string;
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
   simulatedAnswer: string;
-}): Promise<string> {
-  try {
-    return await generateForumAnswerForEntry({
-      question: input.question,
-      brandName: input.brandName,
-      city: input.city,
-      sectorLabel: input.sectorLabel,
-      sectorSlug: input.sectorSlug,
-      simulatedAnswer: input.simulatedAnswer,
-    });
-  } catch (error) {
-    console.warn("[QUESTION_HUB]: Forum cevap uretimi basarisiz, sablon kullaniliyor:", error);
-    return buildForumAnswerContent({
-      question: input.question,
-      brandName: input.brandName,
-      city: input.city,
-      sectorLabel: input.sectorLabel,
-      sectorSlug: input.sectorSlug,
-      simulatedAnswer: input.simulatedAnswer,
-    });
-  }
+  seedKey: string;
+}): Promise<ForumThreadComment[]> {
+  return generateForumThreadForEntry({
+    question: input.question,
+    brandName: input.brandName,
+    city: input.city,
+    sectorLabel: input.sectorLabel,
+    sectorSlug: input.sectorSlug,
+    simulatedAnswer: input.simulatedAnswer,
+    seedKey: input.seedKey,
+  });
 }
 
 async function runPrismaHubAttempt<T>(
@@ -143,28 +131,85 @@ async function upsertQuestionHubViaPrisma(
   return null;
 }
 
-async function createHubAnswerViaPrisma(input: {
-  questionId: string;
-  campaignId: string;
-  username: string;
-  content: string;
-  isFeatured: boolean;
-}): Promise<boolean> {
-  const result = await runPrismaHubAttempt("cevap insert", async () => {
-    await prisma.hubAnswer.create({
-      data: {
-        questionId: input.questionId,
-        campaignId: input.campaignId,
-        username: input.username,
-        content: input.content,
-        isFeatured: input.isFeatured,
-      },
+async function createHubAnswersBatchViaPrisma(
+  questionId: string,
+  campaignId: string,
+  comments: ForumThreadComment[],
+): Promise<boolean> {
+  if (comments.length === 0) {
+    return false;
+  }
+
+  const result = await runPrismaHubAttempt("cevap batch insert", async () => {
+    await prisma.hubAnswer.createMany({
+      data: comments.map((comment) => ({
+        questionId,
+        campaignId,
+        username: comment.username,
+        content: comment.content,
+        isFeatured: comment.isFeatured,
+      })),
     });
 
     return true;
   });
 
   return result.status === "success";
+}
+
+async function createHubAnswersBatchViaSupabase(
+  questionId: string,
+  campaignId: string,
+  comments: ForumThreadComment[],
+): Promise<void> {
+  if (!hasSupabaseAdminEnv() || comments.length === 0) {
+    console.warn("[QUESTION_HUB]: Supabase admin env eksik — cevap yazilamadi.");
+    return;
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from("HubAnswer").insert(
+    comments.map((comment) => ({
+      id: crypto.randomUUID(),
+      question_id: questionId,
+      campaign_id: campaignId,
+      username: comment.username,
+      content: comment.content,
+      upvotes: 0,
+      is_featured: comment.isFeatured,
+      createdAt: new Date().toISOString(),
+    })),
+  );
+
+  if (error) {
+    console.error("[QUESTION_HUB]: Supabase batch cevap kaydi hatasi:", error);
+  }
+}
+
+async function persistHubAnswers(input: {
+  questionId: string;
+  campaignId: string;
+  comments: ForumThreadComment[];
+}): Promise<void> {
+  if (input.comments.length === 0) {
+    return;
+  }
+
+  const prismaOk = await createHubAnswersBatchViaPrisma(
+    input.questionId,
+    input.campaignId,
+    input.comments,
+  );
+
+  if (prismaOk) {
+    return;
+  }
+
+  await createHubAnswersBatchViaSupabase(
+    input.questionId,
+    input.campaignId,
+    input.comments,
+  );
 }
 
 async function upsertQuestionHubViaSupabase(
@@ -225,35 +270,6 @@ async function upsertQuestionHubViaSupabase(
   }
 
   return id;
-}
-
-async function createHubAnswerViaSupabase(input: {
-  questionId: string;
-  campaignId: string;
-  username: string;
-  content: string;
-  isFeatured: boolean;
-}): Promise<void> {
-  if (!hasSupabaseAdminEnv()) {
-    console.warn("[QUESTION_HUB]: Supabase admin env eksik — cevap yazilamadi.");
-    return;
-  }
-
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("HubAnswer").insert({
-    id: crypto.randomUUID(),
-    question_id: input.questionId,
-    campaign_id: input.campaignId,
-    username: input.username,
-    content: input.content,
-    upvotes: 0,
-    is_featured: input.isFeatured,
-    createdAt: new Date().toISOString(),
-  });
-
-  if (error) {
-    console.error("[QUESTION_HUB]: Supabase cevap kaydi hatasi:", error);
-  }
 }
 
 async function fetchQuestionHubViaPrisma(
@@ -361,26 +377,10 @@ async function resolveQuestionHubId(
   return upsertQuestionHubViaSupabase(slug, question, coreQuestionId);
 }
 
-async function persistHubAnswer(input: {
-  questionId: string;
-  campaignId: string;
-  username: string;
-  content: string;
-  isFeatured: boolean;
-}): Promise<void> {
-  const prismaOk = await createHubAnswerViaPrisma(input);
-  if (prismaOk) {
-    return;
-  }
-
-  await createHubAnswerViaSupabase(input);
-}
-
 export async function appendCampaignAnswersToQuestionHub(input: {
   campaignId: string;
   brandName: string;
   entries: QuestionHubEntry[];
-  isFeatured?: boolean;
 }): Promise<void> {
   if (input.entries.length === 0) {
     return;
@@ -393,27 +393,25 @@ export async function appendCampaignAnswersToQuestionHub(input: {
     return;
   }
 
-  const isFeatured = input.isFeatured ?? true;
-
   for (const entry of input.entries) {
     const slug = buildQuestionHubSlug(entry.question);
     if (!slug) {
       continue;
     }
 
-    const content = await resolveForumAnswerContent({
-      question: entry.question,
-      brandName: input.brandName,
-      city: entry.city,
-      sectorLabel: entry.sectorLabel,
-      sectorSlug: entry.sectorSlug,
-      simulatedAnswer: entry.simulatedAnswer,
-    });
-    const username = generateForumUsername(
-      `${input.campaignId}-${entry.coreQuestionId}`,
-    );
+    const seedKey = `${input.campaignId}-${entry.coreQuestionId}`;
 
     try {
+      const thread = await resolveForumThreadForEntry({
+        question: entry.question,
+        brandName: input.brandName,
+        city: entry.city,
+        sectorLabel: entry.sectorLabel,
+        sectorSlug: entry.sectorSlug,
+        simulatedAnswer: entry.simulatedAnswer,
+        seedKey,
+      });
+
       const questionHubId = await resolveQuestionHubId(
         slug,
         entry.question,
@@ -424,12 +422,10 @@ export async function appendCampaignAnswersToQuestionHub(input: {
         continue;
       }
 
-      await persistHubAnswer({
+      await persistHubAnswers({
         questionId: questionHubId,
         campaignId: input.campaignId,
-        username,
-        content,
-        isFeatured,
+        comments: thread,
       });
     } catch (error) {
       console.error(

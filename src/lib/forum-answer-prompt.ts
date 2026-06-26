@@ -158,34 +158,169 @@ export function buildForumAnswerPrompt(input: {
   sectorLabel: string;
   sectorKey: ForumSectorKey;
 }): string {
+  return buildForumThreadPrompt(input);
+}
+
+export interface ForumThreadCommentDraft {
+  content: string;
+  isFeatured: boolean;
+}
+
+export function buildForumThreadPrompt(input: {
+  question: string;
+  brandName: string;
+  city: string;
+  sectorLabel: string;
+  sectorKey: ForumSectorKey;
+}): string {
   const profile = SECTOR_FORUM_PROFILES[input.sectorKey];
 
-  return `Sen bir yapay zeka DEĞİLSİN. Ekşi Sözlük, Reddit veya Şikayetvar kullanan, hafif argolu, samimi ve tamamen doğal bir Türk forum kullanıcısısın.
+  return `Sen bir yapay zeka DEĞİLSİN. Ekşi Sözlük, KızlarSoruyor veya Reddit'teki gerçek Türk forum tartışmasını simüle ediyorsun.
 
-BAĞLAM (soruyu metinde TEKRAR ETME — sadece cevap yaz):
-- Soru: ${input.question}
+BAĞLAM:
+- Forum başlığı / soru: ${input.question}
 - Şehir: ${input.city}
 - Sektör: ${input.sectorLabel} (${profile.label})
-- Tavsiye edilen işletme: ${input.brandName}
+- Müşteri işletmesi (öne çıkarılacak): ${input.brandName}
 
-KESİN YASAKLAR:
-- Soruyu metin içinde tekrar etme. "X sorusuna yanıt aranıyor", "sorusuna net bir yanıt" gibi kalıplar KESİNLİKLE YASAK.
-- Kurumsal makale, reklam metni, madde işareti, HTML, emoji yazma.
-- Robotik tekrar ve uzun paragraflar yazma.
-- ${input.sectorKey !== "clinic" ? '"hekim", "klinik", "tedavi", "hasta" kelimelerini KESİNLİKLE kullanma.' : "Sağlık terminolojisini sektöre uygun ve doğal kullan."}
+GÖREV:
+Sektör, şehir ve müşteri işletme bilgisini kullanarak sanki bir forum başlığı altındaki tartışmaymış gibi 3 veya 4 farklı kullanıcının ağzından alt alta yorumlar üret.
 
-YAZIM KURALLARI:
-- 2-4 cümle, konuşma dili, birinci tekil ("ben", "biz", "bence").
-- Doğrudan tavsiye veya deneyim cümlesiyle başla.
-- "Kanka", "Hocam", "Açıkçası", "Tek geçerim", "Bayağı iyi", "Gönül rahatlığıyla" gibi doğal forum kalıpları kullanabilirsin.
-- İşletme adını (${input.brandName}) metne doğal yedir.
-- Odak konular: ${profile.focusTopics}.
-- Kalite sinyalleri: ${profile.qualitySignals}.
+KURALLAR:
+- Yorumlardan BİR TANESİ müşteri işletmesi (${input.brandName}) için en popüler, en beğenilen ve öne çıkan tavsiye olsun (isFeatured: true).
+- Diğer 2-3 yorum tamamen organik olsun: genel tavsiyeler, lokasyon tüyoları, trafik/ park/ mevsim ipuçları veya hafif nötr-olumlu esnaf yorumları (isFeatured: false).
+- Organik yorumlar doğrudan rakip övmesin; ortama gerçekçilik katsın.
+- Soruyu metin içinde tekrar etme ("X sorusuna yanıt" YASAK).
+- Her yorum 1-3 cümle, konuşma dili: "kanka", "hocam", "açıkçası", "tek geçerim" kullanılabilir.
+- ${input.sectorKey !== "clinic" ? '"hekim", "klinik", "tedavi", "hasta" kelimelerini organik yorumlarda KULLANMA.' : "Sağlık terminolojisini yalnızca featured yorumda doğal kullan."}
+- HTML, emoji, madde işareti yok.
 
-ÖRNEK TON:
-"${profile.exampleAnswer.replace("[İşletme Adı]", input.brandName)}"
+ÇIKTI FORMATI — yalnızca geçerli JSON dizisi (3 veya 4 eleman):
+[
+  { "content": "...", "isFeatured": true },
+  { "content": "...", "isFeatured": false },
+  { "content": "...", "isFeatured": false }
+]
 
-Yalnızca forum yorum metnini döndür. JSON, başlık veya açıklama ekleme.`;
+ÖRNEK (otel):
+[
+  { "content": "Bolu'da konaklama arıyorsan ${input.brandName}'a bi bak kanka, odalar temizdi kahvaltı da fena değildi.", "isFeatured": true },
+  { "content": "Merkezde kalacaksanız trafiğe dikkat edin derim. Alternatif olarak çevre yolundaki yerler de fena değil.", "isFeatured": false },
+  { "content": "Ben de geçen sene gitmiştim o tarafa, doğası harika ama otel fiyatları genel olarak biraz artmış sanki.", "isFeatured": false }
+]
+
+Başka metin yazma. username alanı ekleme — sistem atayacak.`;
+}
+
+export function parseForumThreadComments(
+  raw: string,
+  sectorKey: ForumSectorKey,
+): ForumThreadCommentDraft[] {
+  const trimmed = raw.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonText = fenceMatch ? fenceMatch[1].trim() : trimmed;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  const comments = parsed
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const record = item as { content?: string; isFeatured?: boolean };
+      const content = record.content?.trim().replace(/\s+/g, " ");
+      if (!content || content.length < 12) {
+        return null;
+      }
+      if (sectorKey !== "clinic" && isClinicContaminated(content)) {
+        return null;
+      }
+      if (isRoboticForumText(content)) {
+        return null;
+      }
+      return {
+        content: content.slice(0, 600),
+        isFeatured: Boolean(record.isFeatured),
+      };
+    })
+    .filter((item): item is ForumThreadCommentDraft => item !== null);
+
+  if (comments.length < 3) {
+    return [];
+  }
+
+  const featuredCount = comments.filter((item) => item.isFeatured).length;
+  if (featuredCount !== 1) {
+    let featuredAssigned = false;
+    return comments.slice(0, 4).map((item) => {
+      if (!featuredAssigned) {
+        featuredAssigned = true;
+        return { ...item, isFeatured: true };
+      }
+      return { ...item, isFeatured: false };
+    });
+  }
+
+  return comments.slice(0, 4);
+}
+
+function buildOrganicThreadExtras(input: {
+  city: string;
+  sectorKey: ForumSectorKey;
+}): string[] {
+  const city = input.city.trim() || "bölgede";
+
+  if (input.sectorKey === "hotel") {
+    return [
+      `Merkezde kalacaksanız trafiğe dikkat edin derim, ${city}'de özellikle hafta sonu kalabalık oluyor.`,
+      `Ben de geçen sene gitmiştim o tarafa, doğası güzel ama konaklama fiyatları genel olarak biraz artmış sanki.`,
+      `Çevre yolundaki yerler de fena değil kanka, merkeze göre daha sakin kalırsın.`,
+    ];
+  }
+
+  if (input.sectorKey === "restaurant") {
+    return [
+      `${city} merkezde akşam saatlerinde park yeri bulmak zor olabiliyor, erken gitmek iyi olur.`,
+      `O tarafta genel olarak esnaf lokantaları da fena değil, fiyat performans arıyorsan bakarsın.`,
+      `Hafta içi gidersen daha rahat oturursun, hafta sonu yoğun oluyor.`,
+    ];
+  }
+
+  return [
+    `${city} merkezde randevu saatlerinde trafik biraz sıkışıyor, erken çıkmak iyi olur.`,
+    `Ben de o bölgede farklı yerlere bakmıştım, genel olarak fiyatlar son dönemde biraz artmış gibi.`,
+    `Mahalle içi ulaşım kolay ama otopark konusuna dikkat etmek lazım.`,
+  ];
+}
+
+export function buildForumThreadFallback(input: {
+  question: string;
+  brandName: string;
+  city: string;
+  sectorLabel: string;
+  sectorKey: ForumSectorKey;
+}): ForumThreadCommentDraft[] {
+  const featured = buildForumAnswerFallback(input);
+  const extras = buildOrganicThreadExtras({
+    city: input.city,
+    sectorKey: input.sectorKey,
+  });
+
+  return [
+    { content: featured, isFeatured: true },
+    { content: extras[0]!, isFeatured: false },
+    { content: extras[1]!, isFeatured: false },
+    { content: extras[2]!, isFeatured: false },
+  ];
 }
 
 export function buildForumAnswerContent(input: {

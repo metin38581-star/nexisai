@@ -4,18 +4,18 @@ import { GoogleGenAI } from "@google/genai";
 
 import {
   buildForumAnswerContent,
-  buildForumAnswerFallback,
-  buildForumAnswerPrompt,
-  isRoboticForumText,
+  buildForumThreadFallback,
+  buildForumThreadPrompt,
+  parseForumThreadComments,
   resolveForumSectorKey,
-  shouldDiscardSimulatedAnswerForForum,
-  type ForumSectorKey,
+  type ForumThreadCommentDraft,
 } from "@/lib/forum-answer-prompt";
+import { generateForumUsername } from "@/lib/forum-username";
 import type { BusinessSector } from "@/types/campaign";
 
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
 const GOOGLE_GENAI_API_VERSION = "v1";
-const FORUM_ANSWER_TIMEOUT_MS = 20_000;
+const FORUM_THREAD_TIMEOUT_MS = 30_000;
 
 export interface ForumAnswerInput {
   question: string;
@@ -24,6 +24,13 @@ export interface ForumAnswerInput {
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
   simulatedAnswer?: string;
+  seedKey?: string;
+}
+
+export interface ForumThreadComment {
+  username: string;
+  content: string;
+  isFeatured: boolean;
 }
 
 function resolveApiKey(): string | null {
@@ -42,7 +49,7 @@ function resolveGoogleGenAiModel(): string {
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(new Error("forum_answer_timeout"));
+      reject(new Error("forum_thread_timeout"));
     }, timeoutMs);
 
     promise
@@ -57,32 +64,21 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   });
 }
 
-function sanitizeLlmForumAnswer(raw: string, sectorKey: ForumSectorKey): string {
-  const cleaned = raw
-    .trim()
-    .replace(/^["'`]+|["'`]+$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned) {
-    return "";
-  }
-
-  if (sectorKey !== "clinic" && shouldDiscardSimulatedAnswerForForum(cleaned, sectorKey)) {
-    return "";
-  }
-
-  if (isRoboticForumText(cleaned)) {
-    return "";
-  }
-
-  return cleaned.slice(0, 600);
+function assignUsernamesToThread(
+  drafts: ForumThreadCommentDraft[],
+  seedKey: string,
+): ForumThreadComment[] {
+  return drafts.map((draft, index) => ({
+    username: generateForumUsername(`${seedKey}-thread-${index}`),
+    content: draft.content,
+    isFeatured: draft.isFeatured,
+  }));
 }
 
-async function generateForumAnswerViaLlm(
+async function generateForumThreadViaLlm(
   input: ForumAnswerInput,
-  sectorKey: ForumSectorKey,
-): Promise<string | null> {
+  sectorKey: ReturnType<typeof resolveForumSectorKey>,
+): Promise<ForumThreadCommentDraft[] | null> {
   const apiKey = resolveApiKey();
   if (!apiKey) {
     return null;
@@ -96,7 +92,7 @@ async function generateForumAnswerViaLlm(
   const response = await withTimeout(
     ai.models.generateContent({
       model: resolveGoogleGenAiModel(),
-      contents: buildForumAnswerPrompt({
+      contents: buildForumThreadPrompt({
         question: input.question,
         brandName: input.brandName,
         city: input.city,
@@ -104,11 +100,11 @@ async function generateForumAnswerViaLlm(
         sectorKey,
       }),
       config: {
-        maxOutputTokens: 256,
-        temperature: 0.88,
+        maxOutputTokens: 1024,
+        temperature: 0.9,
       },
     }),
-    FORUM_ANSWER_TIMEOUT_MS,
+    FORUM_THREAD_TIMEOUT_MS,
   );
 
   const text = response.text?.trim();
@@ -116,34 +112,61 @@ async function generateForumAnswerViaLlm(
     return null;
   }
 
-  const sanitized = sanitizeLlmForumAnswer(text, sectorKey);
-  return sanitized || null;
+  const parsed = parseForumThreadComments(text, sectorKey);
+  return parsed.length >= 3 ? parsed : null;
 }
 
-export async function generateForumAnswerForEntry(
+export async function generateForumThreadForEntry(
   input: ForumAnswerInput,
-): Promise<string> {
+): Promise<ForumThreadComment[]> {
   const sectorKey = resolveForumSectorKey(input.sectorLabel, input.sectorSlug);
+  const seedKey =
+    input.seedKey ??
+    `${input.brandName}-${input.city}-${input.question}`.slice(0, 120);
 
   try {
-    const llmAnswer = await generateForumAnswerViaLlm(input, sectorKey);
-    if (llmAnswer) {
-      return llmAnswer;
+    const llmThread = await generateForumThreadViaLlm(input, sectorKey);
+    if (llmThread) {
+      return assignUsernamesToThread(llmThread, seedKey);
     }
   } catch (error) {
-    console.warn("[FORUM_ANSWER]: LLM uretimi basarisiz, sablon fallback:", error);
+    console.warn("[FORUM_ANSWER]: LLM thread uretimi basarisiz, sablon fallback:", error);
   }
 
-  return buildForumAnswerContent(input);
-}
-
-export function buildForumAnswerFallbackForEntry(input: ForumAnswerInput): string {
-  const sectorKey = resolveForumSectorKey(input.sectorLabel, input.sectorSlug);
-  return buildForumAnswerFallback({
+  const fallbackThread = buildForumThreadFallback({
     question: input.question,
     brandName: input.brandName,
     city: input.city,
     sectorLabel: input.sectorLabel,
     sectorKey,
   });
+
+  return assignUsernamesToThread(fallbackThread, seedKey);
+}
+
+/** Tek yorum — geriye dönük uyumluluk */
+export async function generateForumAnswerForEntry(
+  input: ForumAnswerInput,
+): Promise<string> {
+  const thread = await generateForumThreadForEntry(input);
+  const featured =
+    thread.find((comment) => comment.isFeatured) ?? thread[0];
+
+  if (featured?.content) {
+    return featured.content;
+  }
+
+  return buildForumAnswerContent(input);
+}
+
+export function buildForumAnswerFallbackForEntry(input: ForumAnswerInput): string {
+  const thread = buildForumThreadFallback({
+    question: input.question,
+    brandName: input.brandName,
+    city: input.city,
+    sectorLabel: input.sectorLabel,
+    sectorKey: resolveForumSectorKey(input.sectorLabel, input.sectorSlug),
+  });
+
+  return thread.find((item) => item.isFeatured)?.content ?? thread[0]?.content ?? "";
 }
