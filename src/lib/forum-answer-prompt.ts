@@ -219,7 +219,7 @@ Başka metin yazma. username alanı ekleme — sistem atayacak.`;
 function extractJsonPayload(raw: string): unknown | null {
   const trimmed = raw.trim();
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  let candidate = fenceMatch ? fenceMatch[1].trim() : trimmed;
+  const candidate = fenceMatch ? fenceMatch[1].trim() : trimmed;
 
   const attempts = [
     candidate,
