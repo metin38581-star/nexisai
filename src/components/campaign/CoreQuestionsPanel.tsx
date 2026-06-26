@@ -16,6 +16,7 @@ import {
   isCoreQuestionSectorSupported,
   resolveCoreQuestionSector,
   resolveMaxSelection,
+  CORE_QUESTION_SUPPORTED_LABELS_TEXT,
 } from "@/lib/core-questions";
 import { getCityLabel } from "@/lib/constants";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
@@ -128,10 +129,8 @@ export default function CoreQuestionsPanel({
           Kemik soru havuzu bu sektör için henüz hazır değil
         </p>
         <p className="mt-2 text-xs leading-relaxed text-amber-100/70">
-          Kemik soru havuzu Diş Kliniği, Otel, Restoran, Güzellik & Estetik,
-          Avukatlık & Hukuk, Evden Eve Nakliyat, Halı Yıkama, Oto Servis &
-          Ekspertiz ve Sürücü Kursu için 15&apos;er adet kısa soru sunuyor.
-          Lütfen desteklenen sektörlerden birini seçin.
+          Kemik soru havuzu {CORE_QUESTION_SUPPORTED_LABELS_TEXT} için 15&apos;er
+          adet kısa soru sunuyor. Lütfen desteklenen sektörlerden birini seçin.
         </p>
       </div>
     );

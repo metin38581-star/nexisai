@@ -9,7 +9,12 @@ export type CoreQuestionSector =
   | "evden_eve_nakliyat"
   | "hali_yikama"
   | "oto_servis_ekspertiz"
-  | "surucu_kursu";
+  | "surucu_kursu"
+  | "egitim_kurs"
+  | "dijital_ajans"
+  | "oto_galeri_otomotiv"
+  | "guzellik_sac_salonu"
+  | "eticaret_giyim";
 
 export interface QuestionTemplate {
   id: string;

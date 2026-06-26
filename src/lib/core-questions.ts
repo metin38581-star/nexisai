@@ -23,6 +23,11 @@ const SECTOR_SLUG_TO_CORE: Partial<Record<BusinessSector, CoreQuestionSector>> =
   "hali-yikama": "hali_yikama",
   "oto-servis-ekspertiz": "oto_servis_ekspertiz",
   "surucu-kursu": "surucu_kursu",
+  "egitim-kurs": "egitim_kurs",
+  "dijital-ajans": "dijital_ajans",
+  "oto-galeri-otomotiv": "oto_galeri_otomotiv",
+  "guzellik-sac-salonu": "guzellik_sac_salonu",
+  "e-ticaret-giyim": "eticaret_giyim",
 };
 
 const CORE_SECTOR_LABELS: Record<CoreQuestionSector, string> = {
@@ -42,6 +47,11 @@ const CORE_TO_BUSINESS_SECTOR: Record<CoreQuestionSector, BusinessSector> = {
   hali_yikama: "hali-yikama",
   oto_servis_ekspertiz: "oto-servis-ekspertiz",
   surucu_kursu: "surucu-kursu",
+  egitim_kurs: "egitim-kurs",
+  dijital_ajans: "dijital-ajans",
+  oto_galeri_otomotiv: "oto-galeri-otomotiv",
+  guzellik_sac_salonu: "guzellik-sac-salonu",
+  eticaret_giyim: "e-ticaret-giyim",
 };
 
 export function resolveBusinessSectorFromCore(
@@ -53,6 +63,12 @@ export function resolveBusinessSectorFromCore(
 export const CORE_QUESTION_SUPPORTED_SECTORS: BusinessSector[] = Object.values(
   CORE_TO_BUSINESS_SECTOR,
 );
+
+export const CORE_QUESTION_SUPPORTED_LABELS_TEXT =
+  CORE_QUESTION_SUPPORTED_SECTORS.map((slug) => {
+    const core = SECTOR_SLUG_TO_CORE[slug];
+    return core ? CORE_SECTOR_LABELS[core] : slug;
+  }).join(", ");
 
 export function isCoreQuestionSectorSupported(
   sector: BusinessSector | "",

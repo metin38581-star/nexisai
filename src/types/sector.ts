@@ -10,7 +10,10 @@ export type ForumSectorKey =
   | "oto_servis_ekspertiz"
   | "surucu_kursu"
   | "egitim_kurs"
-  | "dijital_ajans";
+  | "dijital_ajans"
+  | "oto_galeri_otomotiv"
+  | "guzellik_sac_salonu"
+  | "eticaret_giyim";
 
 export type Sector = ForumSectorKey;
 
@@ -26,6 +29,9 @@ export const FORUM_SECTOR_KEYS: ForumSectorKey[] = [
   "surucu_kursu",
   "egitim_kurs",
   "dijital_ajans",
+  "oto_galeri_otomotiv",
+  "guzellik_sac_salonu",
+  "eticaret_giyim",
 ];
 
 export const FORUM_SECTOR_LABELS: Record<ForumSectorKey, string> = {
@@ -40,4 +46,7 @@ export const FORUM_SECTOR_LABELS: Record<ForumSectorKey, string> = {
   surucu_kursu: "Sürücü Kursu",
   egitim_kurs: "Eğitim & Kurs",
   dijital_ajans: "Dijital Ajans",
+  oto_galeri_otomotiv: "Oto Galeri & Otomotiv",
+  guzellik_sac_salonu: "Güzellik & Saç Salonu",
+  eticaret_giyim: "E-Ticaret & Giyim",
 };

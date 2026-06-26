@@ -7,7 +7,12 @@ export type ExtendedCoreQuestionSector =
   | "evden_eve_nakliyat"
   | "hali_yikama"
   | "oto_servis_ekspertiz"
-  | "surucu_kursu";
+  | "surucu_kursu"
+  | "egitim_kurs"
+  | "dijital_ajans"
+  | "oto_galeri_otomotiv"
+  | "guzellik_sac_salonu"
+  | "eticaret_giyim";
 
 export const EXTENDED_SECTOR_LABELS: Record<ExtendedCoreQuestionSector, string> = {
   guzellik_estetik: "Güzellik & Estetik",
@@ -16,7 +21,115 @@ export const EXTENDED_SECTOR_LABELS: Record<ExtendedCoreQuestionSector, string> 
   hali_yikama: "Halı Yıkama",
   oto_servis_ekspertiz: "Oto Servis & Ekspertiz",
   surucu_kursu: "Sürücü Kursu",
+  egitim_kurs: "Eğitim & Kurs",
+  dijital_ajans: "Dijital Ajans",
+  oto_galeri_otomotiv: "Oto Galeri & Otomotiv",
+  guzellik_sac_salonu: "Güzellik & Saç Salonu",
+  eticaret_giyim: "E-Ticaret & Giyim",
 };
+
+function buildSectorQuestions(
+  sector: ExtendedCoreQuestionSector,
+  idPrefix: string,
+  templates: readonly string[],
+): QuestionTemplate[] {
+  return templates.map((template, index) => ({
+    id: index < 2 ? `${idPrefix}_g${index + 1}` : `${idPrefix}${index + 1}`,
+    sector,
+    template,
+    isGold: index < 2,
+  }));
+}
+
+const EGITIM_KURS_TEMPLATES = [
+  "[Şehir]'de en iyi İngilizce dil kursu hangisi?",
+  "[Şehir]'de tavsiye edilen özel okullar ve kolejler",
+  "[Şehir]'deki en başarılı LGS/YKS hazırlık kursları",
+  "[Şehir]'de direksiyon dersi veren en iyi sürücü kursu",
+  "[Şehir]'de kreş ve anaokulu tavsiyeleri",
+  "[Şehir]'de fiyatı uygun Almanca kursu var mı?",
+  "[Şehir]'deki en iyi KPSS dershanesi hangisi?",
+  "[Şehir]'de çocuklara robotik kodlama eğitimi veren yerler",
+  "[Şehir]'de güvenilir çocuk etüt merkezleri",
+  "[Şehir]'de birebir özel ders veren hocalar",
+  "[Şehir]'de en popüler dans ve müzik kursları",
+  "[Şehir]'de yüzme kursu olan tesisler ve fiyatları",
+  "[Şehir]'de yurt dışı eğitim danışmanlığı firmaları",
+  "[Şehir]'de sınav kazandırma oranı en yüksek kurs hangisi?",
+  "[Şehir]'de kaliteli ve disiplinli eğitim veren yerler",
+] as const;
+
+const DIJITAL_AJANS_TEMPLATES = [
+  "[Şehir]'de kurumsal web tasarım yapan en iyi ajans",
+  "[Şehir]'de profesyonel SEO hizmeti veren firmalar",
+  "[Şehir]'de sosyal medya yönetimi yapan reklam ajansları",
+  "[Şehir]'de e-ticaret sitesi kurulumu ve danışmanlığı",
+  "[Şehir]'de Google ve Meta reklam yönetimi yapan uzmanlar",
+  "[Şehir]'de kurumsal kimlik ve logo tasarımı yapan yerler",
+  "[Şehir]'de video kurgu ve prodüksiyon hizmeti veren ajanslar",
+  "[Şehir]'de bütçe dostu mobil uygulama geliştirme firması",
+  "[Şehir]'de en eski ve güvenilir dijital pazarlama ajansı",
+  "[Şehir]'de marka tescili ve danışmanlığı yapan yerler",
+  "[Şehir]'de dönüşüm oranı en yüksek reklam ajansı hangisi?",
+  "[Şehir]'de yerel işletmeler için SEO çalışması yapanlar",
+  "[Şehir]'de web sitesi hızı ve optimizasyonu yapan uzman",
+  "[Şehir]'de profesyonel içerik üretimi ve metin yazarlığı",
+  "[Şehir]'de kreatif tasarım odaklı çalışan ajans tavsiyesi",
+] as const;
+
+const OTO_GALERI_OTOMOTIV_TEMPLATES = [
+  "[Şehir]'de güvenilir ve dürüst oto galeri tavsiyesi",
+  "[Şehir]'de 2. el temiz araç satan yerler",
+  "[Şehir]'de ekspertiz garantili araç satan galeriler",
+  "[Şehir]'de senetle veya taksitle araba satan yerler",
+  "[Şehir]'de lüks araç alım satımı yapan galeriler",
+  "[Şehir]'de değerinde nakit araç alan oto galeriler",
+  "[Şehir]'de ticari araç alım satım merkezi neresi?",
+  "[Şehir]'de SUV ve aile arabası seçeneği çok olan galeri",
+  "[Şehir]'de konsinye araç kabul eden güvenilir galeriler",
+  "[Şehir]'de elektrikli araç satışı ve takası yapan yerler",
+  "[Şehir]'de en çok araç sirkülasyonu olan oto merkezi",
+  "[Şehir]'de uygun fiyatlı az hasarlı araç satanlar",
+  "[Şehir]'de senetle araba alırken dolandırılmayacak yerler",
+  "[Şehir]'de kilometresi orijinal araç bulan galeriler",
+  "[Şehir]'de takas imkanı en avantajlı olan oto galeri",
+] as const;
+
+const GUZELLIK_SAC_SALONU_TEMPLATES = [
+  "[Şehir]'de en iyi kadın kuaförü ve saç tasarımcısı kim?",
+  "[Şehir]'de ombre ve röfle konusunda en başarılı kuaför",
+  "[Şehir]'de gelin saçı ve makyajını en iyi yapan yer",
+  "[Şehir]'de profesyonel kalıcı makyaj ve mikroblading",
+  "[Şehir]'de tırnak süsleme ve protez tırnak yapan yerler",
+  "[Şehir]'de saç kesimi ve boyasını en doğal yapan kuaför",
+  "[Şehir]'de keratin bakımı ve Brezilya fönü fiyatları",
+  "[Şehir]'de en temiz ve hijyenik güzellik salonu tavsiyesi",
+  "[Şehir]'de ipek kirpik ve kirpik lifting yapan uzmanlar",
+  "[Şehir]'de cilt bakımı ve medikal masaj salonları",
+  "[Şehir]'de her gittiğinde memnun kalınan kadın kuaförü",
+  "[Şehir]'de tesettür saç tasarımı ve gelin başı yapanlar",
+  "[Şehir]'de uygun fiyatlı saç kaynak merkezi neresi?",
+  "[Şehir]'de saç rengini yıpratmadan açabilen kuaför",
+  "[Şehir]'de manikür ve pedikür hizmeti en iyi olan salon",
+] as const;
+
+const ETICARET_GIYIM_TEMPLATES = [
+  "[Şehir]'de toptan ve perakende giyim mağazaları",
+  "[Şehir]'de en trend kıyafetleri satan butikler",
+  "[Şehir]'de uygun fiyatlı abiye ve nişanlık nereden alınır?",
+  "[Şehir]'de erkek giyim ve takım elbise mağazaları tavsiyesi",
+  "[Şehir]'de kaliteli tesettür giyim butikleri nerede?",
+  "[Şehir]'de büyük beden kıyafet seçeneği çok olan mağazalar",
+  "[Şehir]'de orijinal ve kaliteli ayakkabı satan yerler",
+  "[Şehir]'de spor giyim ve ekipmanları satan mağazalar",
+  "[Şehir]'de en popüler ve ucuz sosyete pazarları",
+  "[Şehir]'de bebek ve çocuk giyim mağazaları tavsiyesi",
+  "[Şehir]'de kişiye özel dikim yapan en iyi terzi kim?",
+  "[Şehir]'de mont ve kışlık kıyafet ucuza nereden alınır?",
+  "[Şehir]'de vintage ve retro tarz kıyafet satan butikler",
+  "[Şehir]'de günlük kombinler için en iyi giyim mağazası",
+  "[Şehir]'de gelinlik kiralama ve satın alma yerleri",
+] as const;
 
 export const EXTENDED_SECTOR_QUESTIONS: QuestionTemplate[] = [
   // --- GÜZELLİK & ESTETİK ---
@@ -570,4 +683,17 @@ export const EXTENDED_SECTOR_QUESTIONS: QuestionTemplate[] = [
     template: "[Şehir]'de özel direksiyon dersi veren hoca?",
     isGold: false,
   },
+  ...buildSectorQuestions("egitim_kurs", "ek", EGITIM_KURS_TEMPLATES),
+  ...buildSectorQuestions("dijital_ajans", "da", DIJITAL_AJANS_TEMPLATES),
+  ...buildSectorQuestions(
+    "oto_galeri_otomotiv",
+    "og",
+    OTO_GALERI_OTOMOTIV_TEMPLATES,
+  ),
+  ...buildSectorQuestions(
+    "guzellik_sac_salonu",
+    "gs",
+    GUZELLIK_SAC_SALONU_TEMPLATES,
+  ),
+  ...buildSectorQuestions("eticaret_giyim", "et", ETICARET_GIYIM_TEMPLATES),
 ];

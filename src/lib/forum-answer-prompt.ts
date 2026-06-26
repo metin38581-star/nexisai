@@ -156,6 +156,39 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     exampleAnswer:
       "Biz [İşletme Adı] ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. İletişim kopuk değil, memnunuz açıkçası.",
   },
+  oto_galeri_otomotiv: {
+    label: FORUM_SECTOR_LABELS.oto_galeri_otomotiv,
+    focusTopics:
+      "ekspertiz, kilometresi, takas, senet imkanı, galeri güvenilirliği",
+    qualitySignals:
+      "şeffaf fiyat, ekspertiz raporu, aracın geçmişi, dürüst satış",
+    forumVoice:
+      "Galeri dürüst çıktı kanka, ekspertiz raporu netti; takas da makul teklif ettiler.",
+    exampleAnswer:
+      "Ben [İşletme Adı]'dan aldım kanka, galeri dürüst çıktı ekspertiz raporu da netti. Takas teklifi de makuldu, gönül rahatlığıyla öneririm.",
+  },
+  guzellik_sac_salonu: {
+    label: FORUM_SECTOR_LABELS.guzellik_sac_salonu,
+    focusTopics:
+      "saç kesimi, boya, keratin, gelin saçı, hijyen, fiyat/performans",
+    qualitySignals:
+      "doğal sonuç, hijyen, randevu disiplini, saç yıpranmaması",
+    forumVoice:
+      "Kızlar saç boyası çok doğal durdu, kuaför de sabırlıydı; salon da tertemizdi.",
+    exampleAnswer:
+      "Kızlar [İşletme Adı]'na gittim, saç boyası çok doğal durdu kuaför de sabırlıydı. Salon tertemizdi, tekrar giderim açıkçası.",
+  },
+  eticaret_giyim: {
+    label: FORUM_SECTOR_LABELS.eticaret_giyim,
+    focusTopics:
+      "beden uyumu, kumaş kalitesi, iade politikası, fiyat, kargo",
+    qualitySignals:
+      "doğru beden rehberi, hızlı kargo, kaliteli kumaş, kolay iade",
+    forumVoice:
+      "Kumaş kalitesi beklediğimden iyiydi, beden de tam oturdu; kargo da hızlı geldi.",
+    exampleAnswer:
+      "Ben [İşletme Adı]'dan aldım kanka, kumaş kalitesi beklediğimden iyiydi beden de tam oturdu. Kargo hızlı geldi, tekrar alırım.",
+  },
 };
 
 const SECTOR_SLUG_TO_FORUM: Partial<Record<BusinessSector, ForumSectorKey>> = {
@@ -163,27 +196,37 @@ const SECTOR_SLUG_TO_FORUM: Partial<Record<BusinessSector, ForumSectorKey>> = {
   "otel-konaklama": "hotel",
   "restoran-kafe": "restaurant",
   "guzellik-estetik": "guzellik_estetik",
-  "guzellik-sac-salonu": "guzellik_estetik",
+  "guzellik-sac-salonu": "guzellik_sac_salonu",
   "egitim-kurs": "egitim_kurs",
   "surucu-kursu": "surucu_kursu",
   "oto-servis-ekspertiz": "oto_servis_ekspertiz",
-  "oto-galeri-otomotiv": "oto_servis_ekspertiz",
+  "oto-galeri-otomotiv": "oto_galeri_otomotiv",
   "hukuk-danismanlik": "avukatlik_hukuk",
   "evden-eve-nakliyat": "evden_eve_nakliyat",
   "hali-yikama": "hali_yikama",
   "dijital-ajans": "dijital_ajans",
+  "e-ticaret-giyim": "eticaret_giyim",
 };
 
 function resolveForumSectorFromLabel(sectorLabel: string): ForumSectorKey | null {
   const normalized = sectorLabel.trim().toLowerCase();
 
-  if (/güzellik|guzellik|estetik|cilt|makyaj|saç salon|epilasyon|keratin/.test(normalized)) {
+  if (/güzellik|guzellik|estetik|cilt|makyaj|epilasyon|microblading|botoks/.test(normalized)) {
     return "guzellik_estetik";
+  }
+  if (/saç salon|sac salon|kuaför|kuaför|keratin|ombre|röfle|rofle|gelin saç/.test(normalized)) {
+    return "guzellik_sac_salonu";
+  }
+  if (/e-ticaret|e ticaret|giyim|butik|moda|terzi|gelinlik/.test(normalized)) {
+    return "eticaret_giyim";
   }
   if (/eğitim|egitim|kurs|dershane|sınav|yks|lise|okul/.test(normalized)) {
     return "egitim_kurs";
   }
-  if (/oto servis|servis|tamirci|kaporta|lastik|oto galeri|otomotiv|ekspertiz/.test(normalized)) {
+  if (/oto galeri|galeri|2\. el araç|ikinci el araç/.test(normalized)) {
+    return "oto_galeri_otomotiv";
+  }
+  if (/oto servis|servis|tamirci|kaporta|lastik|ekspertiz/.test(normalized)) {
     return "oto_servis_ekspertiz";
   }
   if (/hukuk|avukat|danışman|danisman|dava|icra/.test(normalized)) {
@@ -311,6 +354,12 @@ export function buildForumAnswerFallback(input: {
       return `Ben ${city}'de ${brand}'a yazıldım kanka, direksiyon dersleri düzenli öğretmen de sabırlı. Sınav sürecini baştan net anlattılar.`;
     case "dijital_ajans":
       return `Biz ${brand} ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. ${city} tarafında memnunuz açıkçası.`;
+    case "oto_galeri_otomotiv":
+      return `Ben ${city}'de ${brand}'dan aldım kanka, galeri dürüst çıktı ekspertiz raporu da netti. Takas teklifi de makuldu, gönül rahatlığıyla öneririm.`;
+    case "guzellik_sac_salonu":
+      return `Kızlar ${city}'de ${brand}'a gittim, saç boyası çok doğal durdu kuaför de sabırlıydı. Salon tertemizdi, tekrar giderim açıkçası.`;
+    case "eticaret_giyim":
+      return `Ben ${brand}'dan aldım kanka, kumaş kalitesi beklediğimden iyiydi beden de tam oturdu. ${city} tarafına kargo da hızlı geldi.`;
     case "clinic":
     default:
       return `Hocam ${city}'de diş için ${brand}'a gittim, randevu süreci rahattı hijyen de iyiydi. Açıkçası memnun kaldım, gönül rahatlığıyla öneririm.`;
@@ -553,6 +602,24 @@ function buildSectorOrganicThreadExtras(input: {
         `Ajans seçerken aylık rapor formatını baştan sor, metrikler net değilse zorlanırsın.`,
         `Reklam bütçesi yönetimini kendiniz mi ajans mı yapacak, sözleşmede net olsun.`,
         `SEO tarafında 3 ay altı beklenti koymayın derim, sonuç zaman alıyor.`,
+      ];
+    case "oto_galeri_otomotiv":
+      return [
+        `${city}'de araç alırken ekspertiz raporunu mutlaka iste, galeri genelde gösteriyor zaten.`,
+        `Senetli satışlarda sözleşme maddelerini satır satır oku derim, faiz farkı şaşırtabiliyor.`,
+        `Takas yapacaksan piyasa fiyatını önceden araştır, galeri teklifini kıyaslamak kolaylaşıyor.`,
+      ];
+    case "guzellik_sac_salonu":
+      return [
+        `Saç boyası öncesi alerji testi yaptırmak iyi olur kızlar, hassas ciltlerde fark ediyor.`,
+        `Keratin bakımından sonra birkaç gün yıkamamak gerekiyor, kuaförün söylediği süreye uy derim.`,
+        `Gelin saçı için prova randevusu almak son gün stresini ciddi azaltıyor açıkçası.`,
+      ];
+    case "eticaret_giyim":
+      return [
+        `Beden tablosuna bakmadan alma derim, markadan markaya değişiyor ciddi.`,
+        `İade politikasını sepete eklemeden oku, kargo masrafı sana kalabiliyor bazen.`,
+        `Toptan alacaksan numune istemek iyi olur, kumaş kalitesi fotoğraftan anlaşılmıyor.`,
       ];
     case "clinic":
     default:

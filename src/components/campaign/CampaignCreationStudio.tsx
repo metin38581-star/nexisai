@@ -32,6 +32,7 @@ import {
   isCoreQuestionSectorSupported,
   pickDefaultCoreQuestionIds,
   resolveMaxSelection,
+  CORE_QUESTION_SUPPORTED_LABELS_TEXT,
 } from "@/lib/core-questions";
 
 interface CampaignCreationStudioProps {
@@ -51,9 +52,6 @@ const initialForm: CampaignFormData = {
 };
 
 const inputClass = "dc-cyber-input";
-
-const SUPPORTED_SECTOR_LABELS =
-  "Diş Kliniği, Otel, Restoran, Güzellik & Estetik, Avukatlık & Hukuk, Evden Eve Nakliyat, Halı Yıkama, Oto Servis & Ekspertiz ve Sürücü Kursu";
 
 export default function CampaignCreationStudio({
   onSubmit,
@@ -194,7 +192,7 @@ export default function CampaignCreationStudio({
 
     if (!isCoreQuestionSectorSupported(form.sector)) {
       setFormError(
-        `Kemik soru havuzu yalnızca ${SUPPORTED_SECTOR_LABELS} sektörlerinde kullanılabilir.`,
+        `Kemik soru havuzu yalnızca ${CORE_QUESTION_SUPPORTED_LABELS_TEXT} sektörlerinde kullanılabilir.`,
       );
       return;
     }
