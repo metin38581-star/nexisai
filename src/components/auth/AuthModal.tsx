@@ -6,7 +6,6 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { formatWelcomeBalanceMessage } from "@/lib/wallet-constants";
-import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import {
   isSupabaseConfigured,
   SUPABASE_SETUP_HINT,
@@ -55,7 +54,6 @@ async function requestAuthSession(
     email: string;
     password: string;
     companyName?: string;
-    otpCode?: string;
   },
   signal: AbortSignal,
 ): Promise<AuthSessionResponse> {
@@ -95,10 +93,7 @@ export default function AuthModal({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [registerStep, setRegisterStep] = useState<"form" | "otp">("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
@@ -107,12 +102,9 @@ export default function AuthModal({
       setFullName("");
       setEmail("");
       setPassword("");
-      setOtpCode("");
-      setRegisterStep("form");
       setErrorMessage(null);
       submittingRef.current = false;
       setIsSubmitting(false);
-      setIsSendingOtp(false);
     }
   }, [isOpen]);
 
@@ -141,38 +133,11 @@ export default function AuthModal({
       return "Şifre alanı zorunludur.";
     }
 
-    if (trimmedPassword.length < 6) {
-      return "Şifre en az 6 karakter olmalıdır.";
+    if (trimmedPassword.length < 8) {
+      return "Şifre en az 8 karakter olmalıdır.";
     }
 
     return null;
-  };
-
-  const sendOtp = async (): Promise<boolean> => {
-    setIsSendingOtp(true);
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch("/api/auth/otp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), purpose: "register" }),
-      });
-      const result = (await response.json()) as { success?: boolean; error?: string };
-
-      if (!response.ok || !result.success) {
-        setErrorMessage(result.error ?? "Doğrulama kodu gönderilemedi.");
-        return false;
-      }
-
-      toast.success("Doğrulama kodu e-posta adresinize gönderildi.");
-      return true;
-    } catch {
-      setErrorMessage("Doğrulama kodu gönderilemedi. Lütfen tekrar deneyin.");
-      return false;
-    } finally {
-      setIsSendingOtp(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -201,28 +166,6 @@ export default function AuthModal({
       return;
     }
 
-    if (isRegister && registerStep === "form" && !OTP_BYPASS_ENABLED) {
-      const sent = await sendOtp();
-      submittingRef.current = false;
-      setIsSubmitting(false);
-      if (sent) {
-        setRegisterStep("otp");
-      }
-      return;
-    }
-
-    if (
-      isRegister &&
-      !OTP_BYPASS_ENABLED &&
-      registerStep === "otp" &&
-      !/^\d{6}$/.test(otpCode.trim())
-    ) {
-      setErrorMessage("6 haneli doğrulama kodunu girin.");
-      submittingRef.current = false;
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => {
@@ -237,12 +180,7 @@ export default function AuthModal({
             action: isRegister ? "register" : "login",
             email: email.trim(),
             password: password.trim(),
-            ...(isRegister
-              ? {
-                  companyName: fullName.trim(),
-                  ...(OTP_BYPASS_ENABLED ? {} : { otpCode: otpCode.trim() }),
-                }
-              : {}),
+            ...(isRegister ? { companyName: fullName.trim() } : {}),
           },
           controller.signal,
         );
@@ -285,14 +223,12 @@ export default function AuthModal({
           authResult.welcomeBalance > 0
         ) {
           toast.success(
-            `Hesabınız doğrulandı! ${authResult.welcomeBalance.toLocaleString("tr-TR")} ₺ hediye bakiyeniz tanımlandı. 🎁`,
+            `Hesabınız oluşturuldu! ${authResult.welcomeBalance.toLocaleString("tr-TR")} ₺ hediye bakiyeniz tanımlandı. 🎁`,
           );
         } else {
-          toast.success("Hesabınız doğrulandı! Hoş geldiniz. 🎁");
+          toast.success("Hesabınız oluşturuldu! Hoş geldiniz. 🎁");
         }
-        if (OTP_BYPASS_ENABLED) {
-          router.push("/dashboard");
-        }
+        router.push("/dashboard");
       }
 
       onSuccess({
@@ -426,39 +362,11 @@ export default function AuthModal({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isSubmitting}
-                placeholder="En az 6 karakter"
+                placeholder="En az 8 karakter"
                 autoComplete={isRegister ? "new-password" : "current-password"}
                 className={inputClassName}
               />
             </div>
-
-            {/* OTP adımı — OTP_BYPASS_ENABLED iken gizli; tekrar açmak için bypass'ı kapatın */}
-            {isRegister && !OTP_BYPASS_ENABLED && registerStep === "otp" && (
-              <div>
-                <label className="mb-2 block text-sm font-medium text-zinc-300">
-                  E-posta Doğrulama Kodu
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="6 haneli kod"
-                  disabled={isSubmitting}
-                  autoComplete="one-time-code"
-                  className={inputClassName}
-                />
-                <button
-                  type="button"
-                  disabled={isSendingOtp || isSubmitting}
-                  onClick={() => void sendOtp()}
-                  className="mt-2 text-xs font-medium text-violet-400 hover:text-violet-300 disabled:opacity-50"
-                >
-                  {isSendingOtp ? "Kod gönderiliyor..." : "Kodu tekrar gönder"}
-                </button>
-              </div>
-            )}
 
             {errorMessage ? (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -482,20 +390,10 @@ export default function AuthModal({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {isRegister
-                      ? OTP_BYPASS_ENABLED
-                        ? "Kaydediliyor..."
-                        : registerStep === "otp"
-                          ? "Doğrulanıyor..."
-                          : "Kod Gönderiliyor..."
-                      : "Giriş Yapılıyor..."}
+                    {isRegister ? "Kaydediliyor..." : "Giriş Yapılıyor..."}
                   </>
                 ) : isRegister ? (
-                  !OTP_BYPASS_ENABLED && registerStep === "otp" ? (
-                    `Doğrula ve ${formatWelcomeBalanceMessage()} Hediye Bakiyeni Al 🎁`
-                  ) : (
-                    "Doğrulama Kodu Gönder 📧"
-                  )
+                  `Kayıt Ol ve ${formatWelcomeBalanceMessage()} Hediye Bakiyeni Al 🎁`
                 ) : (
                   "Giriş Yap ve Paneli Aç 🔐"
                 )}

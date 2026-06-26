@@ -1,27 +1,5 @@
 import "server-only";
 
-const APP_NAME = "NexisAI";
-
-export async function sendOtpEmail(
-  email: string,
-  code: string,
-): Promise<void> {
-  const subject = `${APP_NAME} — E-posta Doğrulama Kodu`;
-  const body = [
-    `${APP_NAME} hesabınızı doğrulamak için tek kullanımlık kodunuz:`,
-    "",
-    code,
-    "",
-    "Bu kod 10 dakika geçerlidir.",
-  ].join("\n");
-
-  if (process.env.SMTP_URL) {
-    console.log("[email-service] SMTP_URL tanımlı — OTP e-postası gönderildi:", email);
-  } else {
-    console.log("[email-service] OTP (dev):", { email, subject, code, body });
-  }
-}
-
 export async function sendGrowthLoopEmail(
   email: string,
   userName: string,

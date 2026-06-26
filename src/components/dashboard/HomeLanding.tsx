@@ -203,7 +203,7 @@ export default function HomeLanding() {
             {WELCOME_BALANCE_TL.toLocaleString("tr-TR")} ₺ Hediye Bakiye ile Hemen Deneyin
           </h2>
           <p className="relative mx-auto mt-3 max-w-md text-sm text-[#94a3b8]">
-            Kayıt olun, OTP ile doğrulayın ve ilk GEO kampanyanızı dakikalar
+            Kayıt olun ve ilk GEO kampanyanızı dakikalar
             içinde başlatın.
           </p>
           <Link

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
-import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { verifyOtpCode } from "@/lib/otp-service";
 import { grantWelcomeBalance } from "@/lib/user-wallet-service";
 
 type AuthAction = "register" | "login";
@@ -13,7 +11,6 @@ interface AuthSessionRequest {
   email?: string;
   password?: string;
   companyName?: string;
-  otpCode?: string;
 }
 
 function resolveSiteUrl(request: Request): string | undefined {
@@ -49,13 +46,11 @@ function validatePayload(body: AuthSessionRequest): {
   email: string;
   password: string;
   companyName?: string;
-  otpCode?: string;
 } | { error: string } {
   const action = body.action;
   const email = body.email?.trim() ?? "";
   const password = body.password?.trim() ?? "";
   const companyName = body.companyName?.trim();
-  const otpCode = body.otpCode?.trim();
 
   if (action !== "register" && action !== "login") {
     return { error: "Geçersiz oturum işlemi." };
@@ -63,19 +58,6 @@ function validatePayload(body: AuthSessionRequest): {
 
   if (action === "register" && !companyName) {
     return { error: "İşletme adı zorunludur." };
-  }
-
-  if (action === "register" && !OTP_BYPASS_ENABLED && !otpCode) {
-    return { error: "E-posta doğrulama kodu zorunludur." };
-  }
-
-  if (
-    action === "register" &&
-    !OTP_BYPASS_ENABLED &&
-    otpCode &&
-    !/^\d{6}$/.test(otpCode)
-  ) {
-    return { error: "Geçerli 6 haneli doğrulama kodu girin." };
   }
 
   if (!email) {
@@ -94,7 +76,7 @@ function validatePayload(body: AuthSessionRequest): {
     return { error: "Şifre en az 8 karakter olmalıdır." };
   }
 
-  return { action, email, password, companyName, otpCode };
+  return { action, email, password, companyName };
 }
 
 export async function POST(request: Request) {
@@ -109,22 +91,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const { action, email, password, companyName, otpCode } = validated;
+    const { action, email, password, companyName } = validated;
     const supabase = await createSupabaseServerClient();
     const siteUrl = resolveSiteUrl(request);
-
-    if (action === "register" && !OTP_BYPASS_ENABLED) {
-      const otpValid = await verifyOtpCode(email, otpCode ?? "", "register");
-      if (!otpValid) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Doğrulama kodu geçersiz veya süresi dolmuş.",
-          },
-          { status: 400 },
-        );
-      }
-    }
 
     const authResult =
       action === "register"

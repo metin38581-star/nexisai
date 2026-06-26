@@ -10,7 +10,6 @@ import {
   DEFAULT_WALLET_TOPUP_TL,
   formatWelcomeBalanceMessage,
 } from "@/lib/wallet-constants";
-import { OTP_BYPASS_ENABLED } from "@/lib/otp-bypass";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import {
@@ -38,11 +37,8 @@ export default function RegisterWalletPanelContent({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otpCode, setOtpCode] = useState("");
   const [topUpAmount, setTopUpAmount] = useState(String(DEFAULT_WALLET_TOPUP_TL));
-  const [registerStep, setRegisterStep] = useState<"form" | "otp">("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldReveal, setFieldReveal] = useState(0);
 
@@ -74,39 +70,8 @@ export default function RegisterWalletPanelContent({
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return "Geçerli bir e-posta adresi girin.";
     }
-    if (password.trim().length < 6) return "Şifre en az 6 karakter olmalıdır.";
+    if (password.trim().length < 8) return "Şifre en az 8 karakter olmalıdır.";
     return null;
-  };
-
-  const sendOtp = async (): Promise<boolean> => {
-    const validationError = validateRegister();
-    if (validationError) {
-      setErrorMessage(validationError);
-      return false;
-    }
-
-    setIsSendingOtp(true);
-    setErrorMessage(null);
-    try {
-      const response = await fetch("/api/auth/otp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), purpose: "register" }),
-      });
-      const result = (await response.json()) as { success?: boolean; error?: string };
-      if (!response.ok || !result.success) {
-        setErrorMessage(result.error ?? "Doğrulama kodu gönderilemedi.");
-        return false;
-      }
-      toast.success("Doğrulama kodu e-posta adresinize gönderildi.");
-      setRegisterStep("otp");
-      return true;
-    } catch {
-      setErrorMessage("Doğrulama kodu gönderilemedi.");
-      return false;
-    } finally {
-      setIsSendingOtp(false);
-    }
   };
 
   const completeRegister = async (): Promise<void> => {
@@ -134,7 +99,6 @@ export default function RegisterWalletPanelContent({
           email: email.trim(),
           password: password.trim(),
           companyName: fullName.trim(),
-          ...(OTP_BYPASS_ENABLED ? {} : { otpCode: otpCode.trim() }),
         }),
       });
       const result = (await response.json()) as {
@@ -161,10 +125,10 @@ export default function RegisterWalletPanelContent({
 
       if (typeof result.welcomeBalance === "number" && result.welcomeBalance > 0) {
         toast.success(
-          `Hesabınız doğrulandı! ${result.welcomeBalance.toLocaleString("tr-TR")} ₺ hediye bakiyeniz tanımlandı. 🎁`,
+          `Hesabınız oluşturuldu! ${result.welcomeBalance.toLocaleString("tr-TR")} ₺ hediye bakiyeniz tanımlandı. 🎁`,
         );
       } else {
-        toast.success("Hesabınız doğrulandı! Hoş geldiniz. 🎁");
+        toast.success("Hesabınız oluşturuldu! Hoş geldiniz. 🎁");
       }
       onClose();
       router.push("/dashboard");
@@ -178,22 +142,6 @@ export default function RegisterWalletPanelContent({
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-
-    if (OTP_BYPASS_ENABLED) {
-      await completeRegister();
-      return;
-    }
-
-    if (registerStep === "form") {
-      await sendOtp();
-      return;
-    }
-
-    if (!/^\d{6}$/.test(otpCode.trim())) {
-      setErrorMessage("6 haneli doğrulama kodunu girin.");
-      return;
-    }
-
     await completeRegister();
   };
 
@@ -279,7 +227,7 @@ export default function RegisterWalletPanelContent({
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Örn: Nexis Diş Kliniği"
-                disabled={isSubmitting || registerStep === "otp"}
+                disabled={isSubmitting}
                 className={inputClassName}
                 autoComplete="organization"
               />
@@ -293,7 +241,7 @@ export default function RegisterWalletPanelContent({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ornek@isletme.com"
-                disabled={isSubmitting || registerStep === "otp"}
+                disabled={isSubmitting}
                 className={inputClassName}
                 autoComplete="email"
               />
@@ -306,31 +254,12 @@ export default function RegisterWalletPanelContent({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="En az 6 karakter"
-                disabled={isSubmitting || registerStep === "otp"}
+                placeholder="En az 8 karakter"
+                disabled={isSubmitting}
                 className={inputClassName}
                 autoComplete="new-password"
               />
             </div>
-            {/* OTP adımı — OTP_BYPASS_ENABLED iken gizli; tekrar açmak için bypass'ı kapatın */}
-            {!OTP_BYPASS_ENABLED && registerStep === "otp" && (
-              <div style={fieldStyle(4)}>
-                <label className="mb-2 block text-sm font-medium text-zinc-300">
-                  E-posta Doğrulama Kodu
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="6 haneli kod"
-                  disabled={isSubmitting}
-                  className={inputClassName}
-                  autoComplete="one-time-code"
-                />
-              </div>
-            )}
             {errorMessage ? (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                 {errorMessage}
@@ -339,25 +268,19 @@ export default function RegisterWalletPanelContent({
             <div style={fieldStyle(4)}>
               <button
                 type="submit"
-                disabled={isSubmitting || isSendingOtp}
+                disabled={isSubmitting}
                 className="lf-register-btn relative w-full min-h-[48px] overflow-hidden rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 <span className="absolute inset-0 bg-neon-gradient opacity-90" />
                 <span className="absolute inset-[1px] rounded-[11px] bg-slate-950/15 backdrop-blur-sm" />
                 <span className="relative inline-flex items-center justify-center gap-2">
-                  {isSubmitting || isSendingOtp ? (
+                  {isSubmitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {OTP_BYPASS_ENABLED
-                        ? "Kaydediliyor..."
-                        : registerStep === "otp"
-                          ? "Doğrulanıyor..."
-                          : "Gönderiliyor..."}
+                      Kaydediliyor...
                     </>
-                  ) : !OTP_BYPASS_ENABLED && registerStep === "otp" ? (
-                    `Doğrula ve ${formatWelcomeBalanceMessage()} Hediye Bakiyeni Al 🎁`
                   ) : (
-                    "Doğrulama Kodu Gönder 📧"
+                    `Kayıt Ol ve ${formatWelcomeBalanceMessage()} Hediye Bakiyeni Al 🎁`
                   )}
                 </span>
               </button>
