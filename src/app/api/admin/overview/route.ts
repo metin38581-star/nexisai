@@ -4,9 +4,9 @@ import { assertSuperAdminAccess } from "@/lib/admin-auth";
 import { listAdminCampaignOverview } from "@/lib/admin-store";
 import { handleApiRouteError } from "@/lib/api-error";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const access = await assertSuperAdminAccess(request);
+    const access = await assertSuperAdminAccess();
     if (!access.ok) {
       return access.response;
     }

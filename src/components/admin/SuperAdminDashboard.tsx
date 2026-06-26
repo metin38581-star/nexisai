@@ -16,13 +16,7 @@ import type {
   AdminCampaignOverviewRow,
   AdminOverviewStats,
 } from "@/types/admin";
-import { useAuth } from "@/context/AuthContext";
-import { buildAuthFetchInit } from "@/lib/auth-headers";
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
-
-interface SuperAdminDashboardProps {
-  adminEmail: string;
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("tr-TR", {
@@ -93,10 +87,7 @@ function KpiCard({
   );
 }
 
-export default function SuperAdminDashboard({
-  adminEmail,
-}: SuperAdminDashboardProps) {
-  const { accessToken, isAuthReady } = useAuth();
+export default function SuperAdminDashboard() {
   const [rows, setRows] = useState<AdminCampaignOverviewRow[]>([]);
   const [stats, setStats] = useState<AdminOverviewStats>({
     totalUsers: 0,
@@ -108,107 +99,27 @@ export default function SuperAdminDashboard({
   const [searchQuery, setSearchQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState("");
-  const [portalChecking, setPortalChecking] = useState(true);
-  const [portalVerified, setPortalVerified] = useState(false);
-  const [passwordRequired, setPasswordRequired] = useState(false);
-  const [portalPassword, setPortalPassword] = useState("");
-  const [portalError, setPortalError] = useState<string | null>(null);
-  const [portalSubmitting, setPortalSubmitting] = useState(false);
-
-  const checkPortalSession = useCallback(async () => {
-    if (!accessToken) {
-      setPortalChecking(false);
-      setPortalVerified(false);
-      return;
-    }
-
-    setPortalChecking(true);
-
-    try {
-      const response = await fetch(
-        "/api/admin/portal-auth",
-        buildAuthFetchInit(accessToken),
-      );
-      const payload = (await response.json()) as {
-        verified?: boolean;
-        passwordRequired?: boolean;
-        needsPortalAuth?: boolean;
-      };
-
-      setPasswordRequired(Boolean(payload.passwordRequired));
-      setPortalVerified(Boolean(payload.verified));
-    } catch {
-      setPortalVerified(false);
-    } finally {
-      setPortalChecking(false);
-    }
-  }, [accessToken]);
-
-  const submitPortalPassword = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!accessToken || !portalPassword.trim()) {
-      return;
-    }
-
-    setPortalSubmitting(true);
-    setPortalError(null);
-
-    try {
-      const response = await fetch(
-        "/api/admin/portal-auth",
-        buildAuthFetchInit(accessToken, {
-          method: "POST",
-          body: JSON.stringify({ password: portalPassword }),
-        }),
-      );
-      const payload = (await response.json()) as {
-        success?: boolean;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        setPortalError(payload.error ?? "Portal şifresi doğrulanamadı.");
-        return;
-      }
-
-      setPortalVerified(true);
-      setPortalPassword("");
-    } catch {
-      setPortalError("Bağlantı hatası. Lütfen tekrar deneyin.");
-    } finally {
-      setPortalSubmitting(false);
-    }
-  };
 
   const fetchOverview = useCallback(async () => {
-    if (!accessToken || !portalVerified) {
-      setLoading(false);
-      if (!accessToken) {
-        setError("Merkezi panele erişmek için oturum açın.");
-      }
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        "/api/admin/overview",
-        buildAuthFetchInit(accessToken),
-      );
+      const response = await fetch("/api/admin/overview", {
+        credentials: "include",
+      });
       const payload = (await response.json()) as {
         success?: boolean;
         error?: string;
-        needsPortalAuth?: boolean;
+        needsLogin?: boolean;
         rows?: AdminCampaignOverviewRow[];
         stats?: AdminOverviewStats;
       };
 
       if (!response.ok) {
-        if (payload.needsPortalAuth) {
-          setPortalVerified(false);
-          setPasswordRequired(true);
+        if (payload.needsLogin) {
+          window.location.href = "/admin-login";
+          return;
         }
         setError(payload.error ?? "Veri özeti alınamadı.");
         setRows([]);
@@ -229,23 +140,11 @@ export default function SuperAdminDashboard({
     } finally {
       setLoading(false);
     }
-  }, [accessToken, portalVerified]);
+  }, []);
 
   useEffect(() => {
-    if (!isAuthReady) {
-      return;
-    }
-
-    void checkPortalSession();
-  }, [checkPortalSession, isAuthReady]);
-
-  useEffect(() => {
-    if (!isAuthReady || !portalVerified) {
-      return;
-    }
-
     void fetchOverview();
-  }, [fetchOverview, isAuthReady, portalVerified]);
+  }, [fetchOverview]);
 
   const cityOptions = useMemo(
     () =>
@@ -292,62 +191,13 @@ export default function SuperAdminDashboard({
     });
   }, [cityFilter, rows, searchQuery, sectorFilter]);
 
-  if (portalChecking) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center bg-black text-zinc-400">
-        <BackgroundGlow />
-        <div className="relative z-10 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
-          SuperAdmin güvenlik katmanı doğrulanıyor...
-        </div>
-      </div>
-    );
-  }
-
-  if (passwordRequired && !portalVerified) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center bg-black px-6 text-white">
-        <BackgroundGlow />
-        <form
-          onSubmit={submitPortalPassword}
-          className="glass-card relative z-10 w-full max-w-md border border-violet-500/20 p-8"
-        >
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/10">
-              <Shield className="h-5 w-5 text-violet-300" />
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-violet-400">
-                SuperAdmin Portal
-              </p>
-              <p className="text-sm text-zinc-400">{adminEmail}</p>
-            </div>
-          </div>
-          <label className="mb-2 block text-sm text-zinc-300">
-            Portal Şifresi
-          </label>
-          <input
-            type="password"
-            value={portalPassword}
-            onChange={(event) => setPortalPassword(event.target.value)}
-            className={filterInputClass}
-            placeholder="SuperAdmin portal şifreniz"
-            autoComplete="current-password"
-          />
-          {portalError ? (
-            <p className="mt-3 text-sm text-rose-300">{portalError}</p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={portalSubmitting || !portalPassword.trim()}
-            className="mt-6 w-full rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {portalSubmitting ? "Doğrulanıyor..." : "Merkezi Panele Gir"}
-          </button>
-        </form>
-      </div>
-    );
-  }
+  const handleLogout = async () => {
+    await fetch("/api/admin/standalone-auth", {
+      method: "DELETE",
+      credentials: "include",
+    });
+    window.location.href = "/admin-login";
+  };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
@@ -375,9 +225,16 @@ export default function SuperAdminDashboard({
             >
               İşletme Paneli
             </Link>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-400/40"
+            >
+              Çıkış Yap
+            </button>
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-violet-200">
               <Shield className="h-4 w-4" />
-              {adminEmail}
+              Bağımsız Oturum
             </div>
           </div>
         </div>
