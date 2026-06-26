@@ -3,26 +3,38 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
-import bcrypt from "bcryptjs";
+// import bcrypt from "bcryptjs";
 
-import { resolveSuperAdminEmail } from "@/lib/admin-emails";
+import { resolveSuperAdminEmail, isSuperAdminEmail } from "@/lib/admin-emails";
 
 export const ADMIN_PORTAL_COOKIE = "nexis_superadmin_portal";
 const PORTAL_SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
 
+/** GEÇİCİ: bcrypt portal şifresi bypass — yalnızca super admin maili yeterli. */
+const TEMP_PORTAL_PASSWORD_BYPASS = true;
+
 export function isAdminPortalPasswordRequired(): boolean {
-  return Boolean(process.env.ADMIN_PASSWORD_HASH?.trim());
+  if (TEMP_PORTAL_PASSWORD_BYPASS) {
+    return false;
+  }
+
+  // return Boolean(process.env.ADMIN_PASSWORD_HASH?.trim());
+  return false;
 }
 
 export async function verifyAdminPortalPassword(
   plainPassword: string,
 ): Promise<boolean> {
-  const hash = process.env.ADMIN_PASSWORD_HASH?.trim();
-  if (!hash || !plainPassword.trim()) {
-    return false;
+  if (TEMP_PORTAL_PASSWORD_BYPASS) {
+    return true;
   }
 
-  return bcrypt.compare(plainPassword.trim(), hash);
+  // const hash = process.env.ADMIN_PASSWORD_HASH?.trim();
+  // if (!hash || !plainPassword.trim()) {
+  //   return false;
+  // }
+  // return bcrypt.compare(plainPassword.trim(), hash);
+  return false;
 }
 
 function buildPortalSessionToken(email: string): string {
@@ -74,6 +86,10 @@ export function verifyAdminPortalSessionValue(
 export async function hasValidAdminPortalSession(
   email: string,
 ): Promise<boolean> {
+  if (TEMP_PORTAL_PASSWORD_BYPASS && isSuperAdminEmail(email)) {
+    return true;
+  }
+
   if (!isAdminPortalPasswordRequired()) {
     return true;
   }
