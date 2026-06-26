@@ -5,7 +5,12 @@ export type BusinessSector =
   | "dis-klinigi-saglik"
   | "restoran-kafe"
   | "oto-galeri-otomotiv"
+  | "oto-servis"
   | "guzellik-sac-salonu"
+  | "guzellik-estetik"
+  | "egitim-kurs"
+  | "hukuk-danismanlik"
+  | "dijital-ajans"
   | "e-ticaret-giyim";
 
 export type CampaignFormSector = BusinessSector | "";

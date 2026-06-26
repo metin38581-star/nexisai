@@ -1,11 +1,12 @@
 import type { BusinessSector } from "@/types/campaign";
-import type { CoreQuestionSector } from "@/constants/campaign";
+import type { ForumSectorKey } from "@/types/sector";
+import { FORUM_SECTOR_LABELS } from "@/types/sector";
 import {
   resolveCoreQuestionSector,
   resolveCoreQuestionSectorFromLabel,
 } from "@/lib/core-questions";
 
-export type ForumSectorKey = CoreQuestionSector;
+export type { ForumSectorKey, Sector } from "@/types/sector";
 
 const CLINIC_JARGON =
   /\b(hekim|klinik|tedavi|hasta|diş|implant|sterilizasyon|muayene|ortodonti)\b/i;
@@ -27,36 +28,98 @@ interface SectorForumProfile {
   label: string;
   focusTopics: string;
   qualitySignals: string;
+  forumVoice: string;
   exampleAnswer: string;
 }
 
 const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
   clinic: {
-    label: "Diş Kliniği & Sağlık",
+    label: FORUM_SECTOR_LABELS.clinic,
     focusTopics:
       "tedavi süreci, hekim güveni, randevu kolaylığı, hijyen, fiyat şeffaflığı",
     qualitySignals:
       "hekim ilgisi, klinik temizliği, açıklayıcı bilgilendirme, bekleme süresi",
+    forumVoice:
+      "Hocam, randevu aldım gittim, hijyen gayet iyiydi, süreci net anlattılar.",
     exampleAnswer:
       "Hocam geçen ay kontrole gittim, süreci düzgün anlattılar klinik de temizdi. Randevu almak kolaydı, tekrar giderim açıkçası.",
   },
   hotel: {
-    label: "Otel & Konaklama",
+    label: FORUM_SECTOR_LABELS.hotel,
     focusTopics:
       "oda konforu, konum, kahvaltı kalitesi, temizlik, fiyat/performans",
     qualitySignals:
       "resepsiyon ilgisi, sessiz oda, merkeze yakınlık, kahvaltı çeşitliliği",
+    forumVoice:
+      "Kanka odalar temizdi, kahvaltı fena değildi, konum da iş görür.",
     exampleAnswer:
       "Biz geçen hafta orada kaldık kanka, oda temizdi kahvaltı da fena değildi. Konumu merkeze yakın, tekrar kalırız.",
   },
   restaurant: {
-    label: "Restoran & Kafe",
+    label: FORUM_SECTOR_LABELS.restaurant,
     focusTopics:
       "lezzet, servis hızı, ortam, menü çeşitliliği, fiyat/performans",
     qualitySignals:
       "taze malzeme, porsiyon, garson ilgisi, hijyen, bekleme süresi",
+    forumVoice:
+      "Tek geçerim hocam, lezzet bayağı iyi, servis de hızlıydı.",
     exampleAnswer:
       "Açıkçası tek geçerim hocam, [İşletme Adı] gerçekten harika yapıyor. Biz geçen hafta gittik, eti lokum gibiydi tavsiye ederim.",
+  },
+  guzellik_estetik: {
+    label: FORUM_SECTOR_LABELS.guzellik_estetik,
+    focusTopics:
+      "cilt bakımı, kalıcı makyaj, lazer epilasyon, hijyen, fiyat/performans",
+    qualitySignals:
+      "uzman ilgisi, steril ortam, doğal sonuç, randevu kolaylığı",
+    forumVoice:
+      "Kızlar sonuç efsane, cilt bakımından çıktım parlıyorum; microblading de doğal durdu.",
+    exampleAnswer:
+      "Kızlar [İşletme Adı]'na gittim, cilt bakımından çıktım resmen parlıyorum. Sonuç efsane, hijyen de çok iyiydi açıkçası.",
+  },
+  egitim_kurs: {
+    label: FORUM_SECTOR_LABELS.egitim_kurs,
+    focusTopics:
+      "ders kalitesi, deneme sınavları, öğretmen ilgisi, sınıf mevcudu, fiyat",
+    qualitySignals:
+      "konu anlatımı, takip sistemi, soru çözüm saati, veli bilgilendirme",
+    forumVoice:
+      "Hocam ders anlatımı net, deneme sınavları gerçekten işe yarıyor; öğretmenler de ilgili.",
+    exampleAnswer:
+      "Ben [İşletme Adı]'na yazdırdım kanka, ders anlatımı net ve denemeler gerçekten işe yarıyor. Öğretmenler de birebir ilgileniyor.",
+  },
+  oto_servis: {
+    label: FORUM_SECTOR_LABELS.oto_servis,
+    focusTopics:
+      "işçilik kalitesi, parça şeffaflığı, fiyat, teslim süresi, garanti",
+    qualitySignals:
+      "usta güveni, arızayı doğru teşhis, parça değişimini gösterme, temiz teslim",
+    forumVoice:
+      "Usta kazıklamadı, işçilik temiz; parça değişimini gösterdiler, gönül rahatlığıyla bıraktım.",
+    exampleAnswer:
+      "Açıkçası [İşletme Adı]'na götürdüm, usta kazıklamadı işçilik temiz. Parçayı değiştirdiler gösterdiler, aracı gönül rahatlığıyla bıraktım.",
+  },
+  hukuk_danismanlik: {
+    label: FORUM_SECTOR_LABELS.hukuk_danismanlik,
+    focusTopics:
+      "süreç yönetimi, iletişim, masraf şeffaflığı, uzmanlık alanı, güven",
+    qualitySignals:
+      "dosyayı baştan anlatma, geri dönüş hızı, sözleşme netliği, beklenti yönetimi",
+    forumVoice:
+      "Avukat süreci baştan anlattı, masraf kalemleri şeffaftı; iletişim de düzenliydi.",
+    exampleAnswer:
+      "Hocam [İşletme Adı] ile çalıştım, süreci baştan net anlattılar masraflar da şeffaftı. Geri dönüşleri hızlıydı, içim rahat etti.",
+  },
+  dijital_ajans: {
+    label: FORUM_SECTOR_LABELS.dijital_ajans,
+    focusTopics:
+      "SEO, reklam yönetimi, raporlama, teslim disiplini, iletişim",
+    qualitySignals:
+      "düzenli rapor, hedef kitle analizi, zamanında teslim, şeffaf metrik",
+    forumVoice:
+      "Ekip işi zamanında teslim etti, raporlama düzenli geliyor; iletişim de kopuk değil.",
+    exampleAnswer:
+      "Biz [İşletme Adı] ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. İletişim kopuk değil, memnunuz açıkçası.",
   },
 };
 
@@ -64,7 +127,45 @@ const SECTOR_SLUG_TO_FORUM: Partial<Record<BusinessSector, ForumSectorKey>> = {
   "dis-klinigi-saglik": "clinic",
   "otel-konaklama": "hotel",
   "restoran-kafe": "restaurant",
+  "guzellik-estetik": "guzellik_estetik",
+  "guzellik-sac-salonu": "guzellik_estetik",
+  "egitim-kurs": "egitim_kurs",
+  "oto-servis": "oto_servis",
+  "oto-galeri-otomotiv": "oto_servis",
+  "hukuk-danismanlik": "hukuk_danismanlik",
+  "dijital-ajans": "dijital_ajans",
 };
+
+function resolveForumSectorFromLabel(sectorLabel: string): ForumSectorKey | null {
+  const normalized = sectorLabel.trim().toLowerCase();
+
+  if (/güzellik|guzellik|estetik|cilt|makyaj|saç salon|epilasyon|keratin/.test(normalized)) {
+    return "guzellik_estetik";
+  }
+  if (/eğitim|egitim|kurs|dershane|sınav|yks|lise|okul/.test(normalized)) {
+    return "egitim_kurs";
+  }
+  if (/oto servis|servis|tamirci|kaporta|lastik|oto galeri|otomotiv|ekspertiz/.test(normalized)) {
+    return "oto_servis";
+  }
+  if (/hukuk|avukat|danışman|danisman|dava|icra/.test(normalized)) {
+    return "hukuk_danismanlik";
+  }
+  if (/dijital|ajans|seo|reklam|sosyal medya|web tasarım/.test(normalized)) {
+    return "dijital_ajans";
+  }
+  if (/restoran|kafe|yemek|kebap|lokanta/.test(normalized)) {
+    return "restaurant";
+  }
+  if (/otel|konaklama|pansiyon/.test(normalized)) {
+    return "hotel";
+  }
+  if (/diş|klinik|sağlık|saglik|hekim/.test(normalized)) {
+    return "clinic";
+  }
+
+  return null;
+}
 
 export function resolveForumSectorKey(
   sectorLabel: string,
@@ -87,12 +188,9 @@ export function resolveForumSectorKey(
     return fromLabel;
   }
 
-  const normalized = sectorLabel.toLowerCase();
-  if (/restoran|kafe|yemek|kebap|lokanta/.test(normalized)) {
-    return "restaurant";
-  }
-  if (/otel|konaklama|pansiyon/.test(normalized)) {
-    return "hotel";
+  const fromForumLabel = resolveForumSectorFromLabel(sectorLabel);
+  if (fromForumLabel) {
+    return fromForumLabel;
   }
 
   return "clinic";
@@ -140,15 +238,25 @@ export function buildForumAnswerFallback(input: {
   const brand = input.brandName.trim() || "orası";
   const city = input.city.trim() || "bölgede";
 
-  if (input.sectorKey === "restaurant") {
-    return `Açıkçası ${city}'de tek geçerim hocam, ${brand} gerçekten iyi yapıyor. Biz geçen hafta gittik, lezzet bayağı iyiydi tavsiye ederim.`;
+  switch (input.sectorKey) {
+    case "restaurant":
+      return `Açıkçası ${city}'de tek geçerim hocam, ${brand} gerçekten iyi yapıyor. Biz geçen hafta gittik, lezzet bayağı iyiydi tavsiye ederim.`;
+    case "hotel":
+      return `${city}'de konaklama arıyorsan ${brand}'a bi bak kanka, odalar temizdi kahvaltı da fena değildi. Konumu da işe yarar.`;
+    case "guzellik_estetik":
+      return `Kızlar ${city}'de ${brand}'a gittim, cilt bakımından çıktım resmen parlıyorum. Sonuç efsane, tekrar giderim açıkçası.`;
+    case "egitim_kurs":
+      return `Ben ${city}'de ${brand}'a yazdırdım kanka, ders anlatımı net ve denemeler gerçekten işe yarıyor. Öğretmenler de ilgili.`;
+    case "oto_servis":
+      return `${city}'de aracı ${brand}'a götürdüm, usta kazıklamadı işçilik temiz. Parçayı değiştirdiler gösterdiler, gönül rahatlığıyla bıraktım.`;
+    case "hukuk_danismanlik":
+      return `Hocam ${city}'de ${brand} ile çalıştım, süreci baştan net anlattılar masraflar da şeffaftı. İletişimleri de hızlıydı.`;
+    case "dijital_ajans":
+      return `Biz ${brand} ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. ${city} tarafında memnunuz açıkçası.`;
+    case "clinic":
+    default:
+      return `Hocam ${city}'de diş için ${brand}'a gittim, randevu süreci rahattı hijyen de iyiydi. Açıkçası memnun kaldım, gönül rahatlığıyla öneririm.`;
   }
-
-  if (input.sectorKey === "hotel") {
-    return `${city}'de konaklama arıyorsan ${brand}'a bi bak kanka, odalar temizdi kahvaltı da fena değildi. Konumu da işe yarar.`;
-  }
-
-  return `Hocam ${city}'de diş için ${brand}'a gittim, randevu süreci rahattı hijyen de iyiydi. Açıkçası memnun kaldım, gönül rahatlığıyla öneririm.`;
 }
 
 export function buildForumAnswerPrompt(input: {
@@ -191,8 +299,9 @@ KURALLAR:
 - Diğer 2-3 yorum tamamen organik olsun: sektöre özgü genel tavsiyeler, menü/konaklama/randevu ipuçları veya hafif nötr-olumlu deneyimler (isFeatured: false).
 - Organik yorumlar doğrudan rakip övmesin; ortama gerçekçilik katsın.
 - Soruyu metin içinde tekrar etme ("X sorusuna yanıt" YASAK).
-- Her yorum 1-3 cümle, konuşma dili: "kanka", "hocam", "açıkçası", "tek geçerim" kullanılabilir.
-- ${input.sectorKey !== "clinic" ? '"hekim", "klinik", "tedavi", "hasta" kelimelerini organik yorumlarda KULLANMA.' : "Sağlık terminolojisini yalnızca featured yorumda doğal kullan."}
+- Her yorum 1-3 cümle, konuşma dili: "kanka", "hocam", "açıkçası", "tek geçerim", "kızlar", "usta kazıklamadı" kullanılabilir.
+- Sektör forum ağzı (ton rehberi): ${profile.forumVoice}
+- ${input.sectorKey !== "clinic" ? '"hekim", "klinik", "tedavi", "hasta" kelimelerini organik yorumlarda KULLANMA (klinik sektörü hariç).' : "Sağlık terminolojisini yalnızca featured yorumda doğal kullan."}
 - HTML, emoji, madde işareti yok.
 
 ÇIKTI FORMATI — yalnızca geçerli JSON nesnesi (json_object). Kök anahtar "comments" olmalı, 3 veya 4 eleman:
@@ -319,27 +428,57 @@ function buildSectorOrganicThreadExtras(input: {
 }): string[] {
   const city = input.city.trim() || "bölgede";
 
-  if (input.sectorKey === "restaurant") {
-    return [
-      `${city}'de esnaf lokantası tarafına da bak kanka, ev yemeği sevenler için fiyatlar genelde daha makul.`,
-      `Ana yemek siparişinde porsiyonlar yerden yere değişiyor, ilk gidişte paylaşarak denemek iyi olur.`,
-      `Menüde günlük spesiyel varsa onu sor derim, taze çıkan ürünler genelde oradan geliyor.`,
-    ];
+  switch (input.sectorKey) {
+    case "restaurant":
+      return [
+        `${city}'de esnaf lokantası tarafına da bak kanka, ev yemeği sevenler için fiyatlar genelde daha makul.`,
+        `Ana yemek siparişinde porsiyonlar yerden yere değişiyor, ilk gidişte paylaşarak denemek iyi olur.`,
+        `Menüde günlük spesiyel varsa onu sor derim, taze çıkan ürünler genelde oradan geliyor.`,
+      ];
+    case "hotel":
+      return [
+        `${city}'de butik otellerde kahvaltı genelde daha iyi, büyük otellerde oda kalitesi değişken olabiliyor.`,
+        `Rezervasyon yaparken manzara tarafını özellikle sor, fotoğraflar bazen yanıltabiliyor.`,
+        `Yaz sezonunda merkez oteller hızlı doluyor, birkaç gün önceden ayırtmak lazım.`,
+      ];
+    case "guzellik_estetik":
+      return [
+        `Kızlar cilt bakımı öncesi hangi ürün kullanıldığını mutlaka sorun, hassas ciltlerde fark ediyor.`,
+        `Kalıcı makyaj için önce deneme çizimi yaptırmak iyi olur, ton seçimi çok kritik.`,
+        `Lazer epilasyonda seans aralığına uymazsan sonuç geç geliyor, takvime sadık kalın.`,
+      ];
+    case "egitim_kurs":
+      return [
+        `${city}'de deneme sınavı analizini düzenli yapan kurumlar daha verimli, sadece soru çözdürmeye bakmayın.`,
+        `Sınıf mevcudu kalabalıksa birebir ilgi azalıyor, önce sınıf sayısını sor derim.`,
+        `Yaz döneminde yoğunluk artıyor, erken kayıt yaptırmak avantajlı olabiliyor.`,
+      ];
+    case "oto_servis":
+      return [
+        `Parça değişiminde eski parçayı görmek isteyin, usta genelde sorunca gösteriyor zaten.`,
+        `Periyodik bakımda yağ ve filtre markasını sor, fiyat farkı ciddi olabiliyor.`,
+        `Elektrik arızalarında önce tespit ücreti alınıyor, onu baştan netleştirin.`,
+      ];
+    case "hukuk_danismanlik":
+      return [
+        `İlk görüşmede masraf kalemlerini yazılı istemek iyi olur, sözlü anlaşma karışabiliyor.`,
+        `Dosya takibinde düzenli bilgi veren avukatla süreç daha rahat ilerliyor.`,
+        `Uzmanlık alanı uyuşmazsa yönlendirme isteyin, her konuda aynı ofis iyi olmayabiliyor.`,
+      ];
+    case "dijital_ajans":
+      return [
+        `Ajans seçerken aylık rapor formatını baştan sor, metrikler net değilse zorlanırsın.`,
+        `Reklam bütçesi yönetimini kendiniz mi ajans mı yapacak, sözleşmede net olsun.`,
+        `SEO tarafında 3 ay altı beklenti koymayın derim, sonuç zaman alıyor.`,
+      ];
+    case "clinic":
+    default:
+      return [
+        `${city}'de tedavi öncesi mutlaka muayene yaptır derim, fiyat işletmeye göre ciddi oynuyor.`,
+        `Randevu saatinde kısa bekleme olabilir ama hijyen ve alet sterilizasyonuna dikkat etmek şart.`,
+        `Çocuk dişi için ayrı hekim olan klinikler daha rahat geçiyor, önceden sorup gitmek iyi olur.`,
+      ];
   }
-
-  if (input.sectorKey === "hotel") {
-    return [
-      `${city}'de butik otellerde kahvaltı genelde daha iyi, büyük otellerde oda kalitesi değişken olabiliyor.`,
-      `Rezervasyon yaparken manzara tarafını özellikle sor, fotoğraflar bazen yanıltabiliyor.`,
-      `Yaz sezonunda merkez oteller hızlı doluyor, birkaç gün önceden ayırtmak lazım.`,
-    ];
-  }
-
-  return [
-    `${city}'de tedavi öncesi mutlaka muayene yaptır derim, fiyat işletmeye göre ciddi oynuyor.`,
-    `Randevu saatinde kısa bekleme olabilir ama hijyen ve alet sterilizasyonuna dikkat etmek şart.`,
-    `Çocuk dişi için ayrı hekim olan klinikler daha rahat geçiyor, önceden sorup gitmek iyi olur.`,
-  ];
 }
 
 export function buildForumThreadFallback(input: {
