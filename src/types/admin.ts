@@ -68,3 +68,29 @@ export interface AdminBusinessDetail {
   campaigns: AdminCampaignHistory[];
   payments: AdminPaymentRecord[];
 }
+
+export interface AdminCampaignOverviewRow {
+  campaignId: string;
+  userEmail: string;
+  businessName: string;
+  sector: string;
+  sectorLabel: string;
+  city: string;
+  walletBalance: number;
+  totalDeposited: number;
+  amountSpent: number;
+  wordpressUrl: string | null;
+  forumUrl: string | null;
+  createdAt: string;
+}
+
+export interface AdminOverviewStats {
+  totalUsers: number;
+  totalSystemBalance: number;
+  totalLinksPublished: number;
+}
+
+export interface AdminOverviewPayload {
+  rows: AdminCampaignOverviewRow[];
+  stats: AdminOverviewStats;
+}

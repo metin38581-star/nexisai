@@ -4,11 +4,16 @@ import type {
   AdminBusinessDetail,
   AdminBusinessRow,
   AdminCampaignHistory,
+  AdminCampaignOverviewRow,
   AdminIntentContentPair,
+  AdminOverviewPayload,
+  AdminOverviewStats,
   AdminPaymentRecord,
 } from "@/types/admin";
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import { buildHubArticleUrl } from "@/lib/hub-url";
+import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { listCampaignOperationalLogs } from "@/lib/campaign-log-store";
 import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
@@ -237,6 +242,236 @@ export async function listAdminBusinesses(): Promise<AdminBusinessRow[]> {
     (a, b) =>
       new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime(),
   );
+}
+
+type CampaignOverviewSource = {
+  id: string;
+  userId: string | null;
+  markaAdi: string;
+  sehir: string;
+  sektor: string;
+  createdAt: Date;
+  wordpressUrl: string | null;
+  externalLiveUrl: string | null;
+  baits: Array<{
+    slug: string;
+    externalLiveUrl: string | null;
+  }>;
+};
+
+async function listAllCampaignsOverviewViaPrisma(): Promise<
+  CampaignOverviewSource[]
+> {
+  return prisma.campaign.findMany({
+    where: { userId: { not: null } },
+    select: {
+      id: true,
+      userId: true,
+      markaAdi: true,
+      sehir: true,
+      sektor: true,
+      createdAt: true,
+      wordpressUrl: true,
+      externalLiveUrl: true,
+      baits: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          slug: true,
+          externalLiveUrl: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+async function listAllCampaignsOverviewViaSupabase(): Promise<
+  CampaignOverviewSource[]
+> {
+  const supabase = getSupabaseAdmin();
+  const { data: campaigns, error } = await supabase
+    .from("Campaign")
+    .select("*")
+    .not("userId", "is", null)
+    .order("createdAt", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const results: CampaignOverviewSource[] = [];
+
+  for (const campaign of campaigns ?? []) {
+    const campaignId = campaign.id as string;
+    const { data: baits } = await supabase
+      .from("Bait")
+      .select("slug, external_live_url")
+      .eq("campaignId", campaignId)
+      .order("createdAt", { ascending: true });
+
+    results.push({
+      id: campaignId,
+      userId: campaign.userId as string,
+      markaAdi: campaign.markaAdi as string,
+      sehir: campaign.sehir as string,
+      sektor: campaign.sektor as string,
+      createdAt: new Date(campaign.createdAt as string),
+      wordpressUrl: (campaign.wordpress_url as string | null) ?? null,
+      externalLiveUrl: (campaign.external_live_url as string | null) ?? null,
+      baits: (baits ?? []).map((bait) => ({
+        slug: bait.slug as string,
+        externalLiveUrl: (bait.external_live_url as string | null) ?? null,
+      })),
+    });
+  }
+
+  return results;
+}
+
+async function listAllCampaignsOverview(): Promise<CampaignOverviewSource[]> {
+  if (hasDatabaseUrl()) {
+    try {
+      return await listAllCampaignsOverviewViaPrisma();
+    } catch (error) {
+      console.error("[ADMIN_STORE]: Prisma kampanya genel bakış hatası:", error);
+    }
+  }
+
+  return listAllCampaignsOverviewViaSupabase();
+}
+
+async function listWalletBalancesViaPrisma(): Promise<Map<string, number>> {
+  const wallets = await prisma.wallet.findMany({
+    select: { id: true, balance: true },
+  });
+
+  return new Map(wallets.map((wallet) => [wallet.id, wallet.balance]));
+}
+
+async function listWalletBalancesViaSupabase(): Promise<Map<string, number>> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.from("Wallet").select("id, balance");
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(
+    (data ?? []).map((wallet) => [wallet.id as string, Number(wallet.balance)]),
+  );
+}
+
+async function listWalletBalances(): Promise<Map<string, number>> {
+  if (hasDatabaseUrl()) {
+    try {
+      return await listWalletBalancesViaPrisma();
+    } catch (error) {
+      console.error("[ADMIN_STORE]: Prisma cüzdan listesi hatası:", error);
+    }
+  }
+
+  return listWalletBalancesViaSupabase();
+}
+
+function resolveCampaignWordpressUrl(
+  campaign: CampaignOverviewSource,
+): string | null {
+  const firstBait = campaign.baits[0];
+  return (
+    campaign.wordpressUrl ??
+    campaign.externalLiveUrl ??
+    firstBait?.externalLiveUrl ??
+    null
+  );
+}
+
+function resolveCampaignForumUrl(campaign: CampaignOverviewSource): string | null {
+  const firstBait = campaign.baits[0];
+  if (!firstBait?.slug) {
+    return null;
+  }
+
+  return buildForumHubUrl(firstBait.slug);
+}
+
+function buildOverviewStats(
+  authUserCount: number,
+  walletBalances: Map<string, number>,
+  rows: AdminCampaignOverviewRow[],
+): AdminOverviewStats {
+  let totalLinksPublished = 0;
+
+  for (const row of rows) {
+    if (row.wordpressUrl) {
+      totalLinksPublished += 1;
+    }
+    if (row.forumUrl) {
+      totalLinksPublished += 1;
+    }
+  }
+
+  return {
+    totalUsers: authUserCount,
+    totalSystemBalance: Array.from(walletBalances.values()).reduce(
+      (sum, balance) => sum + balance,
+      0,
+    ),
+    totalLinksPublished,
+  };
+}
+
+export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload> {
+  const operationalLogs = await listCampaignOperationalLogs();
+
+  if (operationalLogs.length > 0) {
+    const [authUsers, walletBalances] = await Promise.all([
+      listAuthUsers(),
+      listWalletBalances(),
+    ]);
+
+    return {
+      rows: operationalLogs,
+      stats: buildOverviewStats(authUsers.length, walletBalances, operationalLogs),
+    };
+  }
+
+  const [authUsers, campaigns, paymentTotals, walletBalances] =
+    await Promise.all([
+      listAuthUsers(),
+      listAllCampaignsOverview(),
+      sumSuccessfulPaymentsAllUsers(),
+      listWalletBalances(),
+    ]);
+
+  const emailByUserId = new Map(authUsers.map((user) => [user.id, user.email]));
+
+  const rows: AdminCampaignOverviewRow[] = campaigns
+    .filter((campaign): campaign is CampaignOverviewSource & { userId: string } =>
+      Boolean(campaign.userId),
+    )
+    .map((campaign) => {
+      const userId = campaign.userId;
+
+      return {
+        campaignId: campaign.id,
+        userEmail: emailByUserId.get(userId) ?? "—",
+        businessName: campaign.markaAdi,
+        sector: campaign.sektor,
+        sectorLabel: resolveSectorLabel(campaign.sektor),
+        city: campaign.sehir,
+        walletBalance: walletBalances.get(userId) ?? 0,
+        totalDeposited: paymentTotals.get(userId) ?? 0,
+        amountSpent: 0,
+        wordpressUrl: resolveCampaignWordpressUrl(campaign),
+        forumUrl: resolveCampaignForumUrl(campaign),
+        createdAt: campaign.createdAt.toISOString(),
+      };
+    });
+
+  return {
+    rows,
+    stats: buildOverviewStats(authUsers.length, walletBalances, rows),
+  };
 }
 
 type CampaignWithRelations = {

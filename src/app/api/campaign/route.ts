@@ -12,7 +12,7 @@ import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
 import { queryLlmInquiry } from "@/lib/llm-simulator";
 import { buildDynamicTerminalLogs } from "@/lib/terminal-logs";
 import { calculateDynamicMetrics } from "@/lib/mock-metrics";
-import { getActiveUserId } from "@/lib/auth-session";
+import { getActiveSessionUser } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
   decrementUserWalletBalance,
@@ -42,6 +42,8 @@ import {
   getCoreQuestionPoolSize,
   validateCoreQuestionSelection,
 } from "@/lib/core-questions";
+import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -180,7 +182,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const activeUserId = await getActiveUserId(request);
+    const sessionUser = await getActiveSessionUser(request);
+    const activeUserId = sessionUser?.id ?? null;
     if (!activeUserId) {
       return NextResponse.json(
         {
@@ -549,6 +552,26 @@ export async function POST(request: Request) {
       slug: bait.slug,
       hubPath: buildHubArticlePath(bait.slug),
     }));
+
+    const wordpressUrl =
+      distributionResults.find(
+        (result) => result.ok && result.externalLiveUrl,
+      )?.externalLiveUrl ?? null;
+
+    void recordCampaignOperationalLog({
+      campaignId: persistedCampaignId,
+      userId: activeUserId,
+      userEmail: sessionUser?.email ?? "—",
+      businessName: trimmedMarka,
+      sector: sectorSlug || trimmedSektor,
+      city: trimmedSehir,
+      walletBalance: Math.max(0, walletBalance - toplamMaliyet),
+      amountSpent: toplamMaliyet,
+      wordpressUrl,
+      forumUrl: primarySlug ? buildForumHubUrl(primarySlug) : null,
+    }).catch((logError) => {
+      console.error("[CAMPAIGN_LOG]: Kampanya operasyon kaydı atlandı:", logError);
+    });
 
     const terminalLogs = buildDynamicTerminalLogs(
       {

@@ -100,6 +100,30 @@ model Campaign {
   radarLogs     CampaignRadarLog[]
   growthLoop    CampaignGrowthLoop?
   hubAnswers    HubAnswer[]
+  campaignLog   CampaignLog?
+}
+
+model CampaignLog {
+  id              String   @id @default(uuid())
+  campaignId      String   @unique @map("campaign_id")
+  userId          String   @map("user_id")
+  userEmail       String   @map("user_email")
+  businessName    String   @map("business_name")
+  sector          String
+  sectorLabel     String?  @map("sector_label")
+  city            String
+  walletBalance   Float    @default(0) @map("wallet_balance")
+  amountSpent     Float    @default(0) @map("amount_spent")
+  amountDeposited Float    @default(0) @map("amount_deposited")
+  wordpressUrl    String?  @map("wordpress_url")
+  forumUrl        String?  @map("forum_url")
+  createdAt       DateTime @default(now()) @map("created_at")
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([city])
+  @@index([sector])
+  @@map("CampaignLog")
 }
 
 model MarketIntelligence {
