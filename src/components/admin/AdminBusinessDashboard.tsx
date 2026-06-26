@@ -35,27 +35,21 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 export default function AdminBusinessDashboard() {
-  const { accessToken, isAuthReady, isLoggedIn } = useAuth();
+  const { accessToken } = useAuth();
   const [businesses, setBusinesses] = useState<AdminBusinessRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const fetchBusinesses = useCallback(async () => {
-    if (!accessToken) {
-      setLoading(false);
-      setError("Admin paneline erişmek için giriş yapın.");
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        "/api/admin/businesses",
-        buildAuthFetchInit(accessToken),
-      );
+      const response = await fetch("/api/admin/businesses", {
+        credentials: "include",
+        ...(accessToken ? buildAuthFetchInit(accessToken) : {}),
+      });
       const payload = (await response.json()) as {
         success?: boolean;
         error?: string;
@@ -78,12 +72,8 @@ export default function AdminBusinessDashboard() {
   }, [accessToken]);
 
   useEffect(() => {
-    if (!isAuthReady) {
-      return;
-    }
-
     void fetchBusinesses();
-  }, [fetchBusinesses, isAuthReady]);
+  }, [fetchBusinesses]);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
@@ -118,25 +108,7 @@ export default function AdminBusinessDashboard() {
           </div>
         </div>
 
-        {!isAuthReady ? (
-          <div className="glass-card flex min-h-[320px] items-center justify-center p-10">
-            <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
-          </div>
-        ) : !isLoggedIn ? (
-          <div className="glass-card flex min-h-[320px] flex-col items-center justify-center gap-4 p-10 text-center">
-            <ShieldAlert className="h-10 w-10 text-amber-400" />
-            <p className="text-lg font-semibold text-white">Oturum gerekli</p>
-            <p className="max-w-md text-sm text-zinc-400">
-              Admin paneline erişmek için yetkili bir hesapla giriş yapın.
-            </p>
-            <Link
-              href="/"
-              className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-5 py-2.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/20"
-            >
-              Ana Sayfaya Dön
-            </Link>
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="glass-card flex min-h-[320px] items-center justify-center p-10">
             <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
           </div>

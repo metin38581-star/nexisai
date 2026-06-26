@@ -7,12 +7,18 @@ export const STANDALONE_ADMIN_COOKIE = "nexis_admin_session";
 export const STANDALONE_ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 function resolveStandaloneAdminSecret(): string {
-  return (
-    process.env.ADMIN_STANDALONE_SECRET?.trim() ??
-    process.env.ADMIN_PASSWORD_HASH?.trim() ??
-    process.env.ADMIN_EMAIL?.trim() ??
-    "nexis-standalone-admin"
-  );
+  const secret = process.env.ADMIN_STANDALONE_SECRET?.trim();
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "ADMIN_STANDALONE_SECRET production ortamında zorunludur.",
+    );
+  }
+
+  return "nexis-dev-standalone-secret";
 }
 
 function buildStandaloneSessionSignature(issuedAt: string): string {

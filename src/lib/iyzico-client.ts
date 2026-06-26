@@ -247,17 +247,62 @@ export async function completeIyzicoCheckout(
     return null;
   }
 
-  await prisma.iyzicoCheckout.update({
-    where: { id: checkout.id },
-    data: { status: "success" },
-  });
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.iyzicoCheckout.updateMany({
+      where: { id: checkout.id, status: "pending" },
+      data: { status: "success" },
+    });
 
-  return {
-    checkoutId: checkout.id,
-    userId: checkout.userId,
-    amount: checkout.amount,
-    alreadyCredited: false,
-  };
+    if (claimed.count === 0) {
+      const current = await tx.iyzicoCheckout.findUnique({
+        where: { id: checkout.id },
+      });
+
+      if (current?.status !== "success") {
+        return null;
+      }
+
+      const credited = await tx.payment.findFirst({
+        where: {
+          userId: checkout.userId,
+          providerStatusCode: "CHECKOUT_SUCCESS",
+          description: { contains: checkout.id },
+        },
+      });
+
+      return {
+        checkoutId: checkout.id,
+        userId: checkout.userId,
+        amount: checkout.amount,
+        alreadyCredited: Boolean(credited),
+      };
+    }
+
+    await tx.wallet.upsert({
+      where: { id: checkout.userId },
+      create: { id: checkout.userId, balance: checkout.amount },
+      update: { balance: { increment: checkout.amount } },
+    });
+
+    await tx.payment.create({
+      data: {
+        userId: checkout.userId,
+        amount: checkout.amount,
+        currency: "TRY",
+        status: "success",
+        provider: "iyzico",
+        providerStatusCode: "CHECKOUT_SUCCESS",
+        description: `iyzico cüzdan yüklemesi (checkout:${checkout.id})`,
+      },
+    });
+
+    return {
+      checkoutId: checkout.id,
+      userId: checkout.userId,
+      amount: checkout.amount,
+      alreadyCredited: false,
+    };
+  });
 }
 
 export async function getCheckoutById(checkoutId: string) {

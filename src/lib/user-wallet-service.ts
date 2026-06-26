@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { WELCOME_BALANCE_TL, LEGACY_WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
-import { listPaymentsByUserId, recordPayment } from "@/lib/payment-store";
+import { listPaymentsByUserId } from "@/lib/payment-store";
 
 export { WELCOME_BALANCE_TL } from "@/lib/wallet-constants";
 
@@ -61,68 +61,82 @@ async function resolveHasPaidTopUp(userId: string): Promise<boolean> {
 
 /** Eski hoş geldin kayıtlarını güncel 300 TL politikasına yükseltir. */
 async function reconcileLegacyWelcomeBalance(userId: string): Promise<void> {
-  const payments = await listPaymentsByUserId(userId);
-  const grantedTotal = sumWelcomePayments(payments);
-  const wallet = await prisma.wallet.findUnique({ where: { id: userId } });
-
-  if (!wallet) {
-    return;
-  }
-
-  if (grantedTotal > 0 && wallet.balance < grantedTotal) {
-    await prisma.wallet.update({
-      where: { id: userId },
-      data: { balance: { increment: grantedTotal - wallet.balance } },
+  await prisma.$transaction(async (tx) => {
+    const welcomePayments = await tx.payment.findMany({
+      where: {
+        userId,
+        providerStatusCode: {
+          in: [WELCOME_PROVIDER_CODE, WELCOME_RECONCILE_CODE],
+        },
+      },
     });
-  }
 
-  if (grantedTotal > 0 && grantedTotal < WELCOME_BALANCE_TL) {
-    const deficit = WELCOME_BALANCE_TL - grantedTotal;
+    const grantedTotal = welcomePayments.reduce(
+      (total, payment) => total + payment.amount,
+      0,
+    );
 
-    await prisma.wallet.update({
+    const wallet = await tx.wallet.findUnique({ where: { id: userId } });
+    if (!wallet) {
+      return;
+    }
+
+    if (grantedTotal > 0 && wallet.balance < grantedTotal) {
+      await tx.wallet.update({
+        where: { id: userId },
+        data: { balance: grantedTotal },
+      });
+    }
+
+    if (grantedTotal > 0 && grantedTotal < WELCOME_BALANCE_TL) {
+      const deficit = WELCOME_BALANCE_TL - grantedTotal;
+
+      await tx.wallet.update({
+        where: { id: userId },
+        data: { balance: { increment: deficit } },
+      });
+
+      await tx.payment.create({
+        data: {
+          userId,
+          amount: deficit,
+          currency: "TRY",
+          status: "success",
+          provider: "internal",
+          providerStatusCode: WELCOME_RECONCILE_CODE,
+          description: `Hoş geldin bakiyesi ${WELCOME_BALANCE_TL} TL politikasına yükseltildi`,
+        },
+      });
+      return;
+    }
+
+    if (grantedTotal > 0 || wallet.balance >= WELCOME_BALANCE_TL) {
+      return;
+    }
+
+    const hasPaidTopUp = await resolveHasPaidTopUp(userId);
+    if (hasPaidTopUp || wallet.balance !== LEGACY_WELCOME_BALANCE_TL) {
+      return;
+    }
+
+    const deficit = WELCOME_BALANCE_TL - wallet.balance;
+
+    await tx.wallet.update({
       where: { id: userId },
       data: { balance: { increment: deficit } },
     });
 
-    await recordPayment({
-      userId,
-      amount: deficit,
-      currency: "TRY",
-      status: "success",
-      provider: "internal",
-      providerStatusCode: WELCOME_RECONCILE_CODE,
-      description: `Hoş geldin bakiyesi ${WELCOME_BALANCE_TL} TL politikasına yükseltildi`,
+    await tx.payment.create({
+      data: {
+        userId,
+        amount: deficit,
+        currency: "TRY",
+        status: "success",
+        provider: "internal",
+        providerStatusCode: WELCOME_PROVIDER_CODE,
+        description: "Kayıt hoş geldin bakiyesi (legacy yükseltme)",
+      },
     });
-    return;
-  }
-
-  const refreshed =
-    (await prisma.wallet.findUnique({ where: { id: userId } })) ?? wallet;
-
-  if (grantedTotal > 0 || refreshed.balance >= WELCOME_BALANCE_TL) {
-    return;
-  }
-
-  const hasPaidTopUp = await resolveHasPaidTopUp(userId);
-  if (hasPaidTopUp || wallet.balance !== LEGACY_WELCOME_BALANCE_TL) {
-    return;
-  }
-
-  const deficit = WELCOME_BALANCE_TL - wallet.balance;
-
-  await prisma.wallet.update({
-    where: { id: userId },
-    data: { balance: { increment: deficit } },
-  });
-
-  await recordPayment({
-    userId,
-    amount: WELCOME_BALANCE_TL,
-    currency: "TRY",
-    status: "success",
-    provider: "internal",
-    providerStatusCode: WELCOME_PROVIDER_CODE,
-    description: "Kayıt hoş geldin bakiyesi (legacy yükseltme)",
   });
 }
 
@@ -150,13 +164,7 @@ async function enrichWallet(
     };
   } catch (error) {
     console.error("[USER_WALLET]: Ödeme bayrakları okunamadı:", error);
-    return {
-      id: wallet.id,
-      balance: wallet.balance,
-      updatedAt: wallet.updatedAt,
-      welcomeGranted: false,
-      hasPaidTopUp: false,
-    };
+    throw error;
   }
 }
 
@@ -199,12 +207,7 @@ export async function grantWelcomeBalance(userId: string): Promise<number> {
       },
     });
 
-    const grantedTotal = welcomePayments.reduce(
-      (total, payment) => total + payment.amount,
-      0,
-    );
-
-    if (grantedTotal > 0) {
+    if (welcomePayments.length > 0) {
       const wallet = await tx.wallet.findUnique({ where: { id: userId } });
       return wallet?.balance ?? 0;
     }
@@ -216,7 +219,7 @@ export async function grantWelcomeBalance(userId: string): Promise<number> {
         balance: WELCOME_BALANCE_TL,
       },
       update: {
-        balance: { increment: WELCOME_BALANCE_TL },
+        balance: WELCOME_BALANCE_TL,
       },
     });
 
@@ -240,18 +243,19 @@ export async function decrementUserWalletBalance(
   userId: string,
   amount: number,
 ): Promise<number> {
-  const wallet = await getOrCreateUserWallet(userId);
+  await getOrCreateUserWallet(userId);
 
-  if (wallet.balance < amount) {
-    throw new Error("INSUFFICIENT_BALANCE");
-  }
-
-  const updated = await prisma.wallet.update({
-    where: { id: userId },
+  const updated = await prisma.wallet.updateMany({
+    where: { id: userId, balance: { gte: amount } },
     data: { balance: { decrement: amount } },
   });
 
-  return updated.balance;
+  if (updated.count === 0) {
+    throw new Error("INSUFFICIENT_BALANCE");
+  }
+
+  const wallet = await prisma.wallet.findUniqueOrThrow({ where: { id: userId } });
+  return wallet.balance;
 }
 
 export async function creditUserWallet(
@@ -259,36 +263,104 @@ export async function creditUserWallet(
   amount: number,
   options?: CreditUserWalletOptions,
 ): Promise<number> {
-  await getOrCreateUserWallet(userId);
+  return prisma.$transaction(async (tx) => {
+    await tx.wallet.upsert({
+      where: { id: userId },
+      create: { id: userId, balance: amount },
+      update: { balance: { increment: amount } },
+    });
 
-  const updated = await prisma.wallet.update({
-    where: { id: userId },
-    data: { balance: { increment: amount } },
+    if (options?.paymentMeta) {
+      await tx.payment.create({
+        data: {
+          userId,
+          amount,
+          currency: options.paymentMeta.currency ?? "TRY",
+          status: "success",
+          provider: options.paymentMeta.provider,
+          providerStatusCode: options.paymentMeta.providerStatusCode,
+          description: options.paymentMeta.description,
+        },
+      });
+    } else if (options?.markPaidTopUp) {
+      await tx.payment.create({
+        data: {
+          userId,
+          amount,
+          currency: "TRY",
+          status: "success",
+          provider: "internal",
+          providerStatusCode: "WALLET_TOPUP",
+          description: "Cüzdan bakiye yüklemesi",
+        },
+      });
+    }
+
+    const wallet = await tx.wallet.findUniqueOrThrow({ where: { id: userId } });
+    return wallet.balance;
+  });
+}
+
+export async function debitWalletForCampaign(
+  userId: string,
+  amount: number,
+  campaignId: string,
+  description: string,
+): Promise<{ balance: number; alreadyDebited: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    const existingDebit = await tx.payment.findFirst({
+      where: {
+        campaignId,
+        providerStatusCode: "WALLET_DEBIT",
+        status: { in: ["success", "succeeded", "paid"] },
+      },
+    });
+
+    if (existingDebit) {
+      const wallet = await tx.wallet.findUnique({ where: { id: userId } });
+      return { balance: wallet?.balance ?? 0, alreadyDebited: true };
+    }
+
+    const updated = await tx.wallet.updateMany({
+      where: { id: userId, balance: { gte: amount } },
+      data: { balance: { decrement: amount } },
+    });
+
+    if (updated.count === 0) {
+      throw new Error("INSUFFICIENT_BALANCE");
+    }
+
+    await tx.payment.create({
+      data: {
+        userId,
+        amount,
+        currency: "TRY",
+        status: "success",
+        provider: "internal",
+        providerStatusCode: "WALLET_DEBIT",
+        description,
+        campaignId,
+      },
+    });
+
+    const wallet = await tx.wallet.findUniqueOrThrow({ where: { id: userId } });
+    return { balance: wallet.balance, alreadyDebited: false };
+  });
+}
+
+export async function hasCampaignWalletDebit(
+  campaignId: string,
+): Promise<boolean> {
+  const payment = await prisma.payment.findFirst({
+    where: {
+      campaignId,
+      providerStatusCode: "WALLET_DEBIT",
+      status: { in: ["success", "succeeded", "paid"] },
+    },
+    select: { id: true },
   });
 
-  if (options?.paymentMeta) {
-    await recordPayment({
-      userId,
-      amount,
-      currency: options.paymentMeta.currency ?? "TRY",
-      status: "success",
-      provider: options.paymentMeta.provider,
-      providerStatusCode: options.paymentMeta.providerStatusCode,
-      description: options.paymentMeta.description,
-    });
-  } else if (options?.markPaidTopUp) {
-    await recordPayment({
-      userId,
-      amount,
-      currency: "TRY",
-      status: "success",
-      provider: "internal",
-      providerStatusCode: "WALLET_TOPUP",
-      description: "Cüzdan bakiye yüklemesi",
-    });
-  }
-
-  return updated.balance;
+  return Boolean(payment);
 }
 
 export async function getUserWalletBalance(userId: string): Promise<number> {

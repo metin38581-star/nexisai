@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { handleApiRouteError, assertDataAccessEnv } from "@/lib/api-error";
+import { handleApiRouteError, assertDatabaseEnv } from "@/lib/api-error";
 import { getActiveUserId } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import { recordPayment } from "@/lib/payment-store";
@@ -19,7 +19,7 @@ import {
 export async function GET(request: Request) {
   try {
     logServerEnvStatus("wallet-get");
-    assertDataAccessEnv();
+    assertDatabaseEnv();
 
     const activeUserId = await getActiveUserId(request);
     if (!activeUserId) {
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    assertDataAccessEnv();
+    assertDatabaseEnv();
     const activeUserId = await getActiveUserId(request);
     if (!activeUserId) {
       return NextResponse.json(

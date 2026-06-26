@@ -259,3 +259,108 @@ export async function sumSuccessfulPaymentsAllUsers(): Promise<
 
   return sumSuccessfulPaymentsAllUsersViaSupabase();
 }
+
+const CREDIT_PROVIDER_CODES = new Set([
+  "WALLET_TOPUP",
+  "IYZICO_CHECKOUT",
+  "CHECKOUT_SUCCESS",
+  "WELCOME_BALANCE",
+  "WELCOME_BALANCE_RECONCILE",
+]);
+
+const DEBIT_PROVIDER_CODES = new Set(["WALLET_DEBIT", "WALLET_DEDUCT"]);
+
+function isCreditPayment(row: {
+  provider: string;
+  providerStatusCode: string | null;
+  status: string;
+}): boolean {
+  if (!["success", "succeeded", "paid"].includes(row.status.toLowerCase())) {
+    return false;
+  }
+
+  if (DEBIT_PROVIDER_CODES.has(row.providerStatusCode ?? "")) {
+    return false;
+  }
+
+  return (
+    row.provider === "iyzico" ||
+    CREDIT_PROVIDER_CODES.has(row.providerStatusCode ?? "")
+  );
+}
+
+export async function sumCreditPaymentsByUserId(
+  userId: string,
+): Promise<number> {
+  const payments = await listPaymentsByUserId(userId);
+  return payments
+    .filter(isCreditPayment)
+    .reduce((sum, payment) => sum + payment.amount, 0);
+}
+
+export async function sumCreditPaymentsAllUsers(): Promise<Map<string, number>> {
+  if (hasDatabaseUrl()) {
+    try {
+      const rows = await prisma.payment.findMany({
+        select: {
+          userId: true,
+          amount: true,
+          status: true,
+          provider: true,
+          providerStatusCode: true,
+        },
+      });
+
+      const totals = new Map<string, number>();
+      for (const row of rows) {
+        if (!isCreditPayment(row)) {
+          continue;
+        }
+        totals.set(row.userId, (totals.get(row.userId) ?? 0) + row.amount);
+      }
+      return totals;
+    } catch (error) {
+      console.error("[PAYMENT_STORE]: Kredi toplamı hatası:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("Payment")
+    .select("userId, amount, status, provider, provider_status_code");
+
+  if (error) {
+    throw error;
+  }
+
+  const totals = new Map<string, number>();
+  for (const row of data ?? []) {
+    if (
+      !isCreditPayment({
+        provider: String(row.provider),
+        providerStatusCode: (row.provider_status_code as string | null) ?? null,
+        status: String(row.status),
+      })
+    ) {
+      continue;
+    }
+    totals.set(
+      row.userId as string,
+      (totals.get(row.userId as string) ?? 0) + Number(row.amount),
+    );
+  }
+  return totals;
+}
+
+export async function sumCampaignSpendByUserId(
+  userId: string,
+): Promise<number> {
+  const payments = await listPaymentsByUserId(userId);
+  return payments
+    .filter(
+      (payment) =>
+        payment.providerStatusCode === "WALLET_DEBIT" &&
+        ["success", "succeeded", "paid"].includes(payment.status.toLowerCase()),
+    )
+    .reduce((sum, payment) => sum + payment.amount, 0);
+}

@@ -3,54 +3,50 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
-// import bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";
 
 import { resolveSuperAdminEmail, isSuperAdminEmail } from "@/lib/admin-emails";
 
 export const ADMIN_PORTAL_COOKIE = "nexis_superadmin_portal";
 const PORTAL_SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
 
-/** GEÇİCİ: bcrypt portal şifresi bypass — yalnızca super admin maili yeterli. */
-const TEMP_PORTAL_PASSWORD_BYPASS = true;
-
-export function isAdminPortalPasswordRequired(): boolean {
-  if (TEMP_PORTAL_PASSWORD_BYPASS) {
-    return false;
+function resolvePortalSecret(): string {
+  const secret = process.env.ADMIN_STANDALONE_SECRET?.trim();
+  if (secret) {
+    return secret;
   }
 
-  // return Boolean(process.env.ADMIN_PASSWORD_HASH?.trim());
-  return false;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("ADMIN_STANDALONE_SECRET production ortamında zorunludur.");
+  }
+
+  return "nexis-dev-portal-secret";
+}
+
+export function isAdminPortalPasswordRequired(): boolean {
+  return Boolean(process.env.ADMIN_PASSWORD_HASH?.trim());
 }
 
 export async function verifyAdminPortalPassword(
   plainPassword: string,
 ): Promise<boolean> {
-  if (TEMP_PORTAL_PASSWORD_BYPASS) {
-    return true;
+  const hash = process.env.ADMIN_PASSWORD_HASH?.trim();
+  if (!hash || !plainPassword.trim()) {
+    return false;
   }
 
-  // const hash = process.env.ADMIN_PASSWORD_HASH?.trim();
-  // if (!hash || !plainPassword.trim()) {
-  //   return false;
-  // }
-  // return bcrypt.compare(plainPassword.trim(), hash);
-  return false;
+  return bcrypt.compare(plainPassword.trim(), hash);
 }
 
-function buildPortalSessionToken(email: string): string {
-  const secret =
-    process.env.ADMIN_PASSWORD_HASH?.trim() ??
-    process.env.ADMIN_EMAIL?.trim() ??
-    "nexis-superadmin";
-
-  return createHmac("sha256", secret)
-    .update(`${email.toLowerCase()}:superadmin-portal`)
+function buildPortalSessionSignature(email: string, issuedAt: string): string {
+  return createHmac("sha256", resolvePortalSecret())
+    .update(`${email.toLowerCase()}:superadmin-portal:${issuedAt}`)
     .digest("hex");
 }
 
 export function createAdminPortalSessionValue(email: string): string {
   const issuedAt = Date.now().toString();
-  const signature = buildPortalSessionToken(email);
+  const signature = buildPortalSessionSignature(email, issuedAt);
   return `${issuedAt}.${signature}`;
 }
 
@@ -74,7 +70,7 @@ export function verifyAdminPortalSessionValue(
     return false;
   }
 
-  const expected = buildPortalSessionToken(email);
+  const expected = buildPortalSessionSignature(email, issuedAtRaw);
 
   try {
     return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
@@ -86,12 +82,8 @@ export function verifyAdminPortalSessionValue(
 export async function hasValidAdminPortalSession(
   email: string,
 ): Promise<boolean> {
-  if (TEMP_PORTAL_PASSWORD_BYPASS && isSuperAdminEmail(email)) {
-    return true;
-  }
-
   if (!isAdminPortalPasswordRequired()) {
-    return true;
+    return isSuperAdminEmail(email);
   }
 
   const cookieStore = await cookies();

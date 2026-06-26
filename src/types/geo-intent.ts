@@ -9,6 +9,9 @@ export interface GeoIntentsApiResponse {
   sehir: string;
   sektor: string;
   markaAdi: string;
+  maxQuestions?: number;
+  maxSelection?: number;
+  gunlukButce?: number;
 }
 
 export interface SelectedGeoIntent {

@@ -17,7 +17,7 @@ async function handleRadarScan(request: Request) {
     );
   }
 
-  const report = await runBulkRadarScan();
+  const report = await runBulkRadarScan(activeUserId);
   return NextResponse.json(report);
 }
 

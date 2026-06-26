@@ -30,10 +30,13 @@ function PaymentResumeHandler({
     }
 
     const businessName = searchParams.get("companyName")?.trim() ?? "";
-    const sector = searchParams.get("sector")?.trim() ?? "";
+    const sectorSlugParam = searchParams.get("sectorSlug")?.trim() ?? "";
+    const sectorLabel = searchParams.get("sector")?.trim() ?? "";
     const city = searchParams.get("city")?.trim() ?? "";
     const budget = Number(searchParams.get("budget"));
     const campaignDays = Number(searchParams.get("campaignDays"));
+    const selectedQuestionIds =
+      searchParams.get("selectedQuestionIds")?.split(",").filter(Boolean) ?? [];
 
     if (!businessName || !city) {
       return;
@@ -41,7 +44,7 @@ function PaymentResumeHandler({
 
     onResume({
       businessName,
-      sector: sector as CampaignFormSector,
+      sector: (sectorSlugParam || sectorLabel) as CampaignFormSector,
       city: city as CampaignFormCity,
       dailyBudget: Number.isFinite(budget)
         ? budget
@@ -49,7 +52,7 @@ function PaymentResumeHandler({
       campaignDays: Number.isFinite(campaignDays)
         ? campaignDays
         : MIN_CAMPAIGN_DAYS,
-      selectedQuestionIds: [],
+      selectedQuestionIds,
     });
 
     toast.success(

@@ -70,7 +70,7 @@ export async function POST(request: Request) {
             icerik: content,
             slug,
             platform: "NexisAI Hub",
-            status: "published",
+            status: "PUBLISHED",
             yayinlandi: true,
           },
         },

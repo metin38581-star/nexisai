@@ -6,6 +6,8 @@ import {
   buildAdminPortalCookieOptions,
   createAdminPortalSessionValue,
   hasValidAdminPortalSession,
+  isAdminPortalPasswordRequired,
+  verifyAdminPortalPassword,
 } from "@/lib/admin-portal-auth";
 import { handleApiRouteError } from "@/lib/api-error";
 
@@ -21,8 +23,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: portalVerified,
       verified: portalVerified,
-      needsPortalAuth: false,
-      passwordRequired: false,
+      needsPortalAuth: !portalVerified,
+      passwordRequired: isAdminPortalPasswordRequired(),
     });
   } catch (error) {
     return handleApiRouteError(error, "Portal oturumu doğrulanamadı.");
@@ -36,17 +38,16 @@ export async function POST(request: Request) {
       return identity.response;
     }
 
-    // GEÇİCİ BYPASS: super admin maili ile şifresiz portal oturumu
-    const response = NextResponse.json({ success: true, verified: true });
-    response.cookies.set(
-      ADMIN_PORTAL_COOKIE,
-      createAdminPortalSessionValue(identity.user.email!),
-      buildAdminPortalCookieOptions(),
-    );
+    if (!isAdminPortalPasswordRequired()) {
+      const response = NextResponse.json({ success: true, verified: true });
+      response.cookies.set(
+        ADMIN_PORTAL_COOKIE,
+        createAdminPortalSessionValue(identity.user.email!),
+        buildAdminPortalCookieOptions(),
+      );
+      return response;
+    }
 
-    return response;
-
-    /*
     const body = (await request.json()) as { password?: string };
     const password = body.password?.trim() ?? "";
 
@@ -73,7 +74,6 @@ export async function POST(request: Request) {
     );
 
     return response;
-    */
   } catch (error) {
     return handleApiRouteError(error, "Portal girişi başarısız.");
   }

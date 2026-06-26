@@ -6,7 +6,18 @@ import {
   createStandaloneAdminSessionValue,
   hasValidStandaloneAdminSession,
 } from "@/lib/standalone-admin-auth";
+import {
+  isStandaloneAdminPasswordConfigured,
+  verifyStandaloneAdminPassword,
+} from "@/lib/standalone-admin-password";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { handleApiRouteError } from "@/lib/api-error";
+
+function resolveClientKey(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  return forwarded || realIp || "unknown";
+}
 
 export async function GET() {
   try {
@@ -23,10 +34,36 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!isStandaloneAdminPasswordConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Admin girişi yapılandırılmamış. ADMIN_STANDALONE_PASSWORD tanımlayın.",
+        },
+        { status: 503 },
+      );
+    }
+
+    const rateLimit = checkRateLimit(
+      `admin-login:${resolveClientKey(request)}`,
+      8,
+      15 * 60 * 1000,
+    );
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Çok fazla deneme. Lütfen bir süre sonra tekrar deneyin.",
+        },
+        { status: 429 },
+      );
+    }
+
     const body = (await request.json()) as { password?: string };
     const incomingPassword = (body.password ?? "").trim();
 
-    if (incomingPassword !== "Om180622") {
+    if (!verifyStandaloneAdminPassword(incomingPassword)) {
       return NextResponse.json(
         { success: false, error: "Geçersiz admin şifresi." },
         { status: 401 },

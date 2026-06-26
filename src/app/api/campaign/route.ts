@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import type { BusinessSector } from "@/types/campaign";
-import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
+import { assertDataAccessEnv, assertDatabaseEnv, handleApiRouteError } from "@/lib/api-error";
 import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
@@ -15,12 +15,13 @@ import { calculateDynamicMetrics } from "@/lib/mock-metrics";
 import { getActiveSessionUser } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
-  decrementUserWalletBalance,
+  debitWalletForCampaign,
   getOrCreateUserWallet,
+  hasCampaignWalletDebit,
 } from "@/lib/user-wallet-service";
 import {
-  isTrialBlockedForBusiness,
-  registerBusinessForTrial,
+  assertTrialCampaignAllowed,
+  TrialBusinessBlockedError,
 } from "@/lib/registered-business-store";
 import { createCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import { isIyzicoConfigured } from "@/lib/iyzico-client";
@@ -35,7 +36,6 @@ import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
 import { appendCampaignAnswersToQuestionHub, type QuestionHubEntry } from "@/lib/question-hub-store";
-import { recordPayment } from "@/lib/payment-store";
 import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
 import {
   buildCoreQuestionPairs,
@@ -45,6 +45,7 @@ import {
 import { buildForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
+import { sumCreditPaymentsByUserId } from "@/lib/payment-store";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -135,6 +136,7 @@ export async function POST(request: Request) {
   try {
     logServerEnvStatus("campaign-post");
     assertDataAccessEnv();
+    assertDatabaseEnv();
     const body = (await request.json()) as CampaignApiRequest;
     const {
       markaAdi,
@@ -199,20 +201,38 @@ export async function POST(request: Request) {
     const trimmedSektor = sektor;
     const trimmedSehir = sehir;
 
-    const trialBlocked = await isTrialBlockedForBusiness(
-      trimmedMarka,
-      activeUserId,
-    );
+    try {
+      await assertTrialCampaignAllowed(trimmedMarka, activeUserId);
+    } catch (error) {
+      if (error instanceof TrialBusinessBlockedError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "TRIAL_BUSINESS_BLOCKED",
+            message:
+              "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+          },
+          { status: 403 },
+        );
+      }
+      throw error;
+    }
 
-    if (trialBlocked) {
+    const poolSize = getCoreQuestionPoolSize(sectorSlug);
+    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce, poolSize);
+    const selectionValidation = validateCoreQuestionSelection({
+      budget: gunlukButce,
+      sectorSlug,
+      selectedIds: selectedQuestionIds,
+    });
+
+    if (!selectionValidation.ok) {
       return NextResponse.json(
         {
           success: false,
-          error: "TRIAL_BUSINESS_BLOCKED",
-          message:
-            "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+          error: selectionValidation.error ?? "Geçersiz soru seçimi.",
         },
-        { status: 403 },
+        { status: selectionValidation.statusCode ?? 400 },
       );
     }
 
@@ -234,9 +254,11 @@ export async function POST(request: Request) {
             campaignDraft: {
               companyName: trimmedMarka,
               sector: trimmedSektor,
+              sectorSlug,
               city: trimmedSehir,
               budget: gunlukButce,
               campaignDays: gunSayisi,
+              selectedQuestionIds,
             },
           },
           { status: 402 },
@@ -280,6 +302,32 @@ export async function POST(request: Request) {
     const executionState = await tryAcquireCampaignExecution(reservedCampaignId);
 
     if (executionState === "complete") {
+      const debited = await hasCampaignWalletDebit(reservedCampaignId);
+      if (!debited) {
+        try {
+          await debitWalletForCampaign(
+            activeUserId,
+            toplamMaliyet,
+            reservedCampaignId,
+            `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
+          );
+        } catch (debitError) {
+          if (
+            debitError instanceof Error &&
+            debitError.message === "INSUFFICIENT_BALANCE"
+          ) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: "Yetersiz bakiye. Kampanya tamamlanmış ancak ödeme alınamadı.",
+              },
+              { status: 402 },
+            );
+          }
+          throw debitError;
+        }
+      }
+
       const existingBaitCount = await getCampaignBaitCount(reservedCampaignId);
       return NextResponse.json(
         buildAlreadyProcessedResponse(
@@ -293,24 +341,6 @@ export async function POST(request: Request) {
     if (executionState === "in_progress") {
       return NextResponse.json(
         buildInProgressResponse(reservedCampaignId, trimmedMarka),
-      );
-    }
-
-    const poolSize = getCoreQuestionPoolSize(sectorSlug);
-    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce, poolSize);
-    const selectionValidation = validateCoreQuestionSelection({
-      budget: gunlukButce,
-      sectorSlug,
-      selectedIds: selectedQuestionIds,
-    });
-
-    if (!selectionValidation.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: selectionValidation.error ?? "Geçersiz soru seçimi.",
-        },
-        { status: selectionValidation.statusCode ?? 400 },
       );
     }
 
@@ -461,34 +491,22 @@ export async function POST(request: Request) {
         persistedBaits,
       );
 
-      void appendCampaignAnswersToQuestionHub({
+      await appendCampaignAnswersToQuestionHub({
         campaignId: yeniKampanya.id,
         brandName: targetBrand,
         entries: hubEntries,
-      }).catch((hubError) => {
-        console.error("[QUESTION_HUB]: Kampanya cevapları aktarılamadı:", hubError);
       });
 
       console.log(
         `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk`,
       );
 
-      await decrementUserWalletBalance(activeUserId, toplamMaliyet);
-
-      if (!userWallet.hasPaidTopUp) {
-        await registerBusinessForTrial(trimmedMarka, activeUserId);
-      }
-
-      await recordPayment({
-        userId: activeUserId,
-        amount: toplamMaliyet,
-        currency: "TRY",
-        status: "success",
-        provider: "internal",
-        providerStatusCode: "WALLET_DEBIT",
-        description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
-        campaignId: yeniKampanya.id,
-      });
+      await debitWalletForCampaign(
+        activeUserId,
+        toplamMaliyet,
+        yeniKampanya.id,
+        `GEO Kampanya: ${targetBrand} (${targetCity})`,
+      );
 
       const growthQuestions = buildFixedVisibilityQuestionList(trimmedSehir);
       await createCampaignGrowthLoop(
@@ -572,6 +590,7 @@ export async function POST(request: Request) {
       city: trimmedSehir,
       walletBalance: Math.max(0, walletBalance - toplamMaliyet),
       amountSpent: toplamMaliyet,
+      amountDeposited: await sumCreditPaymentsByUserId(activeUserId),
       wordpressUrl,
       forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
     }).catch((logError) => {

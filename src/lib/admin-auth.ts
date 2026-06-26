@@ -64,6 +64,13 @@ export async function assertSuperAdminAccess() {
 }
 
 export async function assertAdminAccess(request?: Request) {
+  if (await hasValidStandaloneAdminSession()) {
+    return {
+      ok: true as const,
+      user: null,
+    };
+  }
+
   const user = await getActiveSessionUser(request);
 
   if (!user?.email) {

@@ -7,6 +7,7 @@ import {
   buildSemanticAnchorSlug,
 } from "@/lib/geo-prompt";
 import { applyDistributionPlatforms } from "@/lib/distribution-platform";
+import { buildUniqueArticleSlug } from "@/lib/slugify";
 
 export interface SelectedQuestionPair {
   question: string;
@@ -102,8 +103,8 @@ export function buildBaitRecordsFromSelectedQuestions(
       index,
     );
 
-    while (usedSlugs.has(slug)) {
-      slug = `${slug}-${usedSlugs.size + 1}`;
+    if (usedSlugs.has(slug)) {
+      slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
     }
     usedSlugs.add(slug);
 

@@ -1,11 +1,9 @@
-const SITE_ORIGIN =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
-  "https://nexisai-fawn.vercel.app";
+import { resolveSiteOrigin } from "@/lib/site-origin";
 
 export function buildForumHubPath(slug: string): string {
   return `/forum/${encodeURIComponent(slug)}`;
 }
 
 export function buildForumHubUrl(slug: string): string {
-  return `${SITE_ORIGIN}${buildForumHubPath(slug)}`;
+  return `${resolveSiteOrigin()}${buildForumHubPath(slug)}`;
 }

@@ -133,10 +133,11 @@ async function upsertQuestionHubViaPrisma(
 
 async function clearHubAnswersForQuestionViaPrisma(
   questionId: string,
+  campaignId: string,
 ): Promise<boolean> {
   const result = await runPrismaHubAttempt("cevap temizle", async () => {
     await prisma.hubAnswer.deleteMany({
-      where: { questionId },
+      where: { questionId, campaignId },
     });
     return true;
   });
@@ -146,6 +147,7 @@ async function clearHubAnswersForQuestionViaPrisma(
 
 async function clearHubAnswersForQuestionViaSupabase(
   questionId: string,
+  campaignId: string,
 ): Promise<void> {
   if (!hasSupabaseAdminEnv()) {
     return;
@@ -155,16 +157,24 @@ async function clearHubAnswersForQuestionViaSupabase(
   const { error } = await supabase
     .from("HubAnswer")
     .delete()
-    .eq("question_id", questionId);
+    .eq("question_id", questionId)
+    .eq("campaign_id", campaignId);
 
   if (error) {
     console.error("[QUESTION_HUB]: Supabase cevap temizleme hatasi:", error);
   }
 }
 
-async function clearHubAnswersForQuestion(questionId: string): Promise<void> {
-  await clearHubAnswersForQuestionViaPrisma(questionId);
-  await clearHubAnswersForQuestionViaSupabase(questionId);
+async function clearHubAnswersForQuestion(
+  questionId: string,
+  campaignId: string,
+): Promise<void> {
+  if (hasDatabaseUrl()) {
+    await clearHubAnswersForQuestionViaPrisma(questionId, campaignId);
+    return;
+  }
+
+  await clearHubAnswersForQuestionViaSupabase(questionId, campaignId);
 }
 
 async function createHubAnswersBatchViaPrisma(
@@ -231,16 +241,18 @@ async function persistHubAnswers(input: {
     return;
   }
 
-  await clearHubAnswersForQuestion(input.questionId);
+  await clearHubAnswersForQuestion(input.questionId, input.campaignId);
 
-  const prismaOk = await createHubAnswersBatchViaPrisma(
-    input.questionId,
-    input.campaignId,
-    input.comments,
-  );
+  if (hasDatabaseUrl()) {
+    const prismaOk = await createHubAnswersBatchViaPrisma(
+      input.questionId,
+      input.campaignId,
+      input.comments,
+    );
 
-  if (prismaOk) {
-    return;
+    if (prismaOk) {
+      return;
+    }
   }
 
   await createHubAnswersBatchViaSupabase(
@@ -402,14 +414,8 @@ async function resolveQuestionHubId(
   question: string,
   coreQuestionId: string,
 ): Promise<string | null> {
-  const prismaHubId = await upsertQuestionHubViaPrisma(
-    slug,
-    question,
-    coreQuestionId,
-  );
-
-  if (prismaHubId) {
-    return prismaHubId;
+  if (hasDatabaseUrl()) {
+    return upsertQuestionHubViaPrisma(slug, question, coreQuestionId);
   }
 
   return upsertQuestionHubViaSupabase(slug, question, coreQuestionId);
@@ -485,7 +491,7 @@ export async function fetchQuestionHubBySlug(
     return prismaAttempt.data;
   }
 
-  if (prismaAttempt.status === "not_found" || prismaAttempt.status === "failed") {
+  if (!hasDatabaseUrl()) {
     return fetchQuestionHubViaSupabase(slug);
   }
 
@@ -505,7 +511,32 @@ export async function fetchAllQuestionHubSlugs(): Promise<
   });
 
   if (prismaAttempt.status === "success" && prismaAttempt.data.length > 0) {
-    return prismaAttempt.data;
+    const merged = new Map(
+      prismaAttempt.data.map((row) => [row.slug, row]),
+    );
+
+    if (hasSupabaseAdminEnv()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from("QuestionHub")
+        .select("slug, createdAt")
+        .order("createdAt", { ascending: false });
+
+      if (!error) {
+        for (const row of data ?? []) {
+          if (!merged.has(row.slug as string)) {
+            merged.set(row.slug as string, {
+              slug: row.slug as string,
+              createdAt: new Date(row.createdAt as string),
+            });
+          }
+        }
+      }
+    }
+
+    return Array.from(merged.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
   }
 
   if (!hasSupabaseAdminEnv()) {

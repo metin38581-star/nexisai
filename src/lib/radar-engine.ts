@@ -65,9 +65,11 @@ function formatLogTimestamp(date: Date): string {
   });
 }
 
-export async function runBulkRadarScan(): Promise<RadarScanReport> {
+export async function runBulkRadarScan(
+  userId?: string,
+): Promise<RadarScanReport> {
   const apiKey = resolveApiKey();
-  const campaigns = await listRadarCampaigns();
+  const campaigns = await listRadarCampaigns(userId);
 
   if (campaigns.length === 0) {
     return {

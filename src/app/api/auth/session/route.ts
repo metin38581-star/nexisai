@@ -90,8 +90,8 @@ function validatePayload(body: AuthSessionRequest): {
     return { error: "Şifre alanı zorunludur." };
   }
 
-  if (password.length < 6) {
-    return { error: "Şifre en az 6 karakter olmalıdır." };
+  if (password.length < 8) {
+    return { error: "Şifre en az 8 karakter olmalıdır." };
   }
 
   return { action, email, password, companyName, otpCode };

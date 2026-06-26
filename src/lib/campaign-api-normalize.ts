@@ -66,7 +66,7 @@ export function normalizeCampaignApiRequest(
     markaAdi: (body.companyName ?? body.markaAdi ?? "").trim(),
     sektor: resolveSectorLabel(body, sectorSlug),
     sehir: (body.city ?? body.sehir ?? "").trim(),
-    gunlukButce: Number(body.budget ?? body.gunlukButce) || 10,
+    gunlukButce: Number(body.budget ?? body.gunlukButce) || 100,
     gunSayisi: Number(body.campaignDays ?? body.gunSayisi) || DEFAULT_CAMPAIGN_DAYS,
     sectorSlug,
     selectedQuestionIds,

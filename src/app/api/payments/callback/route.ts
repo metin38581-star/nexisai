@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { completeIyzicoCheckout, getCheckoutById } from "@/lib/iyzico-client";
-import { creditUserWallet } from "@/lib/user-wallet-service";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 
 function redirectToDashboard(status: "success" | "failed", checkoutId?: string) {
@@ -33,18 +32,6 @@ export async function POST(request: Request) {
       return redirectToDashboard("failed");
     }
 
-    if (!completed.alreadyCredited) {
-      await creditUserWallet(completed.userId, completed.amount, {
-        markPaidTopUp: true,
-        paymentMeta: {
-          provider: "iyzico",
-          providerStatusCode: "CHECKOUT_SUCCESS",
-          description: "iyzico cüzdan yüklemesi",
-          currency: "TRY",
-        },
-      });
-    }
-
     const checkout = await getCheckoutById(completed.checkoutId);
     const draft = checkout?.campaignDraft as Record<string, unknown> | null;
 
@@ -60,9 +47,16 @@ export async function POST(request: Request) {
       resumeUrl.searchParams.set("resumeCampaign", "1");
       resumeUrl.searchParams.set("companyName", normalized.markaAdi);
       resumeUrl.searchParams.set("sector", normalized.sektor);
+      resumeUrl.searchParams.set("sectorSlug", normalized.sectorSlug);
       resumeUrl.searchParams.set("city", normalized.sehir);
       resumeUrl.searchParams.set("budget", String(normalized.gunlukButce));
       resumeUrl.searchParams.set("campaignDays", String(normalized.gunSayisi));
+      if (normalized.selectedQuestionIds.length > 0) {
+        resumeUrl.searchParams.set(
+          "selectedQuestionIds",
+          normalized.selectedQuestionIds.join(","),
+        );
+      }
 
       return NextResponse.redirect(resumeUrl.toString(), 302);
     }
@@ -80,12 +74,10 @@ export async function GET(request: Request) {
     return redirectToDashboard("failed");
   }
 
-  const fakeForm = new FormData();
-  fakeForm.set("token", token);
-  return POST(
-    new Request(request.url, {
-      method: "POST",
-      body: fakeForm,
-    }),
-  );
+  const completed = await completeIyzicoCheckout(token);
+  if (!completed) {
+    return redirectToDashboard("failed");
+  }
+
+  return redirectToDashboard("success", completed.checkoutId);
 }

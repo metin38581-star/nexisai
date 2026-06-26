@@ -12,6 +12,14 @@ export function assertDataAccessEnv(): void {
   }
 }
 
+export function assertDatabaseEnv(): void {
+  if (!hasDatabaseUrl()) {
+    throw new Error(
+      "Cüzdan işlemleri için DATABASE_URL zorunludur.",
+    );
+  }
+}
+
 export function handleApiRouteError(
   error: unknown,
   fallbackMessage = "İşlem sırasında bir hata oluştu.",

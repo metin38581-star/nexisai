@@ -62,8 +62,8 @@ function mapBait(row: SupabaseBaitRow): StoredBait {
 
 function normalizeBaitStatus(status: string | null | undefined): string {
   const value = status?.trim().toUpperCase();
-  if (!value || value === "PENDING" || value === "FAILED") {
-    return "PUBLISHED";
+  if (!value) {
+    return "PENDING";
   }
   return value;
 }
@@ -81,9 +81,7 @@ function mapPrismaCampaigns(
       ...bait,
       status: normalizeBaitStatus(bait.status),
       yayinlandi:
-        bait.yayinlandi ||
-        isPublishedStatus(normalizeBaitStatus(bait.status)) ||
-        Boolean(bait.slug?.trim()),
+        bait.yayinlandi || isPublishedStatus(normalizeBaitStatus(bait.status)),
     })),
   }));
 }
@@ -822,8 +820,11 @@ export interface RadarCampaignRecord {
   llmFeedback: string | null;
 }
 
-async function listRadarCampaignsViaPrisma(): Promise<RadarCampaignRecord[]> {
+async function listRadarCampaignsViaPrisma(
+  userId?: string,
+): Promise<RadarCampaignRecord[]> {
   const campaigns = await prisma.campaign.findMany({
+    where: userId ? { userId } : undefined,
     orderBy: { createdAt: "desc" },
   });
 
@@ -840,14 +841,22 @@ async function listRadarCampaignsViaPrisma(): Promise<RadarCampaignRecord[]> {
   }));
 }
 
-async function listRadarCampaignsViaSupabase(): Promise<RadarCampaignRecord[]> {
+async function listRadarCampaignsViaSupabase(
+  userId?: string,
+): Promise<RadarCampaignRecord[]> {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  let query = supabase
     .from("Campaign")
     .select(
       "id, markaAdi, sehir, sektor, radarSikligiDakika, lastCheckedAt, createdAt, isOptimized, llmFeedback",
     )
     .order("createdAt", { ascending: false });
+
+  if (userId) {
+    query = query.eq("userId", userId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw error;
@@ -868,16 +877,18 @@ async function listRadarCampaignsViaSupabase(): Promise<RadarCampaignRecord[]> {
   }));
 }
 
-export async function listRadarCampaigns(): Promise<RadarCampaignRecord[]> {
+export async function listRadarCampaigns(
+  userId?: string,
+): Promise<RadarCampaignRecord[]> {
   if (hasDatabaseUrl()) {
     try {
-      return await listRadarCampaignsViaPrisma();
+      return await listRadarCampaignsViaPrisma(userId);
     } catch (error) {
       console.error("API Hatası:", error);
     }
   }
 
-  return listRadarCampaignsViaSupabase();
+  return listRadarCampaignsViaSupabase(userId);
 }
 
 export interface CampaignBaitInput {

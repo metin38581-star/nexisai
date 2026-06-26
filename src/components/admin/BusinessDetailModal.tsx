@@ -58,7 +58,7 @@ export default function BusinessDetailModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId || !accessToken) {
+    if (!userId) {
       setDetail(null);
       setError(null);
       return;
@@ -71,10 +71,10 @@ export default function BusinessDetailModal({
       setError(null);
 
       try {
-        const response = await fetch(
-          `/api/admin/businesses/${userId}`,
-          buildAuthFetchInit(accessToken),
-        );
+        const response = await fetch(`/api/admin/businesses/${userId}`, {
+          credentials: "include",
+          ...(accessToken ? buildAuthFetchInit(accessToken) : {}),
+        });
         const payload = (await response.json()) as {
           success?: boolean;
           error?: string;

@@ -20,8 +20,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
 import {
   listPaymentsByUserId,
-  sumSuccessfulPaymentsAllUsers,
-  sumSuccessfulPaymentsByUserId,
+  sumCreditPaymentsAllUsers,
+  sumCreditPaymentsByUserId,
 } from "@/lib/payment-store";
 
 interface AuthUserSummary {
@@ -188,7 +188,7 @@ function buildBusinessRow(
 ): AdminBusinessRow {
   const companyName = aggregate?.markaAdi ?? user.companyName ?? "—";
   const sector = aggregate?.sektor ?? "—";
-  const currency = "USD";
+  const currency = "TRY";
 
   return {
     userId: user.id,
@@ -207,7 +207,7 @@ export async function listAdminBusinesses(): Promise<AdminBusinessRow[]> {
   const [authUsers, aggregates, paymentTotals] = await Promise.all([
     listAuthUsers(),
     listCampaignAggregates(),
-    sumSuccessfulPaymentsAllUsers(),
+    sumCreditPaymentsAllUsers(),
   ]);
 
   const aggregateByUser = new Map(aggregates.map((row) => [row.userId, row]));
@@ -234,7 +234,7 @@ export async function listAdminBusinesses(): Promise<AdminBusinessRow[]> {
       sectorLabel: resolveSectorLabel(aggregate.sektor),
       email: "—",
       totalPaymentAmount: paymentTotals.get(aggregate.userId) ?? 0,
-      currency: "USD",
+      currency: "TRY",
       campaignCount: aggregate.count,
     });
   }
@@ -513,6 +513,7 @@ function enrichOverviewRows(
   walletBalances: Map<string, number>,
   userIdByCampaignId: Map<string, string>,
   forumUrlByCampaignId: Map<string, string | null>,
+  creditDeposits: Map<string, number>,
 ): AdminCampaignOverviewRow[] {
   return rows.map((row) => {
     const userId = userIdByCampaignId.get(row.campaignId);
@@ -522,14 +523,49 @@ function enrichOverviewRows(
         : row.walletBalance;
     const forumUrl =
       forumUrlByCampaignId.get(row.campaignId) ?? row.forumUrl;
+    const totalDeposited =
+      userId !== undefined
+        ? (creditDeposits.get(userId) ?? row.totalDeposited)
+        : row.totalDeposited;
 
     return {
       ...row,
       walletBalance: liveWalletBalance,
-      totalDeposited: liveWalletBalance,
+      totalDeposited,
       forumUrl,
     };
   });
+}
+
+async function loadCampaignSpendByIds(
+  campaignIds: string[],
+): Promise<Map<string, number>> {
+  const spend = new Map<string, number>();
+  if (campaignIds.length === 0 || !hasDatabaseUrl()) {
+    return spend;
+  }
+
+  try {
+    const payments = await prisma.payment.findMany({
+      where: {
+        campaignId: { in: campaignIds },
+        providerStatusCode: "WALLET_DEBIT",
+        status: { in: ["success", "succeeded", "paid"] },
+      },
+      select: { campaignId: true, amount: true },
+    });
+
+    for (const payment of payments) {
+      if (!payment.campaignId) {
+        continue;
+      }
+      spend.set(payment.campaignId, payment.amount);
+    }
+  } catch (error) {
+    console.error("[ADMIN_STORE]: Kampanya harcama toplamı hatası:", error);
+  }
+
+  return spend;
 }
 
 function buildOverviewStats(
@@ -563,12 +599,13 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
 
   if (operationalLogs.length > 0) {
     const campaignIds = operationalLogs.map((row) => row.campaignId);
-    const [authUsers, walletBalances, userIdByCampaignId, forumUrlByCampaignId] =
+    const [authUsers, walletBalances, userIdByCampaignId, forumUrlByCampaignId, creditDeposits] =
       await Promise.all([
         listAuthUsers(),
         listWalletBalances(),
         loadCampaignLogUserIds(),
         resolveForumUrlsByCampaignIds(campaignIds),
+        sumCreditPaymentsAllUsers(),
       ]);
 
     const rows = enrichOverviewRows(
@@ -576,6 +613,7 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
       walletBalances,
       userIdByCampaignId,
       forumUrlByCampaignId,
+      creditDeposits,
     );
 
     return {
@@ -584,11 +622,16 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
     };
   }
 
-  const [authUsers, campaigns, walletBalances] = await Promise.all([
-    listAuthUsers(),
-    listAllCampaignsOverview(),
-    listWalletBalances(),
-  ]);
+  const [authUsers, campaigns, walletBalances, creditDeposits] =
+    await Promise.all([
+      listAuthUsers(),
+      listAllCampaignsOverview(),
+      listWalletBalances(),
+      sumCreditPaymentsAllUsers(),
+    ]);
+
+  const campaignIds = campaigns.map((c) => c.id);
+  const spendByCampaign = await loadCampaignSpendByIds(campaignIds);
 
   const emailByUserId = new Map(authUsers.map((user) => [user.id, user.email]));
 
@@ -609,8 +652,8 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
         sectorLabel: resolveSectorLabel(campaign.sektor),
         city: campaign.sehir,
         walletBalance: liveWalletBalance,
-        totalDeposited: liveWalletBalance,
-        amountSpent: 0,
+        totalDeposited: creditDeposits.get(userId) ?? 0,
+        amountSpent: spendByCampaign.get(campaign.id) ?? 0,
         wordpressUrl: resolveCampaignWordpressUrl(campaign),
         forumUrl: resolveCampaignForumUrl(campaign),
         createdAt: campaign.createdAt.toISOString(),
@@ -860,19 +903,13 @@ export async function getAdminBusinessDetail(
   }
 
   const payments = await listPaymentsByUserId(userId);
-  let paymentTotal = payments
-    .filter((payment) =>
-      ["success", "succeeded", "paid"].includes(payment.status.toLowerCase()),
-    )
-    .reduce((sum, payment) => sum + payment.amount, 0);
+  let paymentTotal = await sumCreditPaymentsByUserId(userId);
 
   if (paymentTotal === 0 && campaigns.length > 0) {
     paymentTotal = campaigns.reduce(
       (sum, campaign) => sum + campaign.gunlukButce * campaign.gunSayisi,
       0,
     );
-  } else if (paymentTotal === 0) {
-    paymentTotal = await sumSuccessfulPaymentsByUserId(userId);
   }
 
   const latestCampaign = campaigns[0];
@@ -902,7 +939,7 @@ export async function getAdminBusinessDetail(
     sector,
     sectorLabel: sector === "—" ? "—" : resolveSectorLabel(sector),
     totalPaymentAmount: paymentTotal,
-    currency: payments[0]?.currency ?? "USD",
+    currency: payments[0]?.currency ?? "TRY",
     campaigns: campaigns.map(mapCampaignHistory),
     payments: payments.map(mapPaymentRecord),
   };
