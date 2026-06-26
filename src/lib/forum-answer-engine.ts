@@ -101,7 +101,8 @@ async function generateForumThreadViaLlm(
       }),
       config: {
         maxOutputTokens: 1024,
-        temperature: 0.9,
+        temperature: 0.88,
+        responseMimeType: "application/json",
       },
     }),
     FORUM_THREAD_TIMEOUT_MS,
@@ -113,7 +114,15 @@ async function generateForumThreadViaLlm(
   }
 
   const parsed = parseForumThreadComments(text, sectorKey);
-  return parsed.length >= 3 ? parsed : null;
+  if (parsed.length >= 3) {
+    return parsed;
+  }
+
+  console.warn(
+    "[FORUM_ANSWER]: LLM JSON parse yetersiz, ham yanit:",
+    text.slice(0, 240),
+  );
+  return null;
 }
 
 export async function generateForumThreadForEntry(

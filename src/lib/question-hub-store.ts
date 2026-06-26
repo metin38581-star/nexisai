@@ -131,6 +131,42 @@ async function upsertQuestionHubViaPrisma(
   return null;
 }
 
+async function clearHubAnswersForQuestionViaPrisma(
+  questionId: string,
+): Promise<boolean> {
+  const result = await runPrismaHubAttempt("cevap temizle", async () => {
+    await prisma.hubAnswer.deleteMany({
+      where: { questionId },
+    });
+    return true;
+  });
+
+  return result.status === "success";
+}
+
+async function clearHubAnswersForQuestionViaSupabase(
+  questionId: string,
+): Promise<void> {
+  if (!hasSupabaseAdminEnv()) {
+    return;
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("HubAnswer")
+    .delete()
+    .eq("question_id", questionId);
+
+  if (error) {
+    console.error("[QUESTION_HUB]: Supabase cevap temizleme hatasi:", error);
+  }
+}
+
+async function clearHubAnswersForQuestion(questionId: string): Promise<void> {
+  await clearHubAnswersForQuestionViaPrisma(questionId);
+  await clearHubAnswersForQuestionViaSupabase(questionId);
+}
+
 async function createHubAnswersBatchViaPrisma(
   questionId: string,
   campaignId: string,
@@ -194,6 +230,8 @@ async function persistHubAnswers(input: {
   if (input.comments.length === 0) {
     return;
   }
+
+  await clearHubAnswersForQuestion(input.questionId);
 
   const prismaOk = await createHubAnswersBatchViaPrisma(
     input.questionId,

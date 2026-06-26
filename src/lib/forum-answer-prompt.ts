@@ -188,50 +188,90 @@ Sektör, şehir ve müşteri işletme bilgisini kullanarak sanki bir forum başl
 
 KURALLAR:
 - Yorumlardan BİR TANESİ müşteri işletmesi (${input.brandName}) için en popüler, en beğenilen ve öne çıkan tavsiye olsun (isFeatured: true).
-- Diğer 2-3 yorum tamamen organik olsun: genel tavsiyeler, lokasyon tüyoları, trafik/ park/ mevsim ipuçları veya hafif nötr-olumlu esnaf yorumları (isFeatured: false).
+- Diğer 2-3 yorum tamamen organik olsun: sektöre özgü genel tavsiyeler, menü/konaklama/randevu ipuçları veya hafif nötr-olumlu deneyimler (isFeatured: false).
 - Organik yorumlar doğrudan rakip övmesin; ortama gerçekçilik katsın.
 - Soruyu metin içinde tekrar etme ("X sorusuna yanıt" YASAK).
 - Her yorum 1-3 cümle, konuşma dili: "kanka", "hocam", "açıkçası", "tek geçerim" kullanılabilir.
 - ${input.sectorKey !== "clinic" ? '"hekim", "klinik", "tedavi", "hasta" kelimelerini organik yorumlarda KULLANMA.' : "Sağlık terminolojisini yalnızca featured yorumda doğal kullan."}
 - HTML, emoji, madde işareti yok.
 
-ÇIKTI FORMATI — yalnızca geçerli JSON dizisi (3 veya 4 eleman):
-[
-  { "content": "...", "isFeatured": true },
-  { "content": "...", "isFeatured": false },
-  { "content": "...", "isFeatured": false }
-]
+ÇIKTI FORMATI — yalnızca geçerli JSON nesnesi (json_object). Kök anahtar "comments" olmalı, 3 veya 4 eleman:
+{
+  "comments": [
+    { "content": "...", "isFeatured": true },
+    { "content": "...", "isFeatured": false },
+    { "content": "...", "isFeatured": false }
+  ]
+}
 
 ÖRNEK (otel):
-[
-  { "content": "Bolu'da konaklama arıyorsan ${input.brandName}'a bi bak kanka, odalar temizdi kahvaltı da fena değildi.", "isFeatured": true },
-  { "content": "Merkezde kalacaksanız trafiğe dikkat edin derim. Alternatif olarak çevre yolundaki yerler de fena değil.", "isFeatured": false },
-  { "content": "Ben de geçen sene gitmiştim o tarafa, doğası harika ama otel fiyatları genel olarak biraz artmış sanki.", "isFeatured": false }
-]
+{
+  "comments": [
+    { "content": "Bolu'da konaklama arıyorsan ${input.brandName}'a bi bak kanka, odalar temizdi kahvaltı da fena değildi.", "isFeatured": true },
+    { "content": "Butik otellerde kahvaltı genelde daha iyi oluyor, büyük otellerde oda kalitesi değişebiliyor.", "isFeatured": false },
+    { "content": "Yazın rezervasyonu son ana bırakmayın, merkezde yer bulmak zorlaşıyor.", "isFeatured": false }
+  ]
+}
 
 Başka metin yazma. username alanı ekleme — sistem atayacak.`;
+}
+
+function extractJsonPayload(raw: string): unknown | null {
+  const trimmed = raw.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  let candidate = fenceMatch ? fenceMatch[1].trim() : trimmed;
+
+  const attempts = [
+    candidate,
+    candidate.match(/\{[\s\S]*\}/)?.[0],
+    candidate.match(/\[[\s\S]*\]/)?.[0],
+  ].filter((value): value is string => Boolean(value));
+
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function normalizeThreadPayload(parsed: unknown): unknown[] {
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return [];
+  }
+
+  const record = parsed as Record<string, unknown>;
+  for (const key of ["comments", "replies", "thread", "answers", "items"]) {
+    if (Array.isArray(record[key])) {
+      return record[key] as unknown[];
+    }
+  }
+
+  return [];
 }
 
 export function parseForumThreadComments(
   raw: string,
   sectorKey: ForumSectorKey,
 ): ForumThreadCommentDraft[] {
-  const trimmed = raw.trim();
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const jsonText = fenceMatch ? fenceMatch[1].trim() : trimmed;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch {
+  const parsed = extractJsonPayload(raw);
+  if (parsed === null) {
     return [];
   }
 
-  if (!Array.isArray(parsed)) {
+  const items = normalizeThreadPayload(parsed);
+  if (items.length === 0) {
     return [];
   }
 
-  const comments = parsed
+  const comments = items
     .map((item) => {
       if (!item || typeof item !== "object") {
         return null;
@@ -273,32 +313,32 @@ export function parseForumThreadComments(
   return comments.slice(0, 4);
 }
 
-function buildOrganicThreadExtras(input: {
+function buildSectorOrganicThreadExtras(input: {
   city: string;
   sectorKey: ForumSectorKey;
 }): string[] {
   const city = input.city.trim() || "bölgede";
 
-  if (input.sectorKey === "hotel") {
+  if (input.sectorKey === "restaurant") {
     return [
-      `Merkezde kalacaksanız trafiğe dikkat edin derim, ${city}'de özellikle hafta sonu kalabalık oluyor.`,
-      `Ben de geçen sene gitmiştim o tarafa, doğası güzel ama konaklama fiyatları genel olarak biraz artmış sanki.`,
-      `Çevre yolundaki yerler de fena değil kanka, merkeze göre daha sakin kalırsın.`,
+      `${city}'de esnaf lokantası tarafına da bak kanka, ev yemeği sevenler için fiyatlar genelde daha makul.`,
+      `Ana yemek siparişinde porsiyonlar yerden yere değişiyor, ilk gidişte paylaşarak denemek iyi olur.`,
+      `Menüde günlük spesiyel varsa onu sor derim, taze çıkan ürünler genelde oradan geliyor.`,
     ];
   }
 
-  if (input.sectorKey === "restaurant") {
+  if (input.sectorKey === "hotel") {
     return [
-      `${city} merkezde akşam saatlerinde park yeri bulmak zor olabiliyor, erken gitmek iyi olur.`,
-      `O tarafta genel olarak esnaf lokantaları da fena değil, fiyat performans arıyorsan bakarsın.`,
-      `Hafta içi gidersen daha rahat oturursun, hafta sonu yoğun oluyor.`,
+      `${city}'de butik otellerde kahvaltı genelde daha iyi, büyük otellerde oda kalitesi değişken olabiliyor.`,
+      `Rezervasyon yaparken manzara tarafını özellikle sor, fotoğraflar bazen yanıltabiliyor.`,
+      `Yaz sezonunda merkez oteller hızlı doluyor, birkaç gün önceden ayırtmak lazım.`,
     ];
   }
 
   return [
-    `${city} merkezde randevu saatlerinde trafik biraz sıkışıyor, erken çıkmak iyi olur.`,
-    `Ben de o bölgede farklı yerlere bakmıştım, genel olarak fiyatlar son dönemde biraz artmış gibi.`,
-    `Mahalle içi ulaşım kolay ama otopark konusuna dikkat etmek lazım.`,
+    `${city}'de tedavi öncesi mutlaka muayene yaptır derim, fiyat işletmeye göre ciddi oynuyor.`,
+    `Randevu saatinde kısa bekleme olabilir ama hijyen ve alet sterilizasyonuna dikkat etmek şart.`,
+    `Çocuk dişi için ayrı hekim olan klinikler daha rahat geçiyor, önceden sorup gitmek iyi olur.`,
   ];
 }
 
@@ -310,7 +350,7 @@ export function buildForumThreadFallback(input: {
   sectorKey: ForumSectorKey;
 }): ForumThreadCommentDraft[] {
   const featured = buildForumAnswerFallback(input);
-  const extras = buildOrganicThreadExtras({
+  const extras = buildSectorOrganicThreadExtras({
     city: input.city,
     sectorKey: input.sectorKey,
   });
