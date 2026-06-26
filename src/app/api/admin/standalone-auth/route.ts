@@ -5,7 +5,6 @@ import {
   buildStandaloneAdminCookieOptions,
   createStandaloneAdminSessionValue,
   hasValidStandaloneAdminSession,
-  verifyStandaloneAdminPassword,
 } from "@/lib/standalone-admin-auth";
 import { handleApiRouteError } from "@/lib/api-error";
 
@@ -25,9 +24,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { password?: string };
-    const password = body.password ?? "";
+    const incomingPassword = (body.password ?? "").trim();
 
-    if (!verifyStandaloneAdminPassword(password)) {
+    if (incomingPassword !== "Om180622") {
       return NextResponse.json(
         { success: false, error: "Geçersiz admin şifresi." },
         { status: 401 },

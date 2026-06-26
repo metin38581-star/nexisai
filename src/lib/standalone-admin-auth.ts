@@ -15,27 +15,6 @@ function resolveStandaloneAdminSecret(): string {
   );
 }
 
-function resolveStandaloneAdminPassword(): string | null {
-  const configured = process.env.ADMIN_STANDALONE_PASSWORD?.trim();
-  return configured || null;
-}
-
-export function verifyStandaloneAdminPassword(input: string): boolean {
-  const expected = resolveStandaloneAdminPassword();
-  if (!expected || !input.trim()) {
-    return false;
-  }
-
-  const provided = Buffer.from(input.trim());
-  const target = Buffer.from(expected);
-
-  if (provided.length !== target.length) {
-    return false;
-  }
-
-  return timingSafeEqual(provided, target);
-}
-
 function buildStandaloneSessionSignature(issuedAt: string): string {
   return createHmac("sha256", resolveStandaloneAdminSecret())
     .update(`standalone-admin:${issuedAt}`)
