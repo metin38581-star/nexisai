@@ -13,8 +13,7 @@ import {
 } from "@/constants/campaign";
 import type { SelectedQuestionPair } from "@/lib/selected-questions";
 import { buildFallbackSimulatedAnswer } from "@/lib/selected-questions";
-import { CUSTOM_SECTOR_SLUG, isCustomSectorSlug } from "@/lib/sector-utils";
-import { isCustomAnchorQuestionId } from "@/lib/sector-questions-generator";
+import { CUSTOM_SECTOR_SLUG, isCustomSectorSlug, isCustomAnchorQuestionId } from "@/lib/sector-utils";
 
 const SECTOR_SLUG_TO_CORE: Partial<Record<BusinessSector, CoreQuestionSector>> = {
   "dis-klinigi-saglik": "clinic",

@@ -1,7 +1,17 @@
 /** Özel / niş sektör slug'ı — kullanıcı metin girer */
 export const CUSTOM_SECTOR_SLUG = "custom-sector" as const;
 
+export const CUSTOM_ANCHOR_QUESTION_ID_PREFIX = "custom-anchor-";
+
 export type CustomSectorSlug = typeof CUSTOM_SECTOR_SLUG;
+
+export function buildCustomAnchorQuestionId(index: number): string {
+  return `${CUSTOM_ANCHOR_QUESTION_ID_PREFIX}${index}`;
+}
+
+export function isCustomAnchorQuestionId(id: string): boolean {
+  return id.startsWith(CUSTOM_ANCHOR_QUESTION_ID_PREFIX);
+}
 
 export function isCustomSectorSlug(
   value: string | undefined | null,

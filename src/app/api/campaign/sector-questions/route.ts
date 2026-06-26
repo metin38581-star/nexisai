@@ -4,8 +4,8 @@ import { assertDataAccessEnv, handleApiRouteError } from "@/lib/api-error";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
   generateSectorAnchorQuestions,
-  buildCustomAnchorQuestionId,
 } from "@/lib/sector-questions-generator";
+import { buildCustomAnchorQuestionId } from "@/lib/sector-utils";
 
 export async function POST(request: Request) {
   try {

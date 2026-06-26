@@ -5,7 +5,7 @@ import {
   resolveCoreQuestionSector,
   resolveCoreQuestionSectorFromLabel,
 } from "@/lib/core-questions";
-import { isCustomSectorSlug } from "@/lib/sector-utils";
+import { isCustomSectorSlug, resolveEffectiveSectorLabel } from "@/lib/sector-utils";
 
 export type { ForumSectorKey, Sector } from "@/types/sector";
 export { resolveEffectiveSectorLabel, isCustomSectorSlug } from "@/lib/sector-utils";

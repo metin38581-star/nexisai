@@ -4,20 +4,11 @@ import { GoogleGenAI } from "@google/genai";
 
 import { QUESTIONS_PER_SECTOR } from "@/constants/campaign";
 
-export const SECTOR_ANCHOR_QUESTION_COUNT = QUESTIONS_PER_SECTOR;
-export const CUSTOM_ANCHOR_QUESTION_ID_PREFIX = "custom-anchor-";
+const SECTOR_ANCHOR_QUESTION_COUNT = QUESTIONS_PER_SECTOR;
 
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
 const GOOGLE_GENAI_API_VERSION = "v1";
 const SECTOR_ANCHOR_TIMEOUT_MS = 45_000;
-
-export function buildCustomAnchorQuestionId(index: number): string {
-  return `${CUSTOM_ANCHOR_QUESTION_ID_PREFIX}${index}`;
-}
-
-export function isCustomAnchorQuestionId(id: string): boolean {
-  return id.startsWith(CUSTOM_ANCHOR_QUESTION_ID_PREFIX);
-}
 
 function resolveApiKey(): string | null {
   return (
