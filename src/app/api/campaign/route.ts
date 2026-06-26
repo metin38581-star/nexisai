@@ -43,6 +43,7 @@ import {
   validateCoreQuestionSelection,
 } from "@/lib/core-questions";
 import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 
 function buildAlreadyProcessedResponse(
@@ -558,6 +559,10 @@ export async function POST(request: Request) {
         (result) => result.ok && result.externalLiveUrl,
       )?.externalLiveUrl ?? null;
 
+    const primaryForumSlug = hubEntries[0]?.question
+      ? buildQuestionHubSlug(hubEntries[0].question)
+      : null;
+
     void recordCampaignOperationalLog({
       campaignId: persistedCampaignId,
       userId: activeUserId,
@@ -568,7 +573,7 @@ export async function POST(request: Request) {
       walletBalance: Math.max(0, walletBalance - toplamMaliyet),
       amountSpent: toplamMaliyet,
       wordpressUrl,
-      forumUrl: primarySlug ? buildForumHubUrl(primarySlug) : null,
+      forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
     }).catch((logError) => {
       console.error("[CAMPAIGN_LOG]: Kampanya operasyon kaydı atlandı:", logError);
     });

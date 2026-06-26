@@ -13,6 +13,7 @@ import type {
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { listCampaignOperationalLogs } from "@/lib/campaign-log-store";
 import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -257,6 +258,9 @@ type CampaignOverviewSource = {
     slug: string;
     externalLiveUrl: string | null;
   }>;
+  intents: Array<{
+    question: string;
+  }>;
 };
 
 async function listAllCampaignsOverviewViaPrisma(): Promise<
@@ -279,6 +283,11 @@ async function listAllCampaignsOverviewViaPrisma(): Promise<
           slug: true,
           externalLiveUrl: true,
         },
+      },
+      intents: {
+        orderBy: { sortOrder: "asc" },
+        take: 1,
+        select: { question: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -303,11 +312,19 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
 
   for (const campaign of campaigns ?? []) {
     const campaignId = campaign.id as string;
-    const { data: baits } = await supabase
-      .from("Bait")
-      .select("slug, external_live_url")
-      .eq("campaignId", campaignId)
-      .order("createdAt", { ascending: true });
+    const [{ data: baits }, { data: intents }] = await Promise.all([
+      supabase
+        .from("Bait")
+        .select("slug, external_live_url")
+        .eq("campaignId", campaignId)
+        .order("createdAt", { ascending: true }),
+      supabase
+        .from("CampaignIntent")
+        .select("question")
+        .eq("campaignId", campaignId)
+        .order("sortOrder", { ascending: true })
+        .limit(1),
+    ]);
 
     results.push({
       id: campaignId,
@@ -321,6 +338,9 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
       baits: (baits ?? []).map((bait) => ({
         slug: bait.slug as string,
         externalLiveUrl: (bait.external_live_url as string | null) ?? null,
+      })),
+      intents: (intents ?? []).map((intent) => ({
+        question: intent.question as string,
       })),
     });
   }
@@ -385,13 +405,131 @@ function resolveCampaignWordpressUrl(
   );
 }
 
-function resolveCampaignForumUrl(campaign: CampaignOverviewSource): string | null {
-  const firstBait = campaign.baits[0];
-  if (!firstBait?.slug) {
+function resolveCampaignForumUrl(
+  campaign: CampaignOverviewSource,
+): string | null {
+  const firstQuestion = campaign.intents[0]?.question?.trim();
+  if (!firstQuestion) {
     return null;
   }
 
-  return buildForumHubUrl(firstBait.slug);
+  const slug = buildQuestionHubSlug(firstQuestion);
+  return slug ? buildForumHubUrl(slug) : null;
+}
+
+async function resolveForumUrlsByCampaignIds(
+  campaignIds: string[],
+): Promise<Map<string, string | null>> {
+  const urls = new Map<string, string | null>();
+  if (campaignIds.length === 0) {
+    return urls;
+  }
+
+  if (hasDatabaseUrl()) {
+    try {
+      const intents = await prisma.campaignIntent.findMany({
+        where: { campaignId: { in: campaignIds } },
+        orderBy: { sortOrder: "asc" },
+        select: { campaignId: true, question: true },
+      });
+
+      for (const intent of intents) {
+        if (urls.has(intent.campaignId)) {
+          continue;
+        }
+
+        const slug = buildQuestionHubSlug(intent.question);
+        urls.set(
+          intent.campaignId,
+          slug ? buildForumHubUrl(slug) : null,
+        );
+      }
+
+      return urls;
+    } catch (error) {
+      console.error("[ADMIN_STORE]: Forum URL çözümleme hatası:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  for (const campaignId of campaignIds) {
+    const { data } = await supabase
+      .from("CampaignIntent")
+      .select("question")
+      .eq("campaignId", campaignId)
+      .order("sortOrder", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const question = (data?.question as string | undefined)?.trim();
+    if (!question) {
+      urls.set(campaignId, null);
+      continue;
+    }
+
+    const slug = buildQuestionHubSlug(question);
+    urls.set(campaignId, slug ? buildForumHubUrl(slug) : null);
+  }
+
+  return urls;
+}
+
+async function loadCampaignLogUserIds(): Promise<Map<string, string>> {
+  if (hasDatabaseUrl()) {
+    try {
+      const logs = await prisma.campaignLog.findMany({
+        select: { campaignId: true, userId: true },
+      });
+      return new Map(logs.map((log) => [log.campaignId, log.userId]));
+    } catch (error) {
+      console.error("[ADMIN_STORE]: CampaignLog userId listesi hatası:", error);
+    }
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("CampaignLog")
+      .select("campaign_id, user_id");
+
+    if (error) {
+      throw error;
+    }
+
+    return new Map(
+      (data ?? []).map((log) => [
+        log.campaign_id as string,
+        log.user_id as string,
+      ]),
+    );
+  } catch (error) {
+    console.error("[ADMIN_STORE]: Supabase CampaignLog userId hatası:", error);
+    return new Map();
+  }
+}
+
+function enrichOverviewRows(
+  rows: AdminCampaignOverviewRow[],
+  walletBalances: Map<string, number>,
+  userIdByCampaignId: Map<string, string>,
+  forumUrlByCampaignId: Map<string, string | null>,
+): AdminCampaignOverviewRow[] {
+  return rows.map((row) => {
+    const userId = userIdByCampaignId.get(row.campaignId);
+    const liveWalletBalance =
+      userId !== undefined
+        ? (walletBalances.get(userId) ?? row.walletBalance)
+        : row.walletBalance;
+    const forumUrl =
+      forumUrlByCampaignId.get(row.campaignId) ?? row.forumUrl;
+
+    return {
+      ...row,
+      walletBalance: liveWalletBalance,
+      totalDeposited: liveWalletBalance,
+      forumUrl,
+    };
+  });
 }
 
 function buildOverviewStats(
@@ -424,24 +562,33 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
   const operationalLogs = await listCampaignOperationalLogs();
 
   if (operationalLogs.length > 0) {
-    const [authUsers, walletBalances] = await Promise.all([
-      listAuthUsers(),
-      listWalletBalances(),
-    ]);
+    const campaignIds = operationalLogs.map((row) => row.campaignId);
+    const [authUsers, walletBalances, userIdByCampaignId, forumUrlByCampaignId] =
+      await Promise.all([
+        listAuthUsers(),
+        listWalletBalances(),
+        loadCampaignLogUserIds(),
+        resolveForumUrlsByCampaignIds(campaignIds),
+      ]);
+
+    const rows = enrichOverviewRows(
+      operationalLogs,
+      walletBalances,
+      userIdByCampaignId,
+      forumUrlByCampaignId,
+    );
 
     return {
-      rows: operationalLogs,
-      stats: buildOverviewStats(authUsers.length, walletBalances, operationalLogs),
+      rows,
+      stats: buildOverviewStats(authUsers.length, walletBalances, rows),
     };
   }
 
-  const [authUsers, campaigns, paymentTotals, walletBalances] =
-    await Promise.all([
-      listAuthUsers(),
-      listAllCampaignsOverview(),
-      sumSuccessfulPaymentsAllUsers(),
-      listWalletBalances(),
-    ]);
+  const [authUsers, campaigns, walletBalances] = await Promise.all([
+    listAuthUsers(),
+    listAllCampaignsOverview(),
+    listWalletBalances(),
+  ]);
 
   const emailByUserId = new Map(authUsers.map((user) => [user.id, user.email]));
 
@@ -452,6 +599,8 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
     .map((campaign) => {
       const userId = campaign.userId;
 
+      const liveWalletBalance = walletBalances.get(userId) ?? 0;
+
       return {
         campaignId: campaign.id,
         userEmail: emailByUserId.get(userId) ?? "—",
@@ -459,8 +608,8 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
         sector: campaign.sektor,
         sectorLabel: resolveSectorLabel(campaign.sektor),
         city: campaign.sehir,
-        walletBalance: walletBalances.get(userId) ?? 0,
-        totalDeposited: paymentTotals.get(userId) ?? 0,
+        walletBalance: liveWalletBalance,
+        totalDeposited: liveWalletBalance,
         amountSpent: 0,
         wordpressUrl: resolveCampaignWordpressUrl(campaign),
         forumUrl: resolveCampaignForumUrl(campaign),

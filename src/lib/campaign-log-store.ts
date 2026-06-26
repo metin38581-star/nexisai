@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
-import { sumSuccessfulPaymentsByUserId } from "@/lib/payment-store";
 import type { AdminCampaignOverviewRow } from "@/types/admin";
 
 function resolveSectorLabel(sektor: string): string {
@@ -28,9 +27,7 @@ export interface RecordCampaignLogInput {
 async function recordCampaignLogViaPrisma(
   input: RecordCampaignLogInput,
 ): Promise<void> {
-  const amountDeposited =
-    input.amountDeposited ??
-    (await sumSuccessfulPaymentsByUserId(input.userId));
+  const amountDeposited = input.amountDeposited ?? input.walletBalance;
 
   await prisma.campaignLog.upsert({
     where: { campaignId: input.campaignId },
@@ -67,9 +64,7 @@ async function recordCampaignLogViaSupabase(
   input: RecordCampaignLogInput,
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
-  const amountDeposited =
-    input.amountDeposited ??
-    (await sumSuccessfulPaymentsByUserId(input.userId));
+  const amountDeposited = input.amountDeposited ?? input.walletBalance;
 
   const row = {
     id: crypto.randomUUID(),
@@ -128,7 +123,7 @@ async function listCampaignLogsViaPrisma(): Promise<AdminCampaignOverviewRow[]> 
     sectorLabel: log.sectorLabel ?? resolveSectorLabel(log.sector),
     city: log.city,
     walletBalance: log.walletBalance,
-    totalDeposited: log.amountDeposited,
+    totalDeposited: log.walletBalance,
     amountSpent: log.amountSpent,
     wordpressUrl: log.wordpressUrl,
     forumUrl: log.forumUrl,
@@ -157,7 +152,7 @@ async function listCampaignLogsViaSupabase(): Promise<AdminCampaignOverviewRow[]
       resolveSectorLabel(log.sector as string),
     city: log.city as string,
     walletBalance: Number(log.wallet_balance),
-    totalDeposited: Number(log.amount_deposited),
+    totalDeposited: Number(log.wallet_balance),
     amountSpent: Number(log.amount_spent),
     wordpressUrl: (log.wordpress_url as string | null) ?? null,
     forumUrl: (log.forum_url as string | null) ?? null,

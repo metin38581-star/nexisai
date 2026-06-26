@@ -362,7 +362,7 @@ export default function SuperAdminDashboard() {
                           </p>
                         </td>
                         <td className="px-4 py-3 align-top font-medium text-emerald-300">
-                          {formatTry(row.totalDeposited)}
+                          {formatTry(row.walletBalance)}
                         </td>
                         <td className="px-4 py-3 align-top">
                           <LinkCell url={row.wordpressUrl} label="WordPress" />
