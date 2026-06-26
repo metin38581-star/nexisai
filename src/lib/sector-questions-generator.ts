@@ -42,13 +42,100 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 function buildSectorAnchorQuestionsPrompt(customSector: string): string {
-  return `Sen bir SEO ve GEO uzmanısın. Kullanıcı sisteme '${customSector}' iş kolunu girdi. Bu spesifik iş koluyla ilgili Türk insanının Google, Ekşi Sözlük, Şikayetvar veya KızlarSoruyor gibi platformlarda aratabileceği, tamamen organik, net ve doğrudan hizmeti/sorunu hedefleyen TAM ${SECTOR_ANCHOR_QUESTION_COUNT} ADET kemik soru/başlık üret.
+  return `Sen bir SEO ve dikey arama uzmanısın. Kullanıcı sisteme '${customSector}' niş kategorisini girdi.
+Bu niş sektöre özel, Türk insanının internette (Google, Forumlar, Şikayetvar) GERÇEKTEN kurabileceği ${SECTOR_ANCHOR_QUESTION_COUNT} adet popüler ve birbirinden tamamen farklı soru/başlık üret.
+
+Her sektörün dinamiği kendine hastır; kelime değiştirme şablonları KESİNLİKLE YASAKTIR. Aynı cümle iskeletini tekrarlama, "en sağlam X yapan yer", "X keşif ücreti", "X garanti veren firma" gibi jenerik kalıpları kullanma.
+
+Sektör dinamiğini '${customSector}' ifadesinden kendin çıkar. Aşağıdaki maddeler yalnızca düşünme yönü içindir — çıktıda birebir kopyalama:
+- Balkon filesi / file montajı gibi yapısal hizmetlerde: montaj kalitesi, kedi ve çocuk güvenliği, çelik misina, yırtılma, rüzgara dayanım, balkon ölçüsüne göre fiyat gibi teknik konulara odaklan.
+- Pet taksi / evcil hayvan taşıma gibi ulaştırma hizmetlerinde: 7/24 erişim, şehirler arası taşıma, büyük ırk kabulü, hijyen, güvenli taşıma kafesi, stres yönetimi gibi hayvan ve lojistik odaklı konulara odaklan.
+- Diğer nişlerde: o iş kolunun müşterisinin gerçekten merak ettiği, forumda soracağı spesifik problemleri hedefle; sektör jargonunu doğal kullan.
 
 Kurallar:
-- Adet sınırı kesinlikle ${SECTOR_ANCHOR_QUESTION_COUNT}'tir. Ne eksik ne fazla.
-- Sorular doğrudan hizmeti veya sorunu hedeflemeli (Örn: '[Şehir]'de en sağlam balkon filesi yapan yer?', '[Şehir]'de balkon filesi fiyatları ne kadar?', 'Kediler için file montajı [Şehir]'de kim yapıyor?' vb.)
-- Her soruda şehir yer tutucusu olarak [Şehir] kullan.
-- Çıktıyı sadece ${SECTOR_ANCHOR_QUESTION_COUNT} adet string içeren temiz bir JSON array olarak dön. Başka metin ekleme.`;
+- Tam ${SECTOR_ANCHOR_QUESTION_COUNT} adet soru üret; ne eksik ne fazla.
+- Her soru özgün olsun; anlam ve yapı olarak birbirinin kopyası olmasın.
+- Şehir bağlamı doğal geliyorsa [Şehir] yer tutucusunu kullan; her soruda zorunlu değil.
+- Sorular kısa, net, arama ve forum diliyle uyumlu olsun.
+
+Çıktıyı yalnızca ${SECTOR_ANCHOR_QUESTION_COUNT} adet benzersiz, özgün string içeren temiz bir JSON array olarak dön. Başka metin ekleme.`;
+}
+
+function detectSectorFallbackProfile(customSector: string): "balkon_file" | "pet_taksi" | "generic" {
+  const normalized = customSector.trim().toLocaleLowerCase("tr-TR");
+
+  if (/file|filesi|balkon/.test(normalized)) {
+    return "balkon_file";
+  }
+
+  if (/pet|evcil|hayvan|taksi|taşıma|tasima|kedi|köpek|kopek/.test(normalized)) {
+    return "pet_taksi";
+  }
+
+  return "generic";
+}
+
+export function buildFallbackSectorAnchorQuestions(customSector: string): string[] {
+  const niche = customSector.trim() || "hizmet";
+  const profile = detectSectorFallbackProfile(niche);
+
+  if (profile === "balkon_file") {
+    return [
+      "Kediler için balkona file yaptırmak güvenli mi?",
+      "Kopmayan balkon filesi fiyatları ne kadar?",
+      "[Şehir]'de çocuk emniyetli balkon filesi montajı yapan var mı?",
+      "Çelik misinalı balkon filesi mi plastik file mi daha dayanıklı?",
+      "Balkon filesi rüzgarda yırtılır mı, hangi marka iyi?",
+      "[Şehir]'de balkon file montajı kaç günde biter?",
+      "Apartman yönetimi balkon filesine izin verir mi?",
+      "Kuşlar için ince file mi kalın file mi tercih edilmeli?",
+      "[Şehir]'de balkon file ölçüsü nasıl alınır?",
+      "File montajında vida mı kanca mı daha sağlam?",
+      "Balkon filesi fiyatı metrekareye göre mi hesaplanır?",
+      "[Şehir]'de file sökümü ve yenileme yapan usta arayanlar",
+      "Cam balkona file yaptıranlar memnun mu?",
+      "Balkon filesi UV dayanımı önemli mi?",
+      "[Şehir]'de file montajı sonrası kontrol servisi veren yerler",
+    ].slice(0, SECTOR_ANCHOR_QUESTION_COUNT);
+  }
+
+  if (profile === "pet_taksi") {
+    return [
+      "Şehirler arası pet taksi fiyatları ne kadar?",
+      "Gece açık acil pet taksi var mı?",
+      "Büyük ırk köpek taşıyan pet taksi tavsiyesi",
+      "[Şehir]'den [Şehir]'ye kedi taşıma nasıl yapılır?",
+      "Pet takside kafeste hayvan stresi nasıl azaltılır?",
+      "Havalimanı pet taksi hizmeti veren firmalar",
+      "[Şehir]'de 7/24 evcil hayvan taşıma",
+      "Pet taksi mi veteriner nakil aracı mı farkı ne?",
+      "Kedi taşıma kutusu pet takside gerekli mi?",
+      "[Şehir]'de hijyenik pet taksi yorumları",
+      "Şehir içi köpek taşıma ücreti neye göre belirlenir?",
+      "Pet taksi randevusu ne kadar önceden alınmalı?",
+      "Hamile kedi taşımak için güvenli pet taksi arayanlar",
+      "[Şehir]'de kuş taşıyan pet taksi var mı?",
+      "Pet taksi sigortası olan firmalar hangileri?",
+    ].slice(0, SECTOR_ANCHOR_QUESTION_COUNT);
+  }
+
+  return [
+    `${niche} hakkında [Şehir]'de en çok sorulan sorular neler?`,
+    `${niche} yaptırmadan önce nelere dikkat etmeli?`,
+    `[Şehir]'de ${niche} arayanlar deneyimlerini nerede paylaşıyor?`,
+    `${niche} fiyatları neden bu kadar değişiyor?`,
+    `İlk kez ${niche} hizmeti alacaklar için tavsiyeler`,
+    `[Şehir]'de ${niche} konusunda dolandırılmamak için ne yapmalı?`,
+    `${niche} işinde malzeme kalitesi nasıl anlaşılır?`,
+    `[Şehir]'de ${niche} için randevu almak zor mu?`,
+    `${niche} sonrası bakım veya garanti süreci nasıl işler?`,
+    `Acil ${niche} ihtiyacı olanlar ne yapmalı?`,
+    `[Şehir]'de ${niche} yorumlarına güvenilir mi?`,
+    `${niche} seçerken referans istemek normal mi?`,
+    `[Şehir]'de ${niche} yapan küçük esnaf mı firma mı?`,
+    `${niche} hizmetinde gizli masraf çıkar mı?`,
+    `[Şehir]'de ${niche} konusunda forum tavsiyeleri`,
+  ].slice(0, SECTOR_ANCHOR_QUESTION_COUNT);
 }
 
 function parseQuestionsFromResponse(raw: string): string[] {
@@ -65,29 +152,6 @@ function parseQuestionsFromResponse(raw: string): string[] {
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim().replace(/\s+/g, " "))
     .filter((item) => item.length >= 8);
-}
-
-export function buildFallbackSectorAnchorQuestions(customSector: string): string[] {
-  const niche = customSector.trim() || "hizmet";
-  const templates = [
-    `[Şehir]'de en sağlam ${niche} yapan yer?`,
-    `[Şehir]'de ${niche} fiyatları ne kadar?`,
-    `[Şehir]'de güvenilir ${niche} tavsiyesi`,
-    `[Şehir]'de acil ${niche} lazım`,
-    `[Şehir]' ${niche} yorumları nasıl?`,
-    `[Şehir]'de ucuz ${niche} arayanlar`,
-    `[Şehir]'de ${niche} işi yaptıran var mı?`,
-    `[Şehir]'de ${niche} için keşif ücreti`,
-    `[Şehir]'de ${niche} malzeme kalitesi iyi olan`,
-    `[Şehir]'de ${niche} referanslı usta`,
-    `[Şehir]'de ${niche} garanti veren firma`,
-    `[Şehir]'de ${niche} randevu nasıl alınır?`,
-    `[Şehir]'de ${niche} fiyat performans`,
-    `[Şehir]'de ${niche} deneyimi olanlar`,
-    `[Şehir]'de ${niche} tavsiye eder misiniz?`,
-  ];
-
-  return templates.slice(0, SECTOR_ANCHOR_QUESTION_COUNT);
 }
 
 function normalizeAnchorQuestionCount(
@@ -138,7 +202,7 @@ export async function generateSectorAnchorQuestions(
         contents: buildSectorAnchorQuestionsPrompt(niche),
         config: {
           maxOutputTokens: 4096,
-          temperature: 0.72,
+          temperature: 0.88,
           responseMimeType: "application/json",
         },
       }),
