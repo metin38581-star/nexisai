@@ -1,4 +1,5 @@
 import type { BusinessSector } from "@/types/campaign";
+import { CUSTOM_SECTOR_SLUG } from "@/lib/sector-utils";
 
 export {
   TURKEY_CITY_OPTIONS,
@@ -6,6 +7,8 @@ export {
   DEFAULT_CITY,
   type TurkishCitySlug,
 } from "@/lib/turkey-cities";
+
+export { CUSTOM_SECTOR_SLUG };
 
 export const SECTOR_OPTIONS: { value: BusinessSector; label: string }[] = [
   { value: "otel-konaklama", label: "Otel & Konaklama" },
@@ -16,6 +19,7 @@ export const SECTOR_OPTIONS: { value: BusinessSector; label: string }[] = [
   { value: "oto-servis", label: "Oto Servis" },
   { value: "hukuk-danismanlik", label: "Hukuk & Danışmanlık" },
   { value: "dijital-ajans", label: "Dijital Ajans" },
+  { value: CUSTOM_SECTOR_SLUG, label: "Listede Yok (Kendim Yazacağım)" },
   { value: "oto-galeri-otomotiv", label: "Oto Galeri & Otomotiv" },
   { value: "guzellik-sac-salonu", label: "Güzellik & Saç Salonu" },
   { value: "e-ticaret-giyim", label: "E-Ticaret & Giyim" },
@@ -43,6 +47,7 @@ export const SECTOR_SEARCH_QUERIES: Record<BusinessSector, string> = {
   "oto-galeri-otomotiv": "en iyi oto galeri",
   "guzellik-sac-salonu": "en iyi güzellik salonu",
   "e-ticaret-giyim": "en iyi giyim mağazası",
+  "custom-sector": "en iyi hizmet",
 };
 
 export const SUPPORT_EMAIL = "support@nexisai.com";

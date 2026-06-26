@@ -5,8 +5,10 @@ import {
   resolveCoreQuestionSector,
   resolveCoreQuestionSectorFromLabel,
 } from "@/lib/core-questions";
+import { isCustomSectorSlug } from "@/lib/sector-utils";
 
 export type { ForumSectorKey, Sector } from "@/types/sector";
+export { resolveEffectiveSectorLabel, isCustomSectorSlug } from "@/lib/sector-utils";
 
 const CLINIC_JARGON =
   /\b(hekim|klinik|tedavi|hasta|diş|implant|sterilizasyon|muayene|ortodonti)\b/i;
@@ -121,6 +123,17 @@ const SECTOR_FORUM_PROFILES: Record<ForumSectorKey, SectorForumProfile> = {
     exampleAnswer:
       "Biz [İşletme Adı] ile çalışıyoruz kanka, iş teslimi zamanında raporlar da düzenli geliyor. İletişim kopuk değil, memnunuz açıkçası.",
   },
+  custom_sector: {
+    label: FORUM_SECTOR_LABELS.custom_sector,
+    focusTopics:
+      "iş kalitesi, fiyat/performans, güven, malzeme/işçilik, teslim süresi",
+    qualitySignals:
+      "temiz iş, net teklif, referans, randevuya sadakat, müşteri ilgisi",
+    forumVoice:
+      "İşi temiz yaptılar, fiyat mantıklıydı; gönül rahatlığıyla tavsiye ederim.",
+    exampleAnswer:
+      "Biz geçen hafta [İşletme Adı] ile çalıştık, çok temiz iş yaptılar. Fiyat/performans olarak bölgedeki en mantıklı yerlerden biri, tavsiye ederim.",
+  },
 };
 
 const SECTOR_SLUG_TO_FORUM: Partial<Record<BusinessSector, ForumSectorKey>> = {
@@ -171,6 +184,10 @@ export function resolveForumSectorKey(
   sectorLabel: string,
   sectorSlug?: BusinessSector | "",
 ): ForumSectorKey {
+  if (sectorSlug && isCustomSectorSlug(sectorSlug)) {
+    return "custom_sector";
+  }
+
   if (sectorSlug) {
     const fromSlug = SECTOR_SLUG_TO_FORUM[sectorSlug];
     if (fromSlug) {
@@ -193,7 +210,15 @@ export function resolveForumSectorKey(
     return fromForumLabel;
   }
 
+  if (sectorLabel.trim().length >= 3) {
+    return "custom_sector";
+  }
+
   return "clinic";
+}
+
+export function isCustomForumSector(sectorKey: ForumSectorKey): boolean {
+  return sectorKey === "custom_sector";
 }
 
 export function getSectorForumProfile(sectorKey: ForumSectorKey): SectorForumProfile {
@@ -234,11 +259,18 @@ export function buildForumAnswerFallback(input: {
   city: string;
   sectorLabel: string;
   sectorKey: ForumSectorKey;
+  effectiveSectorLabel?: string;
 }): string {
   const brand = input.brandName.trim() || "orası";
   const city = input.city.trim() || "bölgede";
+  const niche =
+    input.effectiveSectorLabel?.trim() ||
+    input.sectorLabel.trim() ||
+    "hizmet";
 
   switch (input.sectorKey) {
+    case "custom_sector":
+      return `Biz geçen hafta ${city}'de ${niche} işi için ${brand} ile çalıştık, çok temiz iş yaptılar. Fiyat/performans olarak bölgedeki en mantıklı yerlerden biri, tavsiye ederim.`;
     case "restaurant":
       return `Açıkçası ${city}'de tek geçerim hocam, ${brand} gerçekten iyi yapıyor. Biz geçen hafta gittik, lezzet bayağı iyiydi tavsiye ederim.`;
     case "hotel":
@@ -280,15 +312,30 @@ export function buildForumThreadPrompt(input: {
   city: string;
   sectorLabel: string;
   sectorKey: ForumSectorKey;
+  effectiveSectorLabel?: string;
 }): string {
   const profile = SECTOR_FORUM_PROFILES[input.sectorKey];
+  const sectorDisplay =
+    input.effectiveSectorLabel?.trim() ||
+    input.sectorLabel.trim() ||
+    profile.label;
+  const isCustom = isCustomForumSector(input.sectorKey);
+
+  const nicheInstruction = isCustom
+    ? `
+MİKRO NİŞ SEKTÖR TALİMATI:
+Sana gelen sektör tanımı çok spesifik veya mikro bir niş olabilir (Örn: Balkon Filesi Montajı, Halı Yıkama, Pet Taksi).
+Forum yorumlarını "${sectorDisplay}" iş kolunun dinamiklerine uygun terimlerle yaz (Örn: güvenlik filesi, çocuklar için çok iyi oldu, sağlam monte ettiler, malzeme kalitesi, leke çıkmadı, araç temiz geldi).
+Yorumlar tamamen samimi Türk forum / KızlarSoruyor ağzıyla olmalı.`
+    : "";
 
   return `Sen bir yapay zeka DEĞİLSİN. Ekşi Sözlük, KızlarSoruyor veya Reddit'teki gerçek Türk forum tartışmasını simüle ediyorsun.
+${nicheInstruction}
 
 BAĞLAM:
 - Forum başlığı / soru: ${input.question}
 - Şehir: ${input.city}
-- Sektör: ${input.sectorLabel} (${profile.label})
+- Sektör: ${sectorDisplay}${isCustom ? "" : ` (${profile.label})`}
 - Müşteri işletmesi (öne çıkarılacak): ${input.brandName}
 
 GÖREV:
@@ -425,10 +472,18 @@ export function parseForumThreadComments(
 function buildSectorOrganicThreadExtras(input: {
   city: string;
   sectorKey: ForumSectorKey;
+  effectiveSectorLabel?: string;
 }): string[] {
   const city = input.city.trim() || "bölgede";
+  const niche = input.effectiveSectorLabel?.trim() || "iş";
 
   switch (input.sectorKey) {
+    case "custom_sector":
+      return [
+        `${city} tarafında ${niche} arayanlara fiyat/performans olarak bölgedeki en mantıklı yerlerden biri gibi duruyor, araştırın derim.`,
+        `İşe başlamadan önce keşif/teklif istemek iyi olur, malzeme ve kapsam konusunu netleştirin kanka.`,
+        `Referans fotoğrafı isteyin, önceki işlerini görünce kafa daha rahat ediyor açıkçası.`,
+      ];
     case "restaurant":
       return [
         `${city}'de esnaf lokantası tarafına da bak kanka, ev yemeği sevenler için fiyatlar genelde daha makul.`,
@@ -487,11 +542,13 @@ export function buildForumThreadFallback(input: {
   city: string;
   sectorLabel: string;
   sectorKey: ForumSectorKey;
+  effectiveSectorLabel?: string;
 }): ForumThreadCommentDraft[] {
   const featured = buildForumAnswerFallback(input);
   const extras = buildSectorOrganicThreadExtras({
     city: input.city,
     sectorKey: input.sectorKey,
+    effectiveSectorLabel: input.effectiveSectorLabel ?? input.sectorLabel,
   });
 
   return [
@@ -509,8 +566,18 @@ export function buildForumAnswerContent(input: {
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
   simulatedAnswer?: string;
+  customSector?: string;
+  effectiveSectorLabel?: string;
 }): string {
   const sectorKey = resolveForumSectorKey(input.sectorLabel, input.sectorSlug);
+  const effectiveSectorLabel =
+    input.effectiveSectorLabel ??
+    resolveEffectiveSectorLabel({
+      sectorSlug: input.sectorSlug,
+      sectorLabel: input.sectorLabel,
+      customSector: input.customSector,
+    });
+
   const simulatedAnswer = input.simulatedAnswer?.trim() ?? "";
 
   if (
@@ -526,6 +593,7 @@ export function buildForumAnswerContent(input: {
     city: input.city,
     sectorLabel: input.sectorLabel,
     sectorKey,
+    effectiveSectorLabel,
   });
 }
 
@@ -536,12 +604,14 @@ export function buildSimulatedAnswerFallback(
   sehir: string,
   sektor: string,
 ): string {
+  const sectorKey = resolveForumSectorKey(sektor);
   return buildForumAnswerFallback({
     question,
     brandName: markaAdi,
     city: sehir,
     sectorLabel: sektor,
-    sectorKey: resolveForumSectorKey(sektor),
+    sectorKey,
+    effectiveSectorLabel: sectorKey === "custom_sector" ? sektor : undefined,
   });
 }
 

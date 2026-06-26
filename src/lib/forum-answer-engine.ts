@@ -7,6 +7,7 @@ import {
   buildForumThreadFallback,
   buildForumThreadPrompt,
   parseForumThreadComments,
+  resolveEffectiveSectorLabel,
   resolveForumSectorKey,
   type ForumThreadCommentDraft,
 } from "@/lib/forum-answer-prompt";
@@ -23,8 +24,17 @@ export interface ForumAnswerInput {
   city: string;
   sectorLabel: string;
   sectorSlug?: BusinessSector | "";
+  customSector?: string;
   simulatedAnswer?: string;
   seedKey?: string;
+}
+
+function resolveEntrySectorLabel(input: ForumAnswerInput): string {
+  return resolveEffectiveSectorLabel({
+    sectorSlug: input.sectorSlug,
+    sectorLabel: input.sectorLabel,
+    customSector: input.customSector,
+  });
 }
 
 export interface ForumThreadComment {
@@ -84,6 +94,8 @@ async function generateForumThreadViaLlm(
     return null;
   }
 
+  const effectiveSectorLabel = resolveEntrySectorLabel(input);
+
   const ai = new GoogleGenAI({
     apiKey,
     apiVersion: GOOGLE_GENAI_API_VERSION,
@@ -98,6 +110,7 @@ async function generateForumThreadViaLlm(
         city: input.city,
         sectorLabel: input.sectorLabel,
         sectorKey,
+        effectiveSectorLabel,
       }),
       config: {
         maxOutputTokens: 1024,
@@ -148,6 +161,7 @@ export async function generateForumThreadForEntry(
     city: input.city,
     sectorLabel: input.sectorLabel,
     sectorKey,
+    effectiveSectorLabel: resolveEntrySectorLabel(input),
   });
 
   return assignUsernamesToThread(fallbackThread, seedKey);
@@ -169,12 +183,14 @@ export async function generateForumAnswerForEntry(
 }
 
 export function buildForumAnswerFallbackForEntry(input: ForumAnswerInput): string {
+  const sectorKey = resolveForumSectorKey(input.sectorLabel, input.sectorSlug);
   const thread = buildForumThreadFallback({
     question: input.question,
     brandName: input.brandName,
     city: input.city,
     sectorLabel: input.sectorLabel,
-    sectorKey: resolveForumSectorKey(input.sectorLabel, input.sectorSlug),
+    sectorKey,
+    effectiveSectorLabel: resolveEntrySectorLabel(input),
   });
 
   return thread.find((item) => item.isFeatured)?.content ?? thread[0]?.content ?? "";

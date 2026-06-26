@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
 
-import type { CampaignFormData, BusinessSector } from "@/types/campaign";
+import type { CampaignFormData, BusinessSector, CustomAnchorQuestion } from "@/types/campaign";
 import {
   SECTOR_OPTIONS,
   TURKEY_CITY_OPTIONS,
+  CUSTOM_SECTOR_SLUG,
 } from "@/lib/constants";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
 import {
@@ -28,6 +29,7 @@ import { resolveContentVolumePlan } from "@/lib/content-volume";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
 import CyberScanField from "@/components/campaign/CyberScanField";
 import CoreQuestionsPanel from "@/components/campaign/CoreQuestionsPanel";
+import CustomSectorQuestionsPanel from "@/components/campaign/CustomSectorQuestionsPanel";
 import OrbitRingIcon from "@/components/campaign/OrbitRingIcon";
 import { resolveBudgetOperationTier } from "@/lib/budget-operation-tiers";
 import {
@@ -36,7 +38,8 @@ import {
   pickDefaultCoreQuestionIds,
   resolveMaxSelection,
 } from "@/lib/core-questions";
-import "@/components/campaign/budget-operation-tier.css";
+import { isCustomSectorSlug } from "@/lib/sector-utils";
+import { QUESTIONS_PER_SECTOR } from "@/constants/campaign";
 
 interface CampaignCreationStudioProps {
   onSubmit: (data: CampaignFormData) => void;
@@ -48,6 +51,8 @@ interface CampaignCreationStudioProps {
 const initialForm: CampaignFormData = {
   businessName: "",
   sector: "",
+  customSector: "",
+  customAnchorQuestions: [],
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
   campaignDays: DEFAULT_CAMPAIGN_DAYS,
@@ -67,11 +72,18 @@ export default function CampaignCreationStudio({
   const [daysPreview, setDaysPreview] = useState(DEFAULT_CAMPAIGN_DAYS);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [customQuestionsLoading, setCustomQuestionsLoading] = useState(false);
+  const [customQuestionsError, setCustomQuestionsError] = useState<string | null>(
+    null,
+  );
   const submittingRef = useRef(false);
   const lastAppliedDraftRef = useRef<string | null>(null);
 
   const isSubmitLocked = submitting || isLoading;
-  const poolSize = getCoreQuestionPoolSize(form.sector);
+  const isCustomSector = isCustomSectorSlug(form.sector);
+  const poolSize = isCustomSector
+    ? QUESTIONS_PER_SECTOR
+    : getCoreQuestionPoolSize(form.sector);
   const maxSelection = resolveMaxSelection(budgetPreview, form.sector);
 
   useEffect(() => {
@@ -146,6 +158,33 @@ export default function CampaignCreationStudio({
     setForm((prev) => ({ ...prev, selectedQuestionIds }));
   }, []);
 
+  const handleCustomQuestionsChange = useCallback(
+    (customAnchorQuestions: CustomAnchorQuestion[]) => {
+      setForm((prev) => ({ ...prev, customAnchorQuestions }));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isCustomSector) {
+      return;
+    }
+
+    setForm((prev) => {
+      const nextMax = resolveMaxSelection(prev.dailyBudget, prev.sector);
+      if (nextMax === 0) {
+        return prev.selectedQuestionIds.length === 0
+          ? prev
+          : { ...prev, selectedQuestionIds: [] };
+      }
+
+      const trimmed = prev.selectedQuestionIds.slice(0, nextMax);
+      return trimmed.length === prev.selectedQuestionIds.length
+        ? prev
+        : { ...prev, selectedQuestionIds: trimmed };
+    });
+  }, [form.dailyBudget, isCustomSector, form.sector]);
+
   useEffect(() => {
     if (!isCoreQuestionSectorSupported(form.sector)) {
       return;
@@ -181,9 +220,16 @@ export default function CampaignCreationStudio({
     form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
     form.dailyBudget <= MAX_CAMPAIGN_DAILY_BUDGET &&
     form.campaignDays >= MIN_CAMPAIGN_DAYS &&
-    isCoreQuestionSectorSupported(form.sector) &&
-    form.selectedQuestionIds.length > 0 &&
-    form.selectedQuestionIds.length <= maxSelection;
+    (isCustomSector
+      ? (form.customSector?.trim().length ?? 0) >= 3 &&
+        !customQuestionsLoading &&
+        !customQuestionsError &&
+        (form.customAnchorQuestions?.length ?? 0) === QUESTIONS_PER_SECTOR &&
+        form.selectedQuestionIds.length > 0 &&
+        form.selectedQuestionIds.length <= maxSelection
+      : isCoreQuestionSectorSupported(form.sector) &&
+        form.selectedQuestionIds.length > 0 &&
+        form.selectedQuestionIds.length <= maxSelection);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -193,10 +239,20 @@ export default function CampaignCreationStudio({
       return;
     }
 
-    if (!isCoreQuestionSectorSupported(form.sector)) {
+    if (!isCustomSector && !isCoreQuestionSectorSupported(form.sector)) {
       setFormError(
         "Kemik soru havuzu yalnızca Diş Kliniği, Otel ve Restoran sektörlerinde kullanılabilir.",
       );
+      return;
+    }
+
+    if (isCustomSector && (form.customSector?.trim().length ?? 0) < 3) {
+      setFormError("Özel sektör adını en az 3 karakter olarak yazın.");
+      return;
+    }
+
+    if (isCustomSector && (form.customAnchorQuestions?.length ?? 0) === 0) {
+      setFormError("Niş sektör kemik soruları henüz hazır değil. Lütfen bekleyin.");
       return;
     }
 
@@ -214,7 +270,9 @@ export default function CampaignCreationStudio({
 
     if (!isFormReadyToSubmit) {
       setFormError(
-        "İşletme adı, sektör, şehir, bütçe ve soru seçimlerini tamamlayın.",
+        isCustomSector
+          ? "İşletme adı, özel sektör, kemik soru seçimi, şehir ve bütçe alanlarını tamamlayın."
+          : "İşletme adı, sektör, şehir, bütçe ve soru seçimlerini tamamlayın.",
       );
       return;
     }
@@ -224,6 +282,8 @@ export default function CampaignCreationStudio({
     onSubmit({
       businessName: form.businessName.trim(),
       sector: form.sector,
+      customSector: isCustomSector ? form.customSector?.trim() : undefined,
+      customAnchorQuestions: isCustomSector ? form.customAnchorQuestions : undefined,
       city: form.city,
       dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
       campaignDays: clampCampaignDays(form.campaignDays),
@@ -264,9 +324,20 @@ export default function CampaignCreationStudio({
           <CyberScanField label="Sektör">
             <select
               value={form.sector}
-              onChange={(e) =>
-                updateField("sector", e.target.value as BusinessSector | "")
-              }
+              onChange={(e) => {
+                const nextSector = e.target.value as BusinessSector | "";
+                setForm((prev) => ({
+                  ...prev,
+                  sector: nextSector,
+                  customSector:
+                    nextSector === CUSTOM_SECTOR_SLUG ? prev.customSector : "",
+                  customAnchorQuestions:
+                    nextSector === CUSTOM_SECTOR_SLUG
+                      ? prev.customAnchorQuestions
+                      : [],
+                  selectedQuestionIds: [],
+                }));
+              }}
               className={inputClass}
             >
               <option value="" disabled hidden>
@@ -300,6 +371,27 @@ export default function CampaignCreationStudio({
           </CyberScanField>
         </div>
 
+        {isCustomSector ? (
+          <CyberScanField label="Özel Sektör / Hizmet Adı">
+            <input
+              type="text"
+              required
+              placeholder="Örn: Balkon Filesi Montajı, Halı Yıkama, Pet Taksi"
+              value={form.customSector ?? ""}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setForm((prev) => ({
+                  ...prev,
+                  customSector: nextValue,
+                  customAnchorQuestions: [],
+                  selectedQuestionIds: [],
+                }));
+              }}
+              className={inputClass}
+            />
+          </CyberScanField>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <CyberBudgetField
             label="Günlük Operasyon Bütçesi (TL)"
@@ -328,13 +420,29 @@ export default function CampaignCreationStudio({
           />
         </div>
 
-        <CoreQuestionsPanel
-          sector={form.sector}
-          city={form.city}
-          dailyBudget={budgetPreview}
-          selectedIds={form.selectedQuestionIds}
-          onSelectionChange={handleSelectionChange}
-        />
+        {isCustomSector ? (
+          <CustomSectorQuestionsPanel
+            customSector={form.customSector ?? ""}
+            city={form.city}
+            dailyBudget={budgetPreview}
+            questions={form.customAnchorQuestions ?? []}
+            selectedIds={form.selectedQuestionIds}
+            isLoading={customQuestionsLoading}
+            loadError={customQuestionsError}
+            onQuestionsChange={handleCustomQuestionsChange}
+            onLoadingChange={setCustomQuestionsLoading}
+            onLoadErrorChange={setCustomQuestionsError}
+            onSelectionChange={handleSelectionChange}
+          />
+        ) : (
+          <CoreQuestionsPanel
+            sector={form.sector}
+            city={form.city}
+            dailyBudget={budgetPreview}
+            selectedIds={form.selectedQuestionIds}
+            onSelectionChange={handleSelectionChange}
+          />
+        )}
 
         <CampaignBudgetInfoCard
           tier={budgetTier}
@@ -344,6 +452,7 @@ export default function CampaignCreationStudio({
           analysisDescription={softCapResult.analysisDescription}
           contentDescription={contentVolumePlan.description}
           previewDays={daysPreview}
+          isCustomSector={isCustomSector}
         />
 
         {formError ? (
@@ -387,6 +496,7 @@ function CampaignBudgetInfoCard({
   analysisDescription,
   contentDescription,
   previewDays,
+  isCustomSector = false,
 }: {
   tier: ReturnType<typeof resolveBudgetOperationTier>;
   tierLabel: string;
@@ -395,6 +505,7 @@ function CampaignBudgetInfoCard({
   analysisDescription: string;
   contentDescription: string;
   previewDays: number;
+  isCustomSector?: boolean;
 }) {
   const cardThemeClass = `bot-analysis-card bot-analysis-card--${tier.neonTheme}`;
 
@@ -429,9 +540,9 @@ function CampaignBudgetInfoCard({
             </span>
           </div>
           <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
-            Seçtiğiniz kemik sorular makale başlıklarına dönüştürülür ve mevcut
-            webhook / Make.com dağıtım hattına işletme adınızla birlikte
-            gönderilir.
+            {isCustomSector
+              ? "Niş sektörünüze göre üretilen sorular makale başlıklarına dönüştürülür ve mevcut webhook / Make.com dağıtım hattına işletme adınızla birlikte gönderilir."
+              : "Seçtiğiniz kemik sorular makale başlıklarına dönüştürülür ve mevcut webhook / Make.com dağıtım hattına işletme adınızla birlikte gönderilir."}
           </p>
         </div>
       </div>

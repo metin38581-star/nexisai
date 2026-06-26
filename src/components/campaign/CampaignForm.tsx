@@ -7,7 +7,9 @@ import type { CampaignFormData, BusinessSector } from "@/types/campaign";
 import {
   SECTOR_OPTIONS,
   TURKEY_CITY_OPTIONS,
+  CUSTOM_SECTOR_SLUG,
 } from "@/lib/constants";
+import { isCustomSectorSlug } from "@/lib/sector-utils";
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
 import {
   CAMPAIGN_BUSINESS_NAME_PLACEHOLDER,
@@ -35,6 +37,7 @@ interface CampaignFormProps {
 const initialForm: CampaignFormData = {
   businessName: "",
   sector: "",
+  customSector: "",
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
   campaignDays: DEFAULT_CAMPAIGN_DAYS,
@@ -51,6 +54,7 @@ export default function CampaignForm({
   const [form, setForm] = useState<CampaignFormData>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const isCustomSector = isCustomSectorSlug(form.sector);
 
   const isSubmitLocked = submitting || isLoading;
 
@@ -83,11 +87,18 @@ export default function CampaignForm({
       return;
     }
 
+    if (isCustomSector && (form.customSector?.trim().length ?? 0) < 3) {
+      submittingRef.current = false;
+      setSubmitting(false);
+      return;
+    }
+
     submittingRef.current = true;
     setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
       sector: form.sector,
+      customSector: isCustomSector ? form.customSector?.trim() : undefined,
       city: form.city,
       dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
       campaignDays: clampCampaignDays(form.campaignDays),
@@ -129,9 +140,15 @@ export default function CampaignForm({
         <FormField label="İşletme Sektörü">
           <select
             value={form.sector}
-            onChange={(e) =>
-              updateField("sector", e.target.value as BusinessSector | "")
-            }
+            onChange={(e) => {
+              const nextSector = e.target.value as BusinessSector | "";
+              setForm((prev) => ({
+                ...prev,
+                sector: nextSector,
+                customSector:
+                  nextSector === CUSTOM_SECTOR_SLUG ? prev.customSector : "",
+              }));
+            }}
             className={inputClass}
           >
             <option value="" disabled hidden>
@@ -144,6 +161,19 @@ export default function CampaignForm({
             ))}
           </select>
         </FormField>
+
+        {isCustomSector ? (
+          <FormField label="Özel Sektör / Hizmet Adı">
+            <input
+              type="text"
+              required
+              placeholder="Örn: Balkon Filesi Montajı, Halı Yıkama, Pet Taksi"
+              value={form.customSector ?? ""}
+              onChange={(e) => updateField("customSector", e.target.value)}
+              className={inputClass}
+            />
+          </FormField>
+        ) : null}
 
         <FormField label="Şehir">
           <select

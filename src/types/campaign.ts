@@ -1,5 +1,7 @@
 import type { TurkishCitySlug } from "@/lib/turkey-cities";
 
+import type { CustomSectorSlug } from "@/lib/sector-utils";
+
 export type BusinessSector =
   | "otel-konaklama"
   | "dis-klinigi-saglik"
@@ -11,14 +13,24 @@ export type BusinessSector =
   | "egitim-kurs"
   | "hukuk-danismanlik"
   | "dijital-ajans"
-  | "e-ticaret-giyim";
+  | "e-ticaret-giyim"
+  | CustomSectorSlug;
 
 export type CampaignFormSector = BusinessSector | "";
 export type CampaignFormCity = TurkishCitySlug | "";
 
+export interface CustomAnchorQuestion {
+  id: string;
+  template: string;
+}
+
 export interface CampaignFormData {
   businessName: string;
   sector: CampaignFormSector;
+  /** Listede yok seçildiğinde kullanıcının yazdığı niş sektör (Örn: Balkon Filesi Montajı) */
+  customSector?: string;
+  /** Niş sektör için LLM ile üretilen 15 kemik soru */
+  customAnchorQuestions?: CustomAnchorQuestion[];
   city: CampaignFormCity;
   dailyBudget: number;
   campaignDays: number;
@@ -33,6 +45,8 @@ export interface CampaignApiRequest {
   campaignDays?: number;
   selectedQuestionIds?: string[];
   sectorSlug?: string;
+  customSector?: string;
+  customAnchorQuestions?: CustomAnchorQuestion[];
   /** @deprecated Türkçe alan adları — geriye dönük uyumluluk */
   markaAdi?: string;
   sektor?: string;

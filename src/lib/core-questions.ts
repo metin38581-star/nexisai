@@ -1,4 +1,5 @@
 import type { BusinessSector } from "@/types/campaign";
+import type { CustomAnchorQuestion } from "@/types/campaign";
 import {
   calculateMaxQuestions,
   CORE_QUESTIONS,
@@ -6,11 +7,14 @@ import {
   GOLD_QUESTIONS_PER_SECTOR,
   isGoldQuestionId,
   isGoldQuestionBudgetUnlocked,
+  QUESTIONS_PER_SECTOR,
   type CoreQuestionSector,
   type QuestionTemplate,
 } from "@/constants/campaign";
 import type { SelectedQuestionPair } from "@/lib/selected-questions";
 import { buildFallbackSimulatedAnswer } from "@/lib/selected-questions";
+import { CUSTOM_SECTOR_SLUG, isCustomSectorSlug } from "@/lib/sector-utils";
+import { isCustomAnchorQuestionId } from "@/lib/sector-questions-generator";
 
 const SECTOR_SLUG_TO_CORE: Partial<Record<BusinessSector, CoreQuestionSector>> = {
   "dis-klinigi-saglik": "clinic",
@@ -46,6 +50,21 @@ export function isCoreQuestionSectorSupported(
   sector: BusinessSector | "",
 ): sector is BusinessSector {
   return Boolean(sector && CORE_QUESTION_SUPPORTED_SECTORS.includes(sector));
+}
+
+export function isCustomAnchorQuestionSectorSupported(
+  sector: BusinessSector | "",
+): boolean {
+  return isCustomSectorSlug(sector);
+}
+
+export function isQuestionSelectionSectorSupported(
+  sector: BusinessSector | "",
+): boolean {
+  return (
+    isCoreQuestionSectorSupported(sector) ||
+    isCustomAnchorQuestionSectorSupported(sector)
+  );
 }
 
 export function resolveCoreQuestionSector(
@@ -85,6 +104,10 @@ export function getCoreQuestionsForSector(
 }
 
 export function getCoreQuestionPoolSize(sectorSlug: BusinessSector | ""): number {
+  if (isCustomSectorSlug(sectorSlug)) {
+    return QUESTIONS_PER_SECTOR;
+  }
+
   const coreSector = resolveCoreQuestionSector(sectorSlug);
   if (!coreSector) {
     return 0;
@@ -151,6 +174,40 @@ export function buildCoreQuestionPairs(
       };
     })
     .filter((pair): pair is SelectedQuestionPair => pair !== null);
+}
+
+export function buildCustomAnchorQuestionPairs(
+  selectedIds: string[],
+  anchorQuestions: CustomAnchorQuestion[],
+  cityLabel: string,
+  brandName: string,
+  sectorLabel: string,
+): SelectedQuestionPair[] {
+  const byId = new Map(anchorQuestions.map((question) => [question.id, question.template]));
+
+  return selectedIds
+    .filter((id) => byId.has(id))
+    .map((id) => {
+      const question = fillQuestionTemplate(byId.get(id)!, cityLabel);
+
+      return {
+        question,
+        simulatedAnswer: buildFallbackSimulatedAnswer(
+          question,
+          brandName,
+          cityLabel,
+          sectorLabel,
+        ),
+      };
+    });
+}
+
+export function pickDefaultCustomAnchorQuestionIds(
+  anchorQuestions: CustomAnchorQuestion[],
+  budget: number,
+): string[] {
+  const maxSelection = resolveMaxSelection(budget, CUSTOM_SECTOR_SLUG);
+  return anchorQuestions.slice(0, maxSelection).map((question) => question.id);
 }
 
 export interface CoreQuestionValidationResult {
@@ -243,6 +300,77 @@ export function validateCoreQuestionSelection(input: {
   );
 
   const invalidId = input.selectedIds.find((id) => !allowedIds.has(id));
+  if (invalidId) {
+    return {
+      ok: false,
+      maxSelection,
+      error: "Geçersiz veya sektörle uyuşmayan soru seçimi tespit edildi.",
+    };
+  }
+
+  const uniqueIds = new Set(input.selectedIds);
+  if (uniqueIds.size !== input.selectedIds.length) {
+    return {
+      ok: false,
+      maxSelection,
+      error: "Aynı soru birden fazla kez seçilemez.",
+    };
+  }
+
+  return { ok: true, maxSelection };
+}
+
+export function validateCustomAnchorQuestionSelection(input: {
+  budget: number;
+  selectedIds: string[];
+  anchorQuestions: CustomAnchorQuestion[];
+}): CoreQuestionValidationResult {
+  const maxSelection = resolveMaxSelection(input.budget, CUSTOM_SECTOR_SLUG);
+
+  if (input.budget < 100) {
+    return {
+      ok: false,
+      maxSelection: 0,
+      error: "Günlük bütçe en az 100 TL olmalıdır.",
+    };
+  }
+
+  if (input.anchorQuestions.length !== QUESTIONS_PER_SECTOR) {
+    return {
+      ok: false,
+      maxSelection,
+      error: "Niş sektör kemik soru havuzu eksik. Soruları yeniden üretin.",
+    };
+  }
+
+  if (maxSelection < 1) {
+    return {
+      ok: false,
+      maxSelection: 0,
+      error: "Bu bütçe ile soru seçimi yapılamaz.",
+    };
+  }
+
+  if (input.selectedIds.length === 0) {
+    return {
+      ok: false,
+      maxSelection,
+      error: "En az bir kemik soru seçmelisiniz.",
+    };
+  }
+
+  if (input.selectedIds.length > maxSelection) {
+    return {
+      ok: false,
+      maxSelection,
+      error: `Bütçeniz en fazla ${maxSelection} soru seçmenize izin veriyor. ${input.selectedIds.length} soru seçildi.`,
+    };
+  }
+
+  const allowedIds = new Set(input.anchorQuestions.map((question) => question.id));
+  const invalidId = input.selectedIds.find(
+    (id) => !allowedIds.has(id) || !isCustomAnchorQuestionId(id),
+  );
   if (invalidId) {
     return {
       ok: false,

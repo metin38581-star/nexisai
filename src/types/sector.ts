@@ -7,10 +7,11 @@ export type ForumSectorKey =
   | "egitim_kurs"
   | "oto_servis"
   | "hukuk_danismanlik"
-  | "dijital_ajans";
+  | "dijital_ajans"
+  | "custom_sector";
 
-/** @alias ForumSectorKey */
-export type Sector = ForumSectorKey;
+/** Statik enum veya dinamik niş sektör metni */
+export type Sector = ForumSectorKey | (string & {});
 
 export const FORUM_SECTOR_KEYS: ForumSectorKey[] = [
   "clinic",
@@ -21,6 +22,7 @@ export const FORUM_SECTOR_KEYS: ForumSectorKey[] = [
   "oto_servis",
   "hukuk_danismanlik",
   "dijital_ajans",
+  "custom_sector",
 ];
 
 export const FORUM_SECTOR_LABELS: Record<ForumSectorKey, string> = {
@@ -32,4 +34,5 @@ export const FORUM_SECTOR_LABELS: Record<ForumSectorKey, string> = {
   oto_servis: "Oto Servis",
   hukuk_danismanlik: "Hukuk & Danışmanlık",
   dijital_ajans: "Dijital Ajans",
+  custom_sector: "Özel / Niş Hizmet",
 };

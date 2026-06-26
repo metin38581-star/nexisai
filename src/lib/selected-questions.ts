@@ -1,6 +1,7 @@
 import type { SelectedGeoIntent } from "@/types/geo-intent";
 import { generateIntentArticlesForSelections } from "@/lib/geo-engine";
-import { buildSimulatedAnswerFallback } from "@/lib/forum-answer-prompt";import {
+import { buildSimulatedAnswerFallback } from "@/lib/forum-answer-prompt";
+import {
   buildIntentArticleHtml,
   buildIntentPostTitle,
   buildSemanticAnchorSlug,
