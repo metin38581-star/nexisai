@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import type { BusinessSector } from "@/types/campaign";
 import { assertDataAccessEnv, assertDatabaseEnv, handleApiRouteError } from "@/lib/api-error";
-import { claimAutonomousCampaignSlot, completeCampaignWithBaits, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
+import { claimAutonomousCampaignSlot, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
@@ -15,7 +15,11 @@ import { calculateDynamicMetrics } from "@/lib/mock-metrics";
 import { getActiveSessionUser } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
-  debitWalletForCampaign,
+  finalizeCampaignCreationWithBilling,
+  finalizeExistingCampaignBilling,
+  updateCampaignLogPublicationUrls,
+} from "@/lib/campaign-billing";
+import {
   getOrCreateUserWallet,
   hasCampaignWalletDebit,
 } from "@/lib/user-wallet-service";
@@ -44,8 +48,6 @@ import {
 } from "@/lib/core-questions";
 import { buildForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
-import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
-import { sumCreditPaymentsByUserId } from "@/lib/payment-store";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -305,12 +307,16 @@ export async function POST(request: Request) {
       const debited = await hasCampaignWalletDebit(reservedCampaignId);
       if (!debited) {
         try {
-          await debitWalletForCampaign(
-            activeUserId,
-            toplamMaliyet,
-            reservedCampaignId,
-            `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
-          );
+          await finalizeExistingCampaignBilling({
+            campaignId: reservedCampaignId,
+            userId: activeUserId,
+            userEmail: sessionUser?.email ?? "—",
+            businessName: trimmedMarka,
+            sector: sectorSlug || trimmedSektor,
+            city: trimmedSehir,
+            amountSpent: toplamMaliyet,
+            description: `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
+          });
         } catch (debitError) {
           if (
             debitError instanceof Error &&
@@ -462,19 +468,42 @@ export async function POST(request: Request) {
               }),
             );
 
-      const yeniKampanya = await completeCampaignWithBaits(reservedCampaignId, {
-        sehir: targetCity,
-        sektor: targetNiche,
-        markaAdi: targetBrand,
-        skor: currentScore,
-        gunlukButce,
-        gunSayisi,
-        agresiflik: agresiflikSeviyesi,
-        makaleSayisi,
-        radarSikligi,
-        radarSikligiDakika,
-        baits: baitRecords,
+      const primaryForumSlug = hubEntries[0]?.question
+        ? buildQuestionHubSlug(hubEntries[0].question)
+        : null;
+
+      const billingResult = await finalizeCampaignCreationWithBilling({
+        campaignId: reservedCampaignId,
+        campaign: {
+          sehir: targetCity,
+          sektor: targetNiche,
+          markaAdi: targetBrand,
+          skor: currentScore,
+          gunlukButce,
+          gunSayisi,
+          agresiflik: agresiflikSeviyesi,
+          makaleSayisi,
+          radarSikligi,
+          radarSikligiDakika,
+          baits: baitRecords,
+        },
+        billing: {
+          campaignId: reservedCampaignId,
+          userId: activeUserId,
+          userEmail: sessionUser?.email ?? "—",
+          businessName: trimmedMarka,
+          sector: sectorSlug || trimmedSektor,
+          city: trimmedSehir,
+          amountSpent: toplamMaliyet,
+          description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
+          forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
+        },
       });
+
+      const yeniKampanya = billingResult.campaign;
+      if (!yeniKampanya) {
+        throw new Error("CAMPAIGN_BILLING_INCOMPLETE");
+      }
 
       persistedBaits = yeniKampanya.baits.map((bait, index) => ({
         id: bait.id,
@@ -498,14 +527,7 @@ export async function POST(request: Request) {
       });
 
       console.log(
-        `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk`,
-      );
-
-      await debitWalletForCampaign(
-        activeUserId,
-        toplamMaliyet,
-        yeniKampanya.id,
-        `GEO Kampanya: ${targetBrand} (${targetCity})`,
+        `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk, kalanBakiye=${billingResult.balance}`,
       );
 
       const growthQuestions = buildFixedVisibilityQuestionList(trimmedSehir);
@@ -566,36 +588,22 @@ export async function POST(request: Request) {
       (result) => result.ok && result.externalLiveUrl,
     )?.externalLiveUrl;
 
-    const primarySlug = persistedBaits[0]?.slug;
-    const hubArticles = persistedBaits.map((bait) => ({
-      slug: bait.slug,
-      hubPath: buildHubArticlePath(bait.slug),
-    }));
-
     const wordpressUrl =
       distributionResults.find(
         (result) => result.ok && result.externalLiveUrl,
       )?.externalLiveUrl ?? null;
 
-    const primaryForumSlug = hubEntries[0]?.question
-      ? buildQuestionHubSlug(hubEntries[0].question)
-      : null;
+    if (persistedCampaignId) {
+      await updateCampaignLogPublicationUrls(persistedCampaignId, {
+        wordpressUrl,
+      });
+    }
 
-    void recordCampaignOperationalLog({
-      campaignId: persistedCampaignId,
-      userId: activeUserId,
-      userEmail: sessionUser?.email ?? "—",
-      businessName: trimmedMarka,
-      sector: sectorSlug || trimmedSektor,
-      city: trimmedSehir,
-      walletBalance: Math.max(0, walletBalance - toplamMaliyet),
-      amountSpent: toplamMaliyet,
-      amountDeposited: await sumCreditPaymentsByUserId(activeUserId),
-      wordpressUrl,
-      forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
-    }).catch((logError) => {
-      console.error("[CAMPAIGN_LOG]: Kampanya operasyon kaydı atlandı:", logError);
-    });
+    const primarySlug = persistedBaits[0]?.slug;
+    const hubArticles = persistedBaits.map((bait) => ({
+      slug: bait.slug,
+      hubPath: buildHubArticlePath(bait.slug),
+    }));
 
     const terminalLogs = buildDynamicTerminalLogs(
       {

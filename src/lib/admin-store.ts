@@ -12,7 +12,7 @@ import type {
 } from "@/types/admin";
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import { buildHubArticleUrl } from "@/lib/hub-url";
-import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { buildForumHubUrl, normalizeForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { listCampaignOperationalLogs } from "@/lib/campaign-log-store";
 import { prisma } from "@/lib/db";
@@ -20,8 +20,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
 import {
   listPaymentsByUserId,
-  sumCreditPaymentsAllUsers,
-  sumCreditPaymentsByUserId,
+  sumUserPaidTopUpsAllUsers,
+  sumUserPaidTopUpsByUserId,
 } from "@/lib/payment-store";
 
 interface AuthUserSummary {
@@ -207,7 +207,7 @@ export async function listAdminBusinesses(): Promise<AdminBusinessRow[]> {
   const [authUsers, aggregates, paymentTotals] = await Promise.all([
     listAuthUsers(),
     listCampaignAggregates(),
-    sumCreditPaymentsAllUsers(),
+    sumUserPaidTopUpsAllUsers(),
   ]);
 
   const aggregateByUser = new Map(aggregates.map((row) => [row.userId, row]));
@@ -521,8 +521,9 @@ function enrichOverviewRows(
       userId !== undefined
         ? (walletBalances.get(userId) ?? row.walletBalance)
         : row.walletBalance;
-    const forumUrl =
-      forumUrlByCampaignId.get(row.campaignId) ?? row.forumUrl;
+    const forumUrl = normalizeForumHubUrl(
+      forumUrlByCampaignId.get(row.campaignId) ?? row.forumUrl,
+    );
     const totalDeposited =
       userId !== undefined
         ? (creditDeposits.get(userId) ?? row.totalDeposited)
@@ -605,7 +606,7 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
         listWalletBalances(),
         loadCampaignLogUserIds(),
         resolveForumUrlsByCampaignIds(campaignIds),
-        sumCreditPaymentsAllUsers(),
+        sumUserPaidTopUpsAllUsers(),
       ]);
 
     const rows = enrichOverviewRows(
@@ -627,7 +628,7 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
       listAuthUsers(),
       listAllCampaignsOverview(),
       listWalletBalances(),
-      sumCreditPaymentsAllUsers(),
+      sumUserPaidTopUpsAllUsers(),
     ]);
 
   const campaignIds = campaigns.map((c) => c.id);
@@ -903,7 +904,7 @@ export async function getAdminBusinessDetail(
   }
 
   const payments = await listPaymentsByUserId(userId);
-  let paymentTotal = await sumCreditPaymentsByUserId(userId);
+  let paymentTotal = await sumUserPaidTopUpsByUserId(userId);
 
   if (paymentTotal === 0 && campaigns.length > 0) {
     paymentTotal = campaigns.reduce(

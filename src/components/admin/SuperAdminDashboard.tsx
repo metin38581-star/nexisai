@@ -17,6 +17,7 @@ import type {
   AdminOverviewStats,
 } from "@/types/admin";
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
+import { normalizeForumHubUrl } from "@/lib/forum-hub-url";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("tr-TR", {
@@ -39,17 +40,20 @@ function formatTry(amount: number): string {
 }
 
 function LinkCell({ url, label }: { url: string | null; label: string }) {
-  if (!url) {
+  const resolvedUrl =
+    label === "Forum Hub" ? normalizeForumHubUrl(url) : url?.trim() || null;
+
+  if (!resolvedUrl) {
     return <span className="text-zinc-600">—</span>;
   }
 
   return (
     <a
-      href={url}
+      href={resolvedUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex max-w-[220px] items-center gap-1.5 truncate text-xs text-cyan-300 transition hover:text-cyan-200"
-      title={url}
+      title={resolvedUrl}
     >
       <ExternalLink className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate">{label}</span>

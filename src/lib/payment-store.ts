@@ -289,6 +289,105 @@ function isCreditPayment(row: {
   );
 }
 
+const PAID_TOPUP_PROVIDER_CODES = new Set([
+  "WALLET_TOPUP",
+  "IYZICO_CHECKOUT",
+  "CHECKOUT_SUCCESS",
+]);
+
+function isPaidTopUpPayment(row: {
+  provider: string;
+  providerStatusCode: string | null;
+  status: string;
+}): boolean {
+  if (!["success", "succeeded", "paid"].includes(row.status.toLowerCase())) {
+    return false;
+  }
+
+  if (DEBIT_PROVIDER_CODES.has(row.providerStatusCode ?? "")) {
+    return false;
+  }
+
+  return (
+    row.provider === "iyzico" ||
+    PAID_TOPUP_PROVIDER_CODES.has(row.providerStatusCode ?? "")
+  );
+}
+
+export function sumUserPaidTopUpsInPayments(
+  payments: Array<{
+    amount: number;
+    status: string;
+    provider: string;
+    providerStatusCode: string | null;
+  }>,
+): number {
+  return payments
+    .filter(isPaidTopUpPayment)
+    .reduce((sum, payment) => sum + payment.amount, 0);
+}
+
+export async function sumUserPaidTopUpsByUserId(userId: string): Promise<number> {
+  const payments = await listPaymentsByUserId(userId);
+  return sumUserPaidTopUpsInPayments(payments);
+}
+
+export async function sumUserPaidTopUpsAllUsers(): Promise<Map<string, number>> {
+  if (hasDatabaseUrl()) {
+    try {
+      const rows = await prisma.payment.findMany({
+        select: {
+          userId: true,
+          amount: true,
+          status: true,
+          provider: true,
+          providerStatusCode: true,
+        },
+      });
+
+      const totals = new Map<string, number>();
+      for (const row of rows) {
+        if (!isPaidTopUpPayment(row)) {
+          continue;
+        }
+        totals.set(row.userId, (totals.get(row.userId) ?? 0) + row.amount);
+      }
+      return totals;
+    } catch (error) {
+      console.error("[PAYMENT_STORE]: Yüklenen bakiye toplamı hatası:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.from("Payment").select(
+    "userId, amount, status, provider, providerStatusCode",
+  );
+
+  if (error) {
+    console.error("[PAYMENT_STORE]: Supabase yüklenen bakiye hatası:", error);
+    return new Map();
+  }
+
+  const totals = new Map<string, number>();
+  for (const row of data ?? []) {
+    const payment = {
+      amount: Number(row.amount),
+      status: row.status as string,
+      provider: row.provider as string,
+      providerStatusCode: (row.providerStatusCode as string | null) ?? null,
+    };
+
+    if (!isPaidTopUpPayment(payment)) {
+      continue;
+    }
+
+    const userId = row.userId as string;
+    totals.set(userId, (totals.get(userId) ?? 0) + payment.amount);
+  }
+
+  return totals;
+}
+
 export async function sumCreditPaymentsByUserId(
   userId: string,
 ): Promise<number> {

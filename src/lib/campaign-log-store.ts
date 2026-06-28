@@ -27,7 +27,7 @@ export interface RecordCampaignLogInput {
 async function recordCampaignLogViaPrisma(
   input: RecordCampaignLogInput,
 ): Promise<void> {
-  const amountDeposited = input.amountDeposited ?? input.walletBalance;
+  const amountDeposited = input.amountDeposited ?? 0;
 
   await prisma.campaignLog.upsert({
     where: { campaignId: input.campaignId },
@@ -64,7 +64,7 @@ async function recordCampaignLogViaSupabase(
   input: RecordCampaignLogInput,
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
-  const amountDeposited = input.amountDeposited ?? input.walletBalance;
+  const amountDeposited = input.amountDeposited ?? 0;
 
   const row = {
     id: crypto.randomUUID(),
