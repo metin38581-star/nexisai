@@ -36,6 +36,7 @@ export async function publishToHubAndMake(
   const nexisUrl = buildHubArticleUrl(input.slug);
 
   const makeResult = await dispatchToCentralWebhook({
+    campaignId: input.campaignId,
     baslik: input.baslik,
     icerik: input.icerik,
     slug: input.slug,

@@ -10,7 +10,11 @@ import {
   type DistributionProgressListener,
   type GeoDistributionContext,
 } from "@/lib/distribution-core";
-import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
+import {
+  dispatchMakeWebhooksForArticles,
+  dispatchToCentralWebhook,
+  type GeoDistributionResult,
+} from "@/lib/geo-distribution-client";
 import { publishToMedium } from "@/lib/medium-publish";
 import { publishToWordPress } from "@/lib/wordpress-publish";
 import { updateBaitPublication } from "@/lib/bait-publication-update";
@@ -502,6 +506,53 @@ async function publishDominanceNetworkForBaits(
   return dominanceResults;
 }
 
+async function applyMakeWebhookResultsForBaits(
+  baits: DistributionBait[],
+  makeWebhookResults: Map<string, GeoDistributionResult>,
+  results: DistributionResult[],
+  campaignId: string,
+  campaignExternalUrlSaved: { value: boolean },
+): Promise<void> {
+  for (const bait of baits) {
+    const webhookResult = makeWebhookResults.get(bait.id);
+    if (!webhookResult?.ok) {
+      continue;
+    }
+
+    if (results.some((entry) => entry.baitId === bait.id)) {
+      continue;
+    }
+
+    try {
+      await markBaitPublished(
+        bait.id,
+        webhookResult.externalLiveUrl,
+        webhookResult.externalLiveUrl,
+        bait.platform,
+      );
+
+      await maybeSaveCampaignUrl(
+        campaignId,
+        webhookResult.externalLiveUrl,
+        campaignExternalUrlSaved,
+      );
+
+      results.push({
+        baitId: bait.id,
+        slug: bait.slug,
+        ok: true,
+        externalLiveUrl: webhookResult.externalLiveUrl,
+        platform: bait.platform ?? "BLOGGER",
+      });
+    } catch (error) {
+      console.error("Make Webhook Failed:", error, {
+        baitId: bait.id,
+        slug: bait.slug,
+      });
+    }
+  }
+}
+
 export async function distributeBaitsToNetwork(
   baits: DistributionBait[],
   context: GeoDistributionContext,
@@ -514,6 +565,24 @@ export async function distributeBaitsToNetwork(
   const results: DistributionResult[] = [];
   const campaignExternalUrlSaved = { value: false };
   const campaignWordPressUrlSaved = { value: false };
+
+  onProgress?.({
+    progress: 0,
+    phase: "started",
+    currentIndex: 0,
+    totalCount: baits.length,
+    terminalMessage: `${context.sehir} kampanyası için Make.com webhook'u anında tetikleniyor...`,
+  });
+
+  const makeWebhookResults = await dispatchMakeWebhooksForArticles(
+    baits.map((bait) => ({
+      id: bait.id,
+      baslik: bait.baslik,
+      icerik: bait.icerik,
+      slug: bait.slug,
+    })),
+    context,
+  );
 
   const mediumBaits = baits.filter(
     (bait) => normalizePlatform(bait.platform) === "MEDIUM",
@@ -550,6 +619,13 @@ export async function distributeBaitsToNetwork(
   }
 
   if (bloggerBaits.length === 0) {
+    await applyMakeWebhookResultsForBaits(
+      baits,
+      makeWebhookResults,
+      results,
+      context.campaignId,
+      campaignExternalUrlSaved,
+    );
     await publishDominanceNetworkForBaits(baits, results, context.campaignId);
     return results;
   }
@@ -564,6 +640,12 @@ export async function distributeBaitsToNetwork(
     articles,
     context,
     async (payload) => {
+      const bait = bloggerBaits.find((entry) => entry.slug === payload.slug);
+      const cached = bait ? makeWebhookResults.get(bait.id) : undefined;
+      if (cached) {
+        return { ok: cached.ok, externalLiveUrl: cached.externalLiveUrl };
+      }
+
       const result = await dispatchToCentralWebhook(payload);
       return { ok: result.ok, externalLiveUrl: result.externalLiveUrl };
     },

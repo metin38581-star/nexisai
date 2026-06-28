@@ -17,6 +17,7 @@ export type DistributionProgressListener = (
 
 /** Merkezi GEO webhook'una gönderilen kurumsal dağıtım paketi. */
 export interface GeoWebhookPayload {
+  campaignId: string;
   baslik: string;
   icerik: string;
   slug: string;
@@ -68,6 +69,7 @@ export function buildGeoWebhookPayload(
   context: GeoDistributionContext,
 ): GeoWebhookPayload {
   return {
+    campaignId: context.campaignId,
     baslik: article.baslik,
     icerik: article.icerik,
     slug: article.slug,
