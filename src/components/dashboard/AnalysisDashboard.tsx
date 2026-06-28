@@ -5,7 +5,12 @@ import { toast } from "sonner";
 import type { CampaignFormData, CampaignResponse, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
 import {
   buildCampaignSession,
+  clearActiveCampaignId,
   clearCampaignSession,
+  getActiveCampaignId,
+  getCampaignSession,
+  saveActiveCampaignId,
+  saveCampaignSession,
   type CampaignSessionPayload,
 } from "@/lib/campaign-session";
 import { getCampaignMeta } from "@/lib/agresiflik";
@@ -154,6 +159,7 @@ function applyCampaignSuccess(
 ): void {
   if (result.campaignId) {
     handlers.setActiveCampaignId(result.campaignId);
+    saveActiveCampaignId(result.campaignId);
   }
   if (result.llmResult) {
     handlers.setLlmResult(result.llmResult);
@@ -250,10 +256,12 @@ async function pollCampaignProcessingStatus(
           },
           handlers,
         );
+        clearActiveCampaignId();
         return;
       }
 
       if (state.status === "failed" || state.status === "interrupted") {
+        clearActiveCampaignId();
         const errorLog = [...logs]
           .reverse()
           .find((entry) => entry.category === "HATA");
@@ -283,6 +291,7 @@ async function pollCampaignProcessingStatus(
   handlers.setOperationError(DISTRIBUTION_INTERRUPTED_MESSAGE);
   handlers.setOperationPhase("interrupted");
   handlers.resetDistribution();
+  clearActiveCampaignId();
   toast.error(DISTRIBUTION_INTERRUPTED_TITLE);
 }
 
@@ -432,6 +441,7 @@ function AnalysisDashboardContent({
   const userEmailRef = useRef(userEmail);
   const isLoggedInRef = useRef(isLoggedIn);
   const launchIdempotencyKeyRef = useRef<string | null>(null);
+  const resumePollingRef = useRef(false);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -829,6 +839,62 @@ function AnalysisDashboardContent({
     setSessionReady(true);
   }, []);
 
+  useEffect(() => {
+    if (
+      !isAuthReady ||
+      !accessToken ||
+      analysisInFlightRef.current ||
+      resumePollingRef.current
+    ) {
+      return;
+    }
+
+    const savedSession = getCampaignSession();
+    const savedCampaignId = getActiveCampaignId();
+    if (!savedSession || !savedCampaignId) {
+      return;
+    }
+
+    resumePollingRef.current = true;
+    setSession((current) => current ?? savedSession);
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/campaign/${savedCampaignId}/status`,
+          buildAuthFetchInit(accessToken),
+        );
+        if (!response.ok) {
+          return;
+        }
+
+        const state = (await response.json()) as {
+          status?: string;
+        };
+
+        if (
+          state.status === "started" ||
+          state.status === "processing"
+        ) {
+          setOperationPhase("processing");
+          void pollCampaignProcessingStatus(
+            accessToken,
+            savedSession,
+            savedCampaignId,
+            buildCampaignFlowHandlers(),
+          );
+          return;
+        }
+
+        if (state.status === "complete") {
+          clearActiveCampaignId();
+        }
+      } catch {
+        // Sessiz — kullanıcı yeni kampanya başlatabilir.
+      }
+    })();
+  }, [accessToken, buildCampaignFlowHandlers, isAuthReady]);
+
   const startCampaignAnalysis = useCallback((data: CampaignFormData) => {
     if (analysisInFlightRef.current) {
       return;
@@ -838,6 +904,7 @@ function AnalysisDashboardContent({
     launchIdempotencyKeyRef.current = crypto.randomUUID();
     clearCampaignSession();
     const payload = buildCampaignSession(data);
+    saveCampaignSession(payload);
     setSession(payload);
     void runAnalysisRef.current(payload);
   }, []);

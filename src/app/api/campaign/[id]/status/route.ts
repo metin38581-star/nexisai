@@ -4,6 +4,7 @@ import { handleApiRouteError } from "@/lib/api-error";
 import { getActiveSessionUser } from "@/lib/auth-session";
 import {
   getCampaignBaitCount,
+  isCampaignBackgroundJobFinished,
   userHasCampaignAccess,
 } from "@/lib/campaign-store";
 import {
@@ -15,6 +16,37 @@ import { DISTRIBUTION_INTERRUPTED_MESSAGE } from "@/lib/campaign-distribution-ti
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+function buildCompleteStatusPayload(input: {
+  campaignId: string;
+  baitCount: number;
+  terminalLogs?: unknown[];
+  result?: Record<string, unknown> | null;
+  message?: string;
+}) {
+  const fallbackResult = {
+    success: true,
+    campaignId: input.campaignId,
+    status: "complete" as const,
+    baitsGenerated: input.baitCount,
+    message: input.message ?? "Kampanya tamamlandı.",
+    metrics: {
+      visibilityRate: 0,
+      estimatedTraffic: 0,
+      spentBudget: 0,
+      totalBudget: 0,
+    },
+  };
+
+  return {
+    success: true,
+    campaignId: input.campaignId,
+    status: "complete" as const,
+    terminalLogs: input.terminalLogs ?? [],
+    result: input.result ?? fallbackResult,
+    baitsGenerated: input.baitCount,
+  };
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -41,12 +73,43 @@ export async function GET(request: Request, context: RouteContext) {
     const baitCount = await getCampaignBaitCount(campaignId);
 
     if (processingState && isCampaignProcessingStale(processingState)) {
+      if (baitCount > 0) {
+        return NextResponse.json(
+          buildCompleteStatusPayload({
+            campaignId,
+            baitCount,
+            terminalLogs: processingState.terminalLogs,
+            result: processingState.result as Record<string, unknown> | null,
+            message:
+              "Kampanya içerikleri üretildi; dağıtım paneli güncellendi.",
+          }),
+        );
+      }
+
       await interruptCampaignProcessingState(
         campaignId,
         processingState.terminalLogs,
         DISTRIBUTION_INTERRUPTED_MESSAGE,
       );
       processingState = await getCampaignProcessingState(campaignId);
+    }
+
+    if (
+      processingState &&
+      (processingState.status === "started" ||
+        processingState.status === "processing") &&
+      baitCount > 0 &&
+      (await isCampaignBackgroundJobFinished(campaignId))
+    ) {
+      return NextResponse.json(
+        buildCompleteStatusPayload({
+          campaignId,
+          baitCount,
+          terminalLogs: processingState.terminalLogs,
+          result: processingState.result,
+          message: "Kampanya tamamlandı.",
+        }),
+      );
     }
 
     if (processingState) {
@@ -64,28 +127,13 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     if (baitCount > 0) {
-      const fallbackResult = {
-        success: true,
-        campaignId,
-        status: "complete" as const,
-        baitsGenerated: baitCount,
-        message: "Kampanya tamamlandı.",
-        metrics: {
-          visibilityRate: 0,
-          estimatedTraffic: 0,
-          spentBudget: 0,
-          totalBudget: 0,
-        },
-      };
-
-      return NextResponse.json({
-        success: true,
-        campaignId,
-        status: "complete",
-        terminalLogs: [],
-        result: fallbackResult,
-        baitsGenerated: baitCount,
-      });
+      return NextResponse.json(
+        buildCompleteStatusPayload({
+          campaignId,
+          baitCount,
+          message: "Kampanya tamamlandı.",
+        }),
+      );
     }
 
     return NextResponse.json({

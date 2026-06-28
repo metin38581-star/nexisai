@@ -710,6 +710,31 @@ export async function getCampaignBaitCount(campaignId: string): Promise<number> 
   return count ?? 0;
 }
 
+/** Arka plan işi kilidi serbest bıraktıysa (llmFeedback güncellendiyse) true döner. */
+export async function isCampaignBackgroundJobFinished(
+  campaignId: string,
+): Promise<boolean> {
+  if (!hasDatabaseUrl()) {
+    return false;
+  }
+
+  try {
+    const row = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { llmFeedback: true },
+    });
+    const feedback = row?.llmFeedback?.trim() ?? "";
+    if (!feedback || feedback.startsWith(CAMPAIGN_PROCESSING_MARKER)) {
+      return false;
+    }
+
+    return (await getCampaignBaitCount(campaignId)) > 0;
+  } catch (error) {
+    console.error("[CAMPAIGN_BAITS]: Arka plan tamamlanma kontrolü hatası:", error);
+    return false;
+  }
+}
+
 export async function resolveRecentDuplicateCampaignId(
   userId: string,
   markaAdi: string,
