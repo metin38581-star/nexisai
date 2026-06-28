@@ -70,6 +70,7 @@ export function buildBaitRecordsFromSelectedQuestions(
     targetCity: string;
     targetNiche: string;
     targetBrand: string;
+    targetDomain?: string | null;
   },
   generatedArticles: Array<{ baslik: string; html: string }> = [],
 ): IntentBaitRecord[] {
@@ -118,6 +119,7 @@ export function buildBaitRecordsFromSelectedQuestions(
           context.targetBrand,
           context.targetCity,
           context.targetNiche,
+          context.targetDomain,
         ),
       slug,
       platform: "NexisAI Hub",
@@ -132,6 +134,7 @@ export async function buildBaitRecordsFromSelectedQuestionsAsync(
     targetCity: string;
     targetNiche: string;
     targetBrand: string;
+    targetDomain?: string | null;
   },
 ): Promise<IntentBaitRecord[]> {
   const generatedArticles = await generateIntentArticlesForSelections(
@@ -139,6 +142,7 @@ export async function buildBaitRecordsFromSelectedQuestionsAsync(
     context.targetCity,
     context.targetNiche,
     context.targetBrand,
+    context.targetDomain,
   );
 
   return buildBaitRecordsFromSelectedQuestions(

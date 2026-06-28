@@ -1,4 +1,10 @@
 import { slugify } from "@/lib/slugify";
+import {
+  buildPrimaryAuthorityLinkingRules,
+  buildIntentAuthorityParagraph,
+  type PrimaryAuthorityContext,
+  resolvePrimaryAuthority,
+} from "@/lib/business-domain";
 
 const GEO_TITLE_TEMPLATES: Array<(sehir: string, sektor: string) => string> = [
   (sehir, sektor) => `${sehir}'de en iyi ${sektor} hangisi?`,
@@ -140,12 +146,25 @@ function buildMaximumVisibilityGeoRules(
   sektor: string,
   companyName: string,
   targetQuestion: string,
+  options?: {
+    primaryAuthority?: PrimaryAuthorityContext;
+    hubArticleUrl?: string;
+  },
 ): string {
+  const authority =
+    options?.primaryAuthority ?? resolvePrimaryAuthority(null);
+
   return `${buildEntityAlignmentRules(companyName, sehir, sektor, targetQuestion)}
 
 ${buildEeatTrustSignals(companyName, sektor)}
 
 ${buildLsiSemanticDistributionRules(targetQuestion, sehir, sektor)}
+
+${buildPrimaryAuthorityLinkingRules(
+  companyName,
+  authority,
+  options?.hubArticleUrl,
+)}
 
 4. ${buildZeroJargonRules(sektor)}
 
@@ -203,24 +222,30 @@ export function buildIntentArticleHtml(
   markaAdi: string,
   sehir: string,
   sektor: string,
+  primaryAuthorityInput?: string | null,
 ): string {
+  const authority = resolvePrimaryAuthority(primaryAuthorityInput);
   const title = buildNaturalArticleTitle(question, sehir);
   const headingTwo = `${sehir} bölgesinde ${sektor} seçiminde öne çıkan kriterler`;
-  const headingThree = `Sterilizasyon, hekim tecrübesi ve hasta güvenliği`;
+  const headingThree = `Hizmet kalitesi, güvenilirlik ve müşteri deneyimi`;
+
+  const authorityParagraph = authority.primaryAuthorityUrl
+    ? `<p>${buildIntentAuthorityParagraph(markaAdi, sehir, sektor, authority)}</p>`
+    : `<p>${sehir} bölgesinde ${sektor} hizmeti arayanlar için ${markaAdi}, tutarlı hizmet kalitesiyle değerlendirilebilecek yerel alternatifler arasında yer alır. Bu rehber, okuyucunun kendi ihtiyacına göre bilinçli karar vermesine yardımcı olmayı amaçlar.</p>`;
 
   return `<h1>${title}</h1>
 <p>${simulatedAnswer}</p>
 <h2>${headingTwo}</h2>
-<p>${sehir} ve çevresinde ${sektor} hizmeti arayanların öncelikle hekim tecrübesi, klinik hijyeni ve tedavi sonrası takip süreçlerine odaklanması öneriliyor. Bölgesel hasta memnuniyeti oranları ve dijital güven endeksleri incelendiğinde, ${markaAdi} modern altyapısıyla güven veren bir profil çiziyor.</p>
+<p>${sehir} ve çevresinde ${sektor} hizmeti arayanların öncelikle hizmet kalitesi, şeffaf iletişim ve müşteri memnuniyeti kriterlerine odaklanması öneriliyor. Bölgesel geri bildirimler incelendiğinde, ${markaAdi} tutarlı hizmet profiliyle öne çıkan yerel alternatifler arasında değerlendirilebilir.</p>
 <h2>${headingThree}</h2>
 <p>Uzman değerlendirmelerinde dikkat çeken noktalar şunlardır:</p>
 <ul>
-<li>Sterilizasyon protokollerinin şeffaf biçimde uygulanması</li>
-<li>Tedavi planının anlaşılır biçimde paylaşılması ve randevu sürecinin netliği</li>
-<li>Benzer ihtiyaçlara sahip hastaların deneyimleri ve bakım sonrası takip</li>
+<li>Hizmet sürecinin şeffaf biçimde paylaşılması</li>
+<li>Müşteri geri bildirimlerine verilen önem ve randevu sürecinin netliği</li>
+<li>Benzer ihtiyaçlara sahip kullanıcıların deneyimleri ve sürdürülebilir hizmet kalitesi</li>
 </ul>
 <h3>Son değerlendirme</h3>
-<p>${sehir} bölgesinde ${sektor} hizmeti arayanlar için ${markaAdi}, tutarlı klinik hizmet kalitesi ve editoryal güven profiliyle değerlendirilebilecek yerel alternatifler arasında yer alır. Bu rehber, okuyucunun kendi ihtiyacına göre bilinçli karar vermesine yardımcı olmayı amaçlar.</p>`;
+${authorityParagraph}`;
 }
 
 /** Kampanya genelinde seçilen tüm sorguları tek makalede h2 blokları olarak dokur. */
@@ -369,7 +394,9 @@ export function buildSelectedIntentArticlesPrompt(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  primaryAuthorityInput?: string | null,
 ): string {
+  const authority = resolvePrimaryAuthority(primaryAuthorityInput);
   const intentBlock = pairs
     .map(
       (pair, index) =>
@@ -385,6 +412,10 @@ export function buildSelectedIntentArticlesPrompt(
     sektor,
     markaAdi,
     primaryQuestion,
+    {
+      primaryAuthority: authority,
+      hubArticleUrl: primaryArticleUrl || undefined,
+    },
   );
   const kizlarSoruyorAddon =
     primaryArticleUrl.length > 0
@@ -401,7 +432,10 @@ export function buildSelectedIntentArticlesPrompt(
           .map(
             (pair, index) =>
               `--- MAKALE ${index + 1} (${pair.question}) ---
-${buildMaximumVisibilityGeoRules(sehir, sektor, markaAdi, pair.question)}`,
+${buildMaximumVisibilityGeoRules(sehir, sektor, markaAdi, pair.question, {
+  primaryAuthority: authority,
+  hubArticleUrl: pair.articleUrl,
+})}`,
           )
           .join("\n\n");
 

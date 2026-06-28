@@ -21,6 +21,7 @@ export type CampaignFormCity = TurkishCitySlug | "";
 
 export interface CampaignFormData {
   businessName: string;
+  businessWebsite?: string;
   sector: CampaignFormSector;
   city: CampaignFormCity;
   dailyBudget: number;
@@ -30,6 +31,9 @@ export interface CampaignFormData {
 
 export interface CampaignApiRequest {
   companyName?: string;
+  businessWebsite?: string;
+  businessDomain?: string;
+  websiteUrl?: string;
   sector?: string;
   city?: string;
   budget?: number;

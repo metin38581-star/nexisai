@@ -10,6 +10,7 @@ import {
   type CreatedCampaignResult,
 } from "@/lib/campaign-store";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
+import { resolvePrimaryAuthority } from "@/lib/business-domain";
 import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { debitWalletForCampaign } from "@/lib/user-wallet-service";
 
@@ -52,6 +53,7 @@ async function completeCampaignWithBaitsInTransaction(
       makaleSayisi: input.makaleSayisi,
       radarSikligi: input.radarSikligi,
       radarSikligiDakika: input.radarSikligiDakika,
+      businessDomain: input.businessDomain ?? null,
       baits: {
         create: input.baits.map((bait) => ({
           ...bait,
@@ -139,6 +141,8 @@ export interface CampaignBillingLogInput {
   description: string;
   wordpressUrl?: string | null;
   forumUrl?: string | null;
+  businessDomain?: string | null;
+  primaryAuthorityUrl?: string | null;
 }
 
 export interface CampaignBillingResult {
@@ -165,6 +169,10 @@ async function writeCampaignBillingLog(
     amountDeposited,
     wordpressUrl: billing.wordpressUrl ?? null,
     forumUrl: billing.forumUrl ?? null,
+    businessDomain: billing.businessDomain ?? null,
+    primaryAuthorityUrl:
+      billing.primaryAuthorityUrl ??
+      resolvePrimaryAuthority(billing.businessDomain).primaryAuthorityUrl,
   });
 }
 

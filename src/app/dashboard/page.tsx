@@ -35,8 +35,8 @@ function PaymentResumeHandler({
     const city = searchParams.get("city")?.trim() ?? "";
     const budget = Number(searchParams.get("budget"));
     const campaignDays = Number(searchParams.get("campaignDays"));
-    const selectedQuestionIds =
-      searchParams.get("selectedQuestionIds")?.split(",").filter(Boolean) ?? [];
+    const businessDomainParam = searchParams.get("businessDomain")?.trim() ?? "";
+    const businessWebsiteParam = searchParams.get("businessWebsite")?.trim() ?? "";
 
     if (!businessName || !city) {
       return;
@@ -52,7 +52,9 @@ function PaymentResumeHandler({
       campaignDays: Number.isFinite(campaignDays)
         ? campaignDays
         : MIN_CAMPAIGN_DAYS,
-      selectedQuestionIds,
+      selectedQuestionIds:
+      searchParams.get("selectedQuestionIds")?.split(",").filter(Boolean) ?? [],
+      businessWebsite: businessWebsiteParam || businessDomainParam || undefined,
     });
 
     toast.success(

@@ -119,6 +119,7 @@ export async function POST(request: Request) {
     assertDataAccessEnv();
     assertDatabaseEnv();
     const body = (await request.json()) as CampaignApiRequest;
+    const normalized = normalizeCampaignApiRequest(body);
     const {
       markaAdi,
       sektor,
@@ -127,7 +128,8 @@ export async function POST(request: Request) {
       gunSayisi,
       sectorSlug,
       selectedQuestionIds,
-    } = normalizeCampaignApiRequest(body);
+      businessDomain,
+    } = normalized;
     const toplamMaliyet = gunlukButce * gunSayisi;
 
     const budgetParams = resolveCampaignBudgetParams(gunlukButce);
@@ -369,6 +371,7 @@ export async function POST(request: Request) {
         agresiflikSeviyesi,
         radarSikligi,
         radarSikligiDakika,
+        businessDomain,
       });
     });
 

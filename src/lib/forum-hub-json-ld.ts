@@ -1,6 +1,4 @@
-const SITE_ORIGIN =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
-  "https://nexisai-fawn.vercel.app";
+import { resolveSiteOrigin } from "@/lib/site-origin";
 
 export interface ForumQaJsonLdInput {
   slug: string;
@@ -14,7 +12,7 @@ export interface ForumQaJsonLdInput {
 }
 
 export function buildForumQaPageJsonLd(input: ForumQaJsonLdInput): object {
-  const pageUrl = `${SITE_ORIGIN}/forum/${encodeURIComponent(input.slug)}`;
+  const pageUrl = `${resolveSiteOrigin()}/forum/${encodeURIComponent(input.slug)}`;
 
   return {
     "@context": "https://schema.org",

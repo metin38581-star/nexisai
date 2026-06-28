@@ -1,6 +1,7 @@
 import type { CampaignApiRequest } from "@/types/campaign";
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import type { BusinessSector } from "@/types/campaign";
+import { normalizeBusinessDomain } from "@/lib/business-domain";
 import { DEFAULT_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
 
 export interface NormalizedCampaignApiRequest {
@@ -11,6 +12,7 @@ export interface NormalizedCampaignApiRequest {
   gunSayisi: number;
   sectorSlug: BusinessSector | "";
   selectedQuestionIds: string[];
+  businessDomain: string | null;
 }
 
 function resolveSectorSlug(body: CampaignApiRequest): BusinessSector | "" {
@@ -70,5 +72,8 @@ export function normalizeCampaignApiRequest(
     gunSayisi: Number(body.campaignDays ?? body.gunSayisi) || DEFAULT_CAMPAIGN_DAYS,
     sectorSlug,
     selectedQuestionIds,
+    businessDomain: normalizeBusinessDomain(
+      body.businessDomain ?? body.businessWebsite ?? body.websiteUrl,
+    ),
   };
 }

@@ -54,6 +54,7 @@ export interface CampaignBackgroundJobInput {
   agresiflikSeviyesi: string;
   radarSikligi: string;
   radarSikligiDakika: number;
+  businessDomain?: string | null;
 }
 
 function buildFallbackMakaleler(count: number): string[] {
@@ -91,6 +92,7 @@ export async function processCampaignInBackground(
     agresiflikSeviyesi,
     radarSikligi,
     radarSikligiDakika,
+    businessDomain,
   } = input;
 
   const makaleSayisi = selectedQuestionIds.length;
@@ -166,6 +168,7 @@ export async function processCampaignInBackground(
               targetCity,
               targetNiche,
               targetBrand,
+              targetDomain: businessDomain,
             },
           )
         : applyDistributionPlatforms(
@@ -203,6 +206,7 @@ export async function processCampaignInBackground(
         makaleSayisi,
         radarSikligi,
         radarSikligiDakika,
+        businessDomain: businessDomain ?? null,
         baits: baitRecords,
       },
       billing: {
@@ -215,6 +219,7 @@ export async function processCampaignInBackground(
         amountSpent: toplamMaliyet,
         description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
         forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
+        businessDomain: businessDomain ?? null,
       },
     });
 
@@ -299,6 +304,7 @@ export async function processCampaignInBackground(
         gunSayisi,
         sectorSlug: sectorSlug as BusinessSector,
         selectedQuestionIds,
+        businessDomain: businessDomain ?? null,
       },
       llmResult,
       baitDeployment,
@@ -313,6 +319,7 @@ export async function processCampaignInBackground(
         gunSayisi,
         sectorSlug: sectorSlug as BusinessSector,
         selectedQuestionIds,
+        businessDomain: businessDomain ?? null,
       },
       llmResult,
     );

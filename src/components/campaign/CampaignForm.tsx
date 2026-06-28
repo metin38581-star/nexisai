@@ -31,6 +31,7 @@ interface CampaignFormProps {
 
 const initialForm: CampaignFormData = {
   businessName: "",
+  businessWebsite: "",
   sector: "",
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
@@ -118,6 +119,16 @@ export default function CampaignForm({
             placeholder={CAMPAIGN_BUSINESS_NAME_PLACEHOLDER}
             value={form.businessName}
             onChange={(e) => updateField("businessName", e.target.value)}
+            className={inputClass}
+          />
+        </FormField>
+
+        <FormField label="İşletme Web Sitesi (Primary Authority)">
+          <input
+            type="url"
+            placeholder="ornek.com veya https://www.ornek.com"
+            value={form.businessWebsite ?? ""}
+            onChange={(e) => updateField("businessWebsite", e.target.value)}
             className={inputClass}
           />
         </FormField>

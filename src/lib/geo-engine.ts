@@ -12,6 +12,10 @@ import {
 } from "@/lib/geo-prompt";
 import { buildSimulatedAnswerFallback, resolveForumSectorKey } from "@/lib/forum-answer-prompt";
 import { buildHubArticleUrl } from "@/lib/hub-url";
+import {
+  enrichArticleWithAuthorityLinks,
+  resolvePrimaryAuthority,
+} from "@/lib/business-domain";
 import { GoogleGenAI } from "@google/genai";
 
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
@@ -330,10 +334,28 @@ interface RawGeneratedIntentArticle extends GeneratedIntentArticle {
 
 function finalizeGeneratedArticle(
   article: RawGeneratedIntentArticle,
+  enrich?: {
+    markaAdi: string;
+    sehir: string;
+    sektor: string;
+    businessDomain?: string | null;
+  },
 ): GeneratedIntentArticle {
+  let html = article.html;
+
+  if (enrich?.businessDomain) {
+    html = enrichArticleWithAuthorityLinks(
+      html,
+      enrich.markaAdi,
+      enrich.sehir,
+      enrich.sektor,
+      resolvePrimaryAuthority(enrich.businessDomain),
+    );
+  }
+
   return {
     baslik: article.baslik,
-    html: buildArticleContentWithKizlarSoruyor(article.html, article),
+    html: buildArticleContentWithKizlarSoruyor(html, article),
   };
 }
 
@@ -383,6 +405,7 @@ async function generateSingleIntentArticle(
   sektor: string,
   markaAdi: string,
   articleUrl: string,
+  businessDomain?: string | null,
 ): Promise<RawGeneratedIntentArticle | null> {
   const apiKey = resolveApiKey();
   if (!apiKey) {
@@ -403,6 +426,7 @@ async function generateSingleIntentArticle(
         sehir,
         sektor,
         markaAdi,
+        businessDomain,
       ),
       config: {
         maxOutputTokens: 6144,
@@ -426,6 +450,7 @@ export async function generateIntentArticlesForSelections(
   sehir: string,
   sektor: string,
   markaAdi: string,
+  businessDomain?: string | null,
 ): Promise<GeneratedIntentArticle[]> {
   if (pairs.length === 0) {
     return [];
@@ -459,6 +484,7 @@ export async function generateIntentArticlesForSelections(
             sektor,
             markaAdi,
             articleUrl,
+            businessDomain,
           );
           if (article) {
             const withKs =
@@ -474,7 +500,12 @@ export async function generateIntentArticlesForSelections(
                     ),
                   };
 
-            return finalizeGeneratedArticle(withKs);
+            return finalizeGeneratedArticle(withKs, {
+              markaAdi,
+              sehir,
+              sektor,
+              businessDomain,
+            });
           }
           console.warn(
             `[GEO_MOTORU]: Soru ${index + 1} için LLM yanıtı eksik, fallback kullanılacak`,
@@ -515,17 +546,26 @@ export async function generateIntentArticlesForSelections(
         articleUrl,
       );
 
-      return finalizeGeneratedArticle({
-        baslik: buildIntentPostTitle(sehir, sektor, index, pair.question),
-        html: buildIntentArticleHtml(
-          pair.question,
-          pair.simulatedAnswer,
+      return finalizeGeneratedArticle(
+        {
+          baslik: buildIntentPostTitle(sehir, sektor, index, pair.question),
+          html: buildIntentArticleHtml(
+            pair.question,
+            pair.simulatedAnswer,
+            markaAdi,
+            sehir,
+            sektor,
+            businessDomain,
+          ),
+          ...fallbackKs,
+        },
+        {
           markaAdi,
           sehir,
           sektor,
-        ),
-        ...fallbackKs,
-      });
+          businessDomain,
+        },
+      );
     }).filter((item): item is GeneratedIntentArticle => item !== null);
   } catch (error) {
     console.error("[GEO_MOTORU_SECILI_HATA]:", error);

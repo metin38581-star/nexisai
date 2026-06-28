@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveSiteOriginFromRequest } from "@/lib/site-origin";
 import { grantWelcomeBalance } from "@/lib/user-wallet-service";
 
 type AuthAction = "register" | "login";
@@ -14,13 +15,13 @@ interface AuthSessionRequest {
 }
 
 function resolveSiteUrl(request: Request): string | undefined {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
-  if (configured) {
+  const configured = resolveSiteOriginFromRequest(request);
+  if (configured !== "http://localhost:3000") {
     return configured;
   }
 
   const origin = request.headers.get("origin")?.trim().replace(/\/$/, "");
-  return origin || undefined;
+  return origin || configured;
 }
 
 function resolveDisplayName(

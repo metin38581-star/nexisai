@@ -1,15 +1,6 @@
 import type { HubArticle } from "@/lib/hub-article";
 import { buildHubArticleUrl } from "@/lib/hub-url";
-
-const NEXIS_SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
-  "https://nexisai-fawn.vercel.app";
-
-const NEXIS_ORGANIZATION = {
-  "@type": "Organization" as const,
-  name: "NexisAI",
-  url: NEXIS_SITE_URL,
-};
+import { resolveSiteOrigin } from "@/lib/site-origin";
 
 export function buildHubArticleDescription(
   content: string,
@@ -23,9 +14,16 @@ export function buildHubArticleDescription(
 }
 
 export function buildTechArticleJsonLd(article: HubArticle) {
+  const siteOrigin = resolveSiteOrigin();
+  const organization = {
+    "@type": "Organization" as const,
+    name: "NexisAI",
+    url: siteOrigin,
+  };
+
   const url = buildHubArticleUrl(article.slug).startsWith("http")
     ? buildHubArticleUrl(article.slug)
-    : `${NEXIS_SITE_URL}/p/${article.slug}`;
+    : `${siteOrigin}/p/${article.slug}`;
 
   const description =
     buildHubArticleDescription(article.content ?? "", 320) ||
@@ -39,12 +37,12 @@ export function buildTechArticleJsonLd(article: HubArticle) {
     url,
     datePublished: article.createdAt,
     inLanguage: "tr-TR",
-    author: NEXIS_ORGANIZATION,
+    author: organization,
     publisher: {
-      ...NEXIS_ORGANIZATION,
+      ...organization,
       logo: {
         "@type": "ImageObject",
-        url: `${NEXIS_SITE_URL}/favicon.svg`,
+        url: `${siteOrigin}/favicon.svg`,
       },
     },
     mainEntityOfPage: {

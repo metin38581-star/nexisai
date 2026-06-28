@@ -932,6 +932,7 @@ export interface CreateCampaignInput {
   radarSikligi: string;
   radarSikligiDakika: number;
   baits: CampaignBaitInput[];
+  businessDomain?: string | null;
 }
 
 export interface CreatedCampaignResult {
@@ -960,6 +961,7 @@ async function createCampaignViaPrisma(
       makaleSayisi: input.makaleSayisi,
       radarSikligi: input.radarSikligi,
       radarSikligiDakika: input.radarSikligiDakika,
+      businessDomain: input.businessDomain ?? null,
       baits: {
         create: input.baits.map((bait) => ({
           ...bait,

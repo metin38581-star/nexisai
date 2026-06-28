@@ -11,6 +11,7 @@ export interface CampaignSessionPayload {
   gunSayisi: number;
   sectorSlug: CampaignFormData["sector"];
   selectedQuestionIds: string[];
+  businessWebsite?: string;
   withTahsilat?: boolean;
 }
 
@@ -30,6 +31,7 @@ export function buildCampaignSession(
     gunSayisi: data.campaignDays,
     sectorSlug: data.sector,
     selectedQuestionIds: data.selectedQuestionIds,
+    businessWebsite: data.businessWebsite?.trim() || undefined,
     withTahsilat: options?.withTahsilat,
   };
 }

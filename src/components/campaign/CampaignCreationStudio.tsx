@@ -44,6 +44,7 @@ interface CampaignCreationStudioProps {
 
 const initialForm: CampaignFormData = {
   businessName: "",
+  businessWebsite: "",
   sector: "",
   city: "",
   dailyBudget: MIN_CAMPAIGN_DAILY_BUDGET,
@@ -220,6 +221,7 @@ export default function CampaignCreationStudio({
     setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
+      businessWebsite: form.businessWebsite?.trim() || undefined,
       sector: form.sector,
       city: form.city,
       dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
@@ -258,6 +260,18 @@ export default function CampaignCreationStudio({
             />
           </CyberScanField>
 
+          <CyberScanField label="İşletme Web Sitesi">
+            <input
+              type="url"
+              placeholder="ornek.com"
+              value={form.businessWebsite ?? ""}
+              onChange={(e) => updateField("businessWebsite", e.target.value)}
+              className={inputClass}
+            />
+          </CyberScanField>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <CyberScanField label="Sektör">
             <select
               value={form.sector}

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resolveSitePath } from "@/lib/site-origin";
+
 export async function sendGrowthLoopEmail(
   email: string,
   userName: string,
@@ -11,7 +13,7 @@ export async function sendGrowthLoopEmail(
     "",
     "NexisAI: İşletmenizin yapay zeka motorlarındaki görünürlüğü arttı! Güncel skorlarınızı görmek için hemen hesabınızı kontrol edin.",
     "",
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://nexisai-fawn.vercel.app/dashboard",
+    resolveSitePath("/dashboard"),
   ].join("\n");
 
   if (process.env.SMTP_URL) {

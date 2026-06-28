@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { SECTOR_OPTIONS } from "@/lib/constants";
+import { resolvePrimaryAuthority } from "@/lib/business-domain";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
 import type { AdminCampaignOverviewRow } from "@/types/admin";
@@ -29,6 +30,8 @@ async function ensureCampaignLogTable(): Promise<void> {
         "amount_deposited" DOUBLE PRECISION NOT NULL DEFAULT 0,
         "wordpress_url" TEXT,
         "forum_url" TEXT,
+        "primary_authority_url" TEXT,
+        "business_domain" TEXT,
         "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "CampaignLog_pkey" PRIMARY KEY ("id")
       );
@@ -59,6 +62,8 @@ export interface RecordCampaignLogInput {
   amountDeposited?: number;
   wordpressUrl?: string | null;
   forumUrl?: string | null;
+  businessDomain?: string | null;
+  primaryAuthorityUrl?: string | null;
 }
 
 async function recordCampaignLogViaPrisma(
@@ -66,6 +71,9 @@ async function recordCampaignLogViaPrisma(
 ): Promise<void> {
   await ensureCampaignLogTable();
   const amountDeposited = input.amountDeposited ?? 0;
+  const authority = resolvePrimaryAuthority(
+    input.businessDomain ?? input.primaryAuthorityUrl,
+  );
 
   await prisma.campaignLog.upsert({
     where: { campaignId: input.campaignId },
@@ -82,6 +90,9 @@ async function recordCampaignLogViaPrisma(
       amountDeposited,
       wordpressUrl: input.wordpressUrl ?? null,
       forumUrl: input.forumUrl ?? null,
+      businessDomain: authority.businessDomain,
+      primaryAuthorityUrl:
+        input.primaryAuthorityUrl ?? authority.primaryAuthorityUrl,
     },
     update: {
       userEmail: input.userEmail,
@@ -94,6 +105,9 @@ async function recordCampaignLogViaPrisma(
       amountDeposited,
       wordpressUrl: input.wordpressUrl ?? null,
       forumUrl: input.forumUrl ?? null,
+      businessDomain: authority.businessDomain,
+      primaryAuthorityUrl:
+        input.primaryAuthorityUrl ?? authority.primaryAuthorityUrl,
     },
   });
 }
@@ -118,6 +132,11 @@ async function recordCampaignLogViaSupabase(
     amount_deposited: amountDeposited,
     wordpress_url: input.wordpressUrl ?? null,
     forum_url: input.forumUrl ?? null,
+    primary_authority_url:
+      input.primaryAuthorityUrl ??
+      resolvePrimaryAuthority(input.businessDomain).primaryAuthorityUrl,
+    business_domain:
+      resolvePrimaryAuthority(input.businessDomain).businessDomain,
     created_at: new Date().toISOString(),
   };
 

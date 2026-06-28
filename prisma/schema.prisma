@@ -93,6 +93,7 @@ model Campaign {
   liveUrl           String?   @map("live_url")
   externalLiveUrl   String?   @map("external_live_url")
   wordpressUrl      String?   @map("wordpress_url")
+  businessDomain String?   @map("business_domain")
   createdAt     DateTime  @default(now())
   baits         Bait[]
   intents       CampaignIntent[]
@@ -116,8 +117,10 @@ model CampaignLog {
   amountSpent     Float    @default(0) @map("amount_spent")
   amountDeposited Float    @default(0) @map("amount_deposited")
   wordpressUrl    String?  @map("wordpress_url")
-  forumUrl        String?  @map("forum_url")
-  createdAt       DateTime @default(now()) @map("created_at")
+  forumUrl            String?  @map("forum_url")
+  primaryAuthorityUrl String?  @map("primary_authority_url")
+  businessDomain      String?  @map("business_domain")
+  createdAt           DateTime @default(now()) @map("created_at")
   campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([userId])

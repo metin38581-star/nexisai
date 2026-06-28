@@ -41,16 +41,10 @@ export interface InitializeCheckoutResult {
   paymentPageUrl: string;
 }
 
-function resolveSiteOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") ??
-    process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") ??
-    "http://localhost:3000"
-  );
-}
+import { resolveSiteOrigin, resolveSitePath } from "@/lib/site-origin";
 
 export function buildPaymentCallbackUrl(): string {
-  return `${resolveSiteOrigin()}/api/payments/callback`;
+  return resolveSitePath("/api/payments/callback");
 }
 
 export async function initializeIyzicoCheckout(
