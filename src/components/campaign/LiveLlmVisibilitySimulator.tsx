@@ -1,23 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Sparkles } from "lucide-react";
+import Image from "next/image";
 
 import {
-  buildFixedVisibilityAnswer,
-  buildFixedVisibilityQuestion,
-  resolveVisibilityBrand,
-  type FixedVisibilityQuestionVariant,
-} from "@/lib/fixed-visibility-simulation";
-import type { GeoMicroIntent } from "@/types/geo-intent";
+  buildVisibilitySimulationContent,
+  type LlmEngine,
+} from "@/lib/llm-visibility-ui";
 
 const TYPING_INTERVAL_MS = 16;
 
 interface LiveLlmVisibilitySimulatorProps {
-  intent: GeoMicroIntent | null;
+  question: string;
   brandName: string;
   selectedCity?: string | null;
-  questionVariant?: FixedVisibilityQuestionVariant;
+  llmEngine: LlmEngine;
+  isActive: boolean;
 }
 
 function highlightBrand(
@@ -61,20 +59,27 @@ function highlightBrand(
 }
 
 export default function LiveLlmVisibilitySimulator({
-  intent,
+  question,
   brandName,
   selectedCity,
-  questionVariant = "best-clinic",
+  llmEngine,
+  isActive,
 }: LiveLlmVisibilitySimulatorProps) {
   const [typedQuestion, setTypedQuestion] = useState("");
-  const [typedAnswer, setTypedAnswer] = useState("");
-  const [phase, setPhase] = useState<"idle" | "question" | "answer">("idle");
+  const [typedAnswerPrefix, setTypedAnswerPrefix] = useState("");
+  const [typedAnswerBody, setTypedAnswerBody] = useState("");
+  const [phase, setPhase] = useState<
+    "idle" | "question" | "answer-prefix" | "answer-body"
+  >("idle");
   const timerRef = useRef<number | null>(null);
 
-  const brand = resolveVisibilityBrand(brandName);
-  const question = buildFixedVisibilityQuestion(selectedCity, questionVariant);
-  const answer = buildFixedVisibilityAnswer(selectedCity, brandName);
-  const isActive = intent !== null;
+  const content = buildVisibilitySimulationContent(
+    question,
+    selectedCity,
+    brandName,
+    llmEngine.name,
+  );
+  const questionText = question.trim();
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -88,64 +93,94 @@ export default function LiveLlmVisibilitySimulator({
 
     if (!isActive) {
       setTypedQuestion("");
-      setTypedAnswer("");
+      setTypedAnswerPrefix("");
+      setTypedAnswerBody("");
       setPhase("idle");
       return;
     }
 
     setTypedQuestion("");
-    setTypedAnswer("");
+    setTypedAnswerPrefix("");
+    setTypedAnswerBody("");
     setPhase("question");
 
     let qIndex = 0;
 
     timerRef.current = window.setInterval(() => {
       qIndex += 1;
-      setTypedQuestion(question.slice(0, qIndex));
+      setTypedQuestion(questionText.slice(0, qIndex));
 
-      if (qIndex >= question.length) {
+      if (qIndex >= questionText.length) {
         clearTimer();
-        setPhase("answer");
-        let aIndex = 0;
+        setPhase("answer-prefix");
+        let prefixIndex = 0;
+
         timerRef.current = window.setInterval(() => {
-          aIndex += 1;
-          setTypedAnswer(answer.slice(0, aIndex));
-          if (aIndex >= answer.length) {
+          prefixIndex += 1;
+          setTypedAnswerPrefix(content.answerPrefix.slice(0, prefixIndex));
+
+          if (prefixIndex >= content.answerPrefix.length) {
             clearTimer();
+            setPhase("answer-body");
+            let bodyIndex = 0;
+
+            timerRef.current = window.setInterval(() => {
+              bodyIndex += 1;
+              setTypedAnswerBody(content.answerBody.slice(0, bodyIndex));
+              if (bodyIndex >= content.answerBody.length) {
+                clearTimer();
+              }
+            }, TYPING_INTERVAL_MS);
           }
         }, TYPING_INTERVAL_MS);
       }
     }, TYPING_INTERVAL_MS);
 
     return clearTimer;
-  }, [answer, clearTimer, isActive, question]);
+  }, [
+    clearTimer,
+    content.answerBody,
+    content.answerPrefix,
+    isActive,
+    questionText,
+  ]);
+
+  const answerComplete =
+    typedAnswerBody.length >= content.answerBody.length &&
+    phase === "answer-body";
 
   return (
-    <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-2xl border border-emerald-500/20 bg-zinc-950/80 shadow-[0_0_32px_rgba(16,185,129,0.08)]">
-      <div className="flex items-center gap-2 border-b border-white/5 bg-zinc-900/80 px-4 py-3">
-        <Bot className="h-4 w-4 text-emerald-400" />
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400">
-          Yapay Zeka Görünürlük Ekranı
-        </p>
-        <Sparkles className="ml-auto h-4 w-4 text-violet-400" />
+    <div className="flex h-full min-h-[360px] flex-col overflow-hidden rounded-2xl border border-emerald-500/20 bg-zinc-950/80 shadow-[0_0_32px_rgba(16,185,129,0.08)]">
+      <div className="flex items-center gap-3 border-b border-white/5 bg-zinc-900/80 px-4 py-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-950 p-1.5">
+          <Image
+            src={llmEngine.src}
+            alt={llmEngine.alt}
+            width={28}
+            height={28}
+            className="h-7 w-7 object-contain"
+          />
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400">
+            Canlı Simülasyon
+          </p>
+          <p className="text-sm font-medium text-zinc-200">{llmEngine.name}</p>
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {!isActive ? (
-          <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center">
-            <Bot className="mb-3 h-10 w-10 text-zinc-600" />
+          <div className="flex h-full min-h-[280px] flex-col items-center justify-center text-center">
             <p className="text-sm text-zinc-500">
-              Bir arama hedefine tıklayın; ChatGPT/Gemini simülasyonu canlı
-              başlasın.
+              Simülasyon başlatılıyor...
             </p>
           </div>
         ) : (
           <>
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-violet-400">
-                Kullanıcı Sorgusu
-              </p>
               <p className="text-sm leading-relaxed text-zinc-200">
+                <span className="font-semibold text-violet-200">Soru:</span>{" "}
                 {typedQuestion}
                 {phase === "question" && (
                   <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-violet-400 align-middle" />
@@ -154,15 +189,23 @@ export default function LiveLlmVisibilitySimulator({
             </div>
 
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                Simüle LLM Yanıtı
-              </p>
               <p className="text-sm leading-relaxed text-zinc-300">
-                {highlightBrand(
-                  typedAnswer,
-                  brand,
-                  typedAnswer.length,
-                  typedAnswer.length >= answer.length,
+                <span className="font-semibold text-emerald-300">
+                  {typedAnswerPrefix}
+                </span>
+                {phase === "answer-prefix" && (
+                  <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-emerald-400 align-middle" />
+                )}
+                {(phase === "answer-body" || typedAnswerBody.length > 0) && (
+                  <>
+                    {" "}
+                    {highlightBrand(
+                      typedAnswerBody,
+                      content.brand,
+                      typedAnswerBody.length,
+                      answerComplete,
+                    )}
+                  </>
                 )}
               </p>
             </div>

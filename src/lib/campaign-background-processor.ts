@@ -249,7 +249,10 @@ export async function processCampaignInBackground(
       entries: hubEntries,
     });
 
-    const growthQuestions = buildFixedVisibilityQuestionList(sehir);
+    const growthQuestions =
+      selectedQuestionPairs.length > 0
+        ? selectedQuestionPairs.map((pair) => pair.question)
+        : buildFixedVisibilityQuestionList(sehir);
     await createCampaignGrowthLoop(
       yeniKampanya.id,
       userId,

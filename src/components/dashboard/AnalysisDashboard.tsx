@@ -958,6 +958,9 @@ function AnalysisDashboardContent({
               campaignId={activeCampaignId}
               brandName={session.markaAdi}
               selectedCity={session.sehir}
+              sectorSlug={session.sectorSlug}
+              sectorLabel={session.sektor}
+              selectedQuestionIds={session.selectedQuestionIds}
               accessToken={accessToken}
             />
           </div>

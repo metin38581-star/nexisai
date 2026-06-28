@@ -112,7 +112,7 @@ function DashboardPageContent() {
       <DashboardCyberScene3D />
       <div className="dc-grid-overlay" aria-hidden />
       <PaymentResumeHandler onResume={handlePaymentResume} />
-      <Navbar />
+      <Navbar compactLogo />
       <main className="relative z-10 flex-1">
         <DashboardShell
           pendingCampaign={pendingCampaign}
