@@ -77,6 +77,21 @@ function DashboardPageContent() {
     setWalletRefreshToken((value) => value + 1);
   }, []);
 
+  useEffect(() => {
+    if (window.location.hash !== "#campaign-history") {
+      return;
+    }
+
+    const scrollTarget = () => {
+      document
+        .getElementById("campaign-history")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+
+    const timeoutId = window.setTimeout(scrollTarget, 150);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   const handleRequireAuth = useCallback((data?: CampaignFormData) => {
     if (data) {
       setPendingCampaign(data);

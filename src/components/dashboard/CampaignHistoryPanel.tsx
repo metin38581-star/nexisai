@@ -566,7 +566,7 @@ export default function CampaignHistoryPanel({
   isLoading,
 }: CampaignHistoryPanelProps) {
   return (
-    <section className="mt-10 border-t border-violet-500/10 pt-10">
+    <section id="campaign-history" className="mt-10 border-t border-violet-500/10 pt-10 scroll-mt-24">
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.25em] text-violet-400">

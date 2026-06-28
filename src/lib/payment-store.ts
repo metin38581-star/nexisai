@@ -451,6 +451,64 @@ export async function sumCreditPaymentsAllUsers(): Promise<Map<string, number>> 
   return totals;
 }
 
+export async function listWalletCreditHistoryByUserId(userId: string): Promise<
+  Array<{
+    id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    statusLabel: string;
+    typeLabel: string;
+    createdAt: string;
+  }>
+> {
+  const payments = await listPaymentsByUserId(userId);
+
+  return payments.filter(isCreditPayment).map((payment) => ({
+    id: payment.id,
+    amount: payment.amount,
+    currency: payment.currency,
+    status: payment.status,
+    statusLabel: resolvePaymentStatusLabel(payment.status),
+    typeLabel: resolvePaymentTypeLabel(payment),
+    createdAt: payment.createdAt.toISOString(),
+  }));
+}
+
+function resolvePaymentStatusLabel(status: string): string {
+  const normalized = status.toLowerCase();
+  if (["success", "succeeded", "paid"].includes(normalized)) {
+    return "Başarılı";
+  }
+  if (normalized === "pending") {
+    return "Beklemede";
+  }
+  if (normalized === "failed" || normalized === "cancelled") {
+    return "Başarısız";
+  }
+  return status;
+}
+
+function resolvePaymentTypeLabel(payment: PaymentRecord): string {
+  const code = payment.providerStatusCode ?? "";
+
+  if (code === "WELCOME_BALANCE" || code === "WELCOME_BALANCE_RECONCILE") {
+    return "Hoş Geldin Hediyesi";
+  }
+  if (code === "WALLET_TOPUP") {
+    return "Bakiye Yükleme";
+  }
+  if (
+    code === "IYZICO_CHECKOUT" ||
+    code === "CHECKOUT_SUCCESS" ||
+    payment.provider === "iyzico"
+  ) {
+    return "Kart ile Yükleme";
+  }
+
+  return payment.description?.trim() || "Bakiye Hareketi";
+}
+
 export async function sumCampaignSpendByUserId(
   userId: string,
 ): Promise<number> {
