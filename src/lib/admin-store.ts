@@ -4,6 +4,7 @@ import type {
   AdminBusinessDetail,
   AdminBusinessRow,
   AdminCampaignContentRow,
+  AdminCampaignDetail,
   AdminCampaignHistory,
   AdminCampaignOverviewRow,
   AdminCampaignPublicationSummary,
@@ -265,6 +266,8 @@ type CampaignOverviewSource = {
   baits: Array<{
     slug: string;
     externalLiveUrl: string | null;
+    wpUrl?: string | null;
+    platform?: string | null;
   }>;
   intents: Array<{
     question: string;
@@ -291,6 +294,8 @@ async function listAllCampaignsOverviewViaPrisma(): Promise<
         select: {
           slug: true,
           externalLiveUrl: true,
+          wpUrl: true,
+          platform: true,
         },
       },
       intents: {
@@ -324,7 +329,7 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
     const [{ data: baits }, { data: intents }] = await Promise.all([
       supabase
         .from("Bait")
-        .select("slug, external_live_url")
+        .select("slug, external_live_url, wp_url, platform")
         .eq("campaignId", campaignId)
         .order("createdAt", { ascending: true }),
       supabase
@@ -348,6 +353,8 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
       baits: (baits ?? []).map((bait) => ({
         slug: bait.slug as string,
         externalLiveUrl: (bait.external_live_url as string | null) ?? null,
+        wpUrl: (bait.wp_url as string | null) ?? null,
+        platform: (bait.platform as string | null) ?? null,
       })),
       intents: (intents ?? []).map((intent) => ({
         question: intent.question as string,
@@ -403,16 +410,31 @@ async function listWalletBalances(): Promise<Map<string, number>> {
   return listWalletBalancesViaSupabase();
 }
 
+function resolveCampaignHubUrl(campaign: CampaignOverviewSource): string | null {
+  const firstSlug = campaign.baits[0]?.slug?.trim();
+  return firstSlug ? buildHubArticleUrl(firstSlug) : null;
+}
+
 function resolveCampaignWordpressUrl(
   campaign: CampaignOverviewSource,
 ): string | null {
-  const firstBait = campaign.baits[0];
-  return (
-    campaign.wordpressUrl ??
-    campaign.externalLiveUrl ??
-    firstBait?.externalLiveUrl ??
-    (firstBait?.slug ? buildHubArticleUrl(firstBait.slug) : null)
-  );
+  if (campaign.wordpressUrl?.trim()) {
+    return campaign.wordpressUrl.trim();
+  }
+
+  for (const bait of campaign.baits) {
+    if (bait.wpUrl?.trim()) {
+      return bait.wpUrl.trim();
+    }
+    if (
+      bait.platform?.trim().toUpperCase() === "WORDPRESS" &&
+      bait.externalLiveUrl?.trim()
+    ) {
+      return bait.externalLiveUrl.trim();
+    }
+  }
+
+  return campaign.externalLiveUrl?.trim() || null;
 }
 
 function resolveCampaignForumUrl(
@@ -563,6 +585,7 @@ function enrichOverviewRows(
       ...row,
       walletBalance: liveWalletBalance,
       totalDeposited,
+      hubUrl: row.hubUrl,
       ...publication,
     };
   });
@@ -607,6 +630,9 @@ function buildOverviewStats(
   let totalLinksPublished = 0;
 
   for (const row of rows) {
+    if (row.hubUrl) {
+      totalLinksPublished += 1;
+    }
     if (row.wordpressUrl) {
       totalLinksPublished += 1;
     }
@@ -680,6 +706,7 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
       walletBalance: walletBalances.get(userId) ?? log?.walletBalance ?? 0,
       totalDeposited: creditDeposits.get(userId) ?? log?.totalDeposited ?? 0,
       amountSpent: log?.amountSpent ?? spendByCampaign.get(campaign.id) ?? 0,
+      hubUrl: resolveCampaignHubUrl(campaign),
       wordpressUrl: log?.wordpressUrl ?? resolveCampaignWordpressUrl(campaign),
       forumUrl: normalizeForumHubUrl(
         log?.forumUrl ??
@@ -721,6 +748,7 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
 
 type CampaignWithRelations = {
   id: string;
+  userId?: string | null;
   markaAdi: string;
   sehir: string;
   sektor: string;
@@ -819,6 +847,7 @@ async function getCampaignsForUserViaPrisma(
 
   return campaigns.map((campaign) => ({
     ...campaign,
+    userId: campaign.userId,
     hubAnswers: campaign.hubAnswers.map((answer) => ({
       id: answer.id,
       username: answer.username,
@@ -878,6 +907,7 @@ async function getCampaignsForUserViaSupabase(
 
     results.push({
       id: campaignId,
+      userId: campaign.userId as string | null,
       markaAdi: campaign.markaAdi as string,
       sehir: campaign.sehir as string,
       sektor: campaign.sektor as string,
@@ -1021,6 +1051,8 @@ function buildCampaignPublicationSummary(
     baits: campaign.baits.map((bait) => ({
       slug: bait.slug,
       externalLiveUrl: bait.externalLiveUrl,
+      wpUrl: bait.wpUrl,
+      platform: bait.platform,
     })),
     intents: campaign.intents.map((intent) => ({ question: intent.question })),
   };
@@ -1028,6 +1060,7 @@ function buildCampaignPublicationSummary(
   const fallbackForumUrl = resolveCampaignForumUrl(overviewSource);
 
   return {
+    hubUrl: resolveCampaignHubUrl(overviewSource),
     wordpressUrl:
       campaign.campaignLog?.wordpressUrl ??
       resolveCampaignWordpressUrl(overviewSource),
@@ -1064,7 +1097,7 @@ function buildCampaignContentInventory(
 
   for (const intent of campaign.intents) {
     const forumSlug = buildQuestionHubSlug(intent.question);
-    const forumUrl = forumSlug ? buildForumHubUrl(forumSlug) : null;
+    const intentForumUrl = forumSlug ? buildForumHubUrl(forumSlug) : null;
 
     rows.push({
       id: intent.id,
@@ -1072,14 +1105,15 @@ function buildCampaignContentInventory(
       title: intent.question,
       excerpt: truncateExcerpt(intent.simulatedAnswer),
       createdAt: intent.createdAt.toISOString(),
-      links: {
-        hubUrl: intent.bait ? buildHubArticleUrl(intent.bait.slug) : null,
-        blogUrl: intent.bait ? buildBlogPostUrl(intent.bait.slug) : null,
-        wpUrl: intent.bait?.wpUrl ?? null,
-        forumUrl,
-        externalUrl:
-          intent.bait?.externalLiveUrl ?? intent.bait?.liveUrl ?? null,
-      },
+      links: intent.bait
+        ? mapBaitLinkSet(intent.bait, intentForumUrl)
+        : {
+            hubUrl: null,
+            blogUrl: null,
+            wpUrl: null,
+            forumUrl: intentForumUrl,
+            externalUrl: null,
+          },
       relatedBaitId: intent.baitId,
       relatedIntentId: intent.id,
     });
@@ -1200,6 +1234,248 @@ function mapPaymentRecord(payment: {
     description: payment.description,
     campaignId: payment.campaignId,
     createdAt: payment.createdAt.toISOString(),
+  };
+}
+
+async function getCampaignWithRelationsByIdViaPrisma(
+  campaignId: string,
+): Promise<CampaignWithRelations | null> {
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: {
+      baits: {
+        orderBy: { createdAt: "asc" },
+      },
+      intents: {
+        orderBy: { sortOrder: "asc" },
+        include: { bait: true },
+      },
+      hubAnswers: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          questionHub: {
+            select: { slug: true, question: true },
+          },
+        },
+      },
+      campaignLog: {
+        select: {
+          wordpressUrl: true,
+          forumUrl: true,
+          blogUrl: true,
+          primaryAuthorityUrl: true,
+        },
+      },
+    },
+  });
+
+  if (!campaign) {
+    return null;
+  }
+
+  return {
+    ...campaign,
+    userId: campaign.userId,
+    hubAnswers: campaign.hubAnswers.map((answer) => ({
+      id: answer.id,
+      username: answer.username,
+      content: answer.content,
+      createdAt: answer.createdAt,
+      questionHub: answer.questionHub,
+    })),
+  };
+}
+
+async function getCampaignWithRelationsByIdViaSupabase(
+  campaignId: string,
+): Promise<CampaignWithRelations | null> {
+  const supabase = getSupabaseAdmin();
+  const { data: campaign, error } = await supabase
+    .from("Campaign")
+    .select("*")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (error || !campaign) {
+    return null;
+  }
+
+  const [{ data: baits }, { data: intents }, { data: hubAnswers }, { data: campaignLog }] =
+    await Promise.all([
+      supabase
+        .from("Bait")
+        .select("*")
+        .eq("campaignId", campaignId)
+        .order("createdAt", { ascending: true }),
+      supabase
+        .from("CampaignIntent")
+        .select("*")
+        .eq("campaignId", campaignId)
+        .order("sortOrder", { ascending: true }),
+      supabase
+        .from("HubAnswer")
+        .select("id, username, content, createdAt, question_id, QuestionHub(slug, question)")
+        .eq("campaign_id", campaignId)
+        .order("createdAt", { ascending: true }),
+      supabase
+        .from("CampaignLog")
+        .select("wordpress_url, forum_url, blog_url, primary_authority_url")
+        .eq("campaign_id", campaignId)
+        .maybeSingle(),
+    ]);
+
+  const baitMap = new Map(
+    (baits ?? []).map((bait) => [bait.id as string, bait]),
+  );
+
+  return {
+    id: campaignId,
+    userId: campaign.userId as string | null,
+    markaAdi: campaign.markaAdi as string,
+    sehir: campaign.sehir as string,
+    sektor: campaign.sektor as string,
+    gunlukButce: Number(campaign.gunlukButce),
+    gunSayisi: Number(campaign.gunSayisi),
+    skor: Number(campaign.skor),
+    agresiflik: campaign.agresiflik as string,
+    makaleSayisi: Number(campaign.makaleSayisi),
+    createdAt: new Date(campaign.createdAt as string),
+    wordpressUrl: (campaign.wordpress_url as string | null) ?? null,
+    businessDomain: (campaign.business_domain as string | null) ?? null,
+    baits: (baits ?? []).map((bait) => ({
+      id: bait.id as string,
+      baslik: bait.baslik as string,
+      icerik: bait.icerik as string,
+      slug: bait.slug as string,
+      platform: (bait.platform as string | null) ?? null,
+      createdAt: new Date(bait.createdAt as string),
+      liveUrl: (bait.live_url as string | null) ?? null,
+      externalLiveUrl: (bait.external_live_url as string | null) ?? null,
+      wpUrl: (bait.wp_url as string | null) ?? null,
+      blogUrl: (bait.blog_url as string | null) ?? null,
+      forumUrl: (bait.forum_url as string | null) ?? null,
+    })),
+    intents: (intents ?? []).map((intent) => {
+      const baitId = intent.baitId as string | null;
+      const baitRow = baitId ? baitMap.get(baitId) : undefined;
+
+      return {
+        id: intent.id as string,
+        question: intent.question as string,
+        simulatedAnswer: intent.simulatedAnswer as string,
+        sortOrder: Number(intent.sortOrder),
+        baitId,
+        createdAt: new Date(intent.createdAt as string),
+        bait: baitRow
+          ? {
+              id: baitRow.id as string,
+              baslik: baitRow.baslik as string,
+              icerik: baitRow.icerik as string,
+              slug: baitRow.slug as string,
+              createdAt: new Date(baitRow.createdAt as string),
+              liveUrl: (baitRow.live_url as string | null) ?? null,
+              externalLiveUrl:
+                (baitRow.external_live_url as string | null) ?? null,
+              wpUrl: (baitRow.wp_url as string | null) ?? null,
+              blogUrl: (baitRow.blog_url as string | null) ?? null,
+              forumUrl: (baitRow.forum_url as string | null) ?? null,
+              platform: (baitRow.platform as string | null) ?? null,
+            }
+          : null,
+      };
+    }),
+    hubAnswers: (hubAnswers ?? []).flatMap((answer) => {
+      const hub = answer.QuestionHub as
+        | { slug: string; question: string }
+        | { slug: string; question: string }[]
+        | null;
+
+      const questionHub = Array.isArray(hub) ? hub[0] : hub;
+      if (!questionHub?.slug) {
+        return [];
+      }
+
+      return [
+        {
+          id: answer.id as string,
+          username: answer.username as string,
+          content: answer.content as string,
+          createdAt: new Date(answer.createdAt as string),
+          questionHub: {
+            slug: questionHub.slug,
+            question: questionHub.question,
+          },
+        },
+      ];
+    }),
+    campaignLog: campaignLog
+      ? {
+          wordpressUrl: (campaignLog.wordpress_url as string | null) ?? null,
+          forumUrl: (campaignLog.forum_url as string | null) ?? null,
+          blogUrl: (campaignLog.blog_url as string | null) ?? null,
+          primaryAuthorityUrl:
+            (campaignLog.primary_authority_url as string | null) ?? null,
+        }
+      : null,
+  };
+}
+
+async function getCampaignWithRelationsById(
+  campaignId: string,
+): Promise<CampaignWithRelations | null> {
+  if (hasDatabaseUrl()) {
+    try {
+      const campaign = await getCampaignWithRelationsByIdViaPrisma(campaignId);
+      if (campaign) {
+        return campaign;
+      }
+    } catch (error) {
+      console.error("[ADMIN_STORE]: Prisma kampanya detay hatası:", error);
+    }
+  }
+
+  return getCampaignWithRelationsByIdViaSupabase(campaignId);
+}
+
+async function resolveUserEmail(userId: string | null | undefined): Promise<string> {
+  if (!userId) {
+    return "—";
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.auth.admin.getUserById(userId);
+    if (!error && data.user?.email) {
+      return data.user.email;
+    }
+  } catch (error) {
+    console.error("[ADMIN_STORE]: Kullanıcı e-posta çözümleme hatası:", error);
+  }
+
+  return "—";
+}
+
+export async function getAdminCampaignDetail(
+  campaignId: string,
+): Promise<AdminCampaignDetail | null> {
+  const campaign = await getCampaignWithRelationsById(campaignId);
+  if (!campaign) {
+    return null;
+  }
+
+  const publicationSummary = buildCampaignPublicationSummary(campaign);
+  const userEmail = await resolveUserEmail(campaign.userId);
+
+  return {
+    id: campaign.id,
+    markaAdi: campaign.markaAdi,
+    sehir: campaign.sehir,
+    sektor: campaign.sektor,
+    sectorLabel: resolveSectorLabel(campaign.sektor),
+    userEmail,
+    createdAt: campaign.createdAt.toISOString(),
+    contentInventory: buildCampaignContentInventory(campaign),
+    publicationSummary,
   };
 }
 

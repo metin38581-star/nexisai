@@ -195,6 +195,7 @@ async function listCampaignLogsViaPrisma(): Promise<AdminCampaignOverviewRow[]> 
     forumUrl: log.forumUrl,
     blogUrl: log.blogUrl,
     primaryAuthorityUrl: log.primaryAuthorityUrl,
+    hubUrl: null,
     createdAt: log.createdAt.toISOString(),
   }));
 }
@@ -226,6 +227,7 @@ async function listCampaignLogsViaSupabase(): Promise<AdminCampaignOverviewRow[]
     forumUrl: (log.forum_url as string | null) ?? null,
     blogUrl: (log.blog_url as string | null) ?? null,
     primaryAuthorityUrl: (log.primary_authority_url as string | null) ?? null,
+    hubUrl: null,
     createdAt: log.created_at as string,
   }));
 }

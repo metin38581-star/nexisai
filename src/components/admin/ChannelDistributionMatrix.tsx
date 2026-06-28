@@ -50,7 +50,8 @@ export default function ChannelDistributionMatrix({
         url={row.wordpressUrl}
         title="WordPress"
       />
-      <ChannelLinkBadge label="Hub" url={row.forumUrl} title="Form Hub" />
+      <ChannelLinkBadge label="Hub" url={row.hubUrl} title="Makale Hub" />
+      <ChannelLinkBadge label="Forum" url={row.forumUrl} title="Soru-Cevap Hub" />
       <ChannelLinkBadge label="Blog" url={row.blogUrl} title="Merkezi Blog" />
       <ChannelLinkBadge
         label="Otorite"

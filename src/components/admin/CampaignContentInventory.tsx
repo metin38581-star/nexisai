@@ -145,6 +145,10 @@ export default function CampaignContentInventory({
     <div>
       <div className="flex flex-wrap gap-2 border-b border-white/5 px-4 py-3 sm:px-5">
         <CampaignSummaryLink
+          label="Kampanya Hub"
+          url={publicationSummary.hubUrl}
+        />
+        <CampaignSummaryLink
           label="Kampanya WP"
           url={publicationSummary.wordpressUrl}
         />

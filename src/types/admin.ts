@@ -32,6 +32,7 @@ export interface AdminCampaignContentRow {
 }
 
 export interface AdminCampaignPublicationSummary {
+  hubUrl: string | null;
   wordpressUrl: string | null;
   forumUrl: string | null;
   blogUrl: string | null;
@@ -113,6 +114,7 @@ export interface AdminCampaignOverviewRow {
   walletBalance: number;
   totalDeposited: number;
   amountSpent: number;
+  hubUrl: string | null;
   wordpressUrl: string | null;
   forumUrl: string | null;
   blogUrl: string | null;
@@ -124,6 +126,18 @@ export interface AdminOverviewStats {
   totalUsers: number;
   totalSystemBalance: number;
   totalLinksPublished: number;
+}
+
+export interface AdminCampaignDetail {
+  id: string;
+  markaAdi: string;
+  sehir: string;
+  sektor: string;
+  sectorLabel: string;
+  userEmail: string;
+  createdAt: string;
+  contentInventory: AdminCampaignContentRow[];
+  publicationSummary: AdminCampaignPublicationSummary;
 }
 
 export interface AdminOverviewPayload {

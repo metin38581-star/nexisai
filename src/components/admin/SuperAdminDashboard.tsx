@@ -17,6 +17,7 @@ import type {
 } from "@/types/admin";
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
 import ChannelDistributionMatrix from "@/components/admin/ChannelDistributionMatrix";
+import CampaignDetailModal from "@/components/admin/CampaignDetailModal";
 import { ADMIN_BUSINESS_PATH, ADMIN_LOGIN_PATH } from "@/lib/admin-routes";
 
 function formatDate(iso: string): string {
@@ -81,6 +82,9 @@ export default function SuperAdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState("");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
+    null,
+  );
 
   const fetchOverview = useCallback(async () => {
     setLoading(true);
@@ -307,13 +311,14 @@ export default function SuperAdminDashboard() {
                       Kanal Dağıtım Matrisi
                     </th>
                     <th className="px-4 py-3 font-semibold">Kampanya Tarihi</th>
+                    <th className="px-4 py-3 font-semibold">İçerikler</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-4 py-10 text-center text-zinc-500"
                       >
                         Filtrelere uygun kampanya kaydı bulunamadı.
@@ -349,6 +354,15 @@ export default function SuperAdminDashboard() {
                         <td className="px-4 py-3 align-top whitespace-nowrap text-zinc-400">
                           {formatDate(row.createdAt)}
                         </td>
+                        <td className="px-4 py-3 align-top">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCampaignId(row.campaignId)}
+                            className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200 transition hover:border-violet-400/40 hover:bg-violet-500/15"
+                          >
+                            Tüm İçerik
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -365,6 +379,11 @@ export default function SuperAdminDashboard() {
           </p>
         ) : null}
       </div>
+
+      <CampaignDetailModal
+        campaignId={selectedCampaignId}
+        onClose={() => setSelectedCampaignId(null)}
+      />
     </div>
   );
 }
