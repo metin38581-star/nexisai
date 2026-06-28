@@ -215,24 +215,38 @@ async function pollCampaignProcessingStatus(
         status?: string;
         terminalLogs?: TerminalLogEntry[];
         result?: CampaignResponse | null;
+        baitsGenerated?: number;
       };
 
       const logs = state.terminalLogs ?? [];
 
-      if (state.status === "complete" && state.result) {
+      if (state.status === "complete") {
+        const baitsGenerated =
+          state.baitsGenerated ??
+          (typeof state.result?.baitsGenerated === "number"
+            ? state.result.baitsGenerated
+            : 0);
+
         applyCampaignSuccess(
           payload,
           {
-            ...state.result,
+            ...(state.result ?? {}),
             success: true,
             campaignId,
+            status: "complete",
+            baitsGenerated,
             terminalLogs: logs,
-            metrics: state.result.metrics ?? {
+            metrics: state.result?.metrics ?? {
               visibilityRate: 0,
               estimatedTraffic: 0,
               spentBudget: 0,
               totalBudget: 0,
             },
+            message:
+              state.result?.message ??
+              (baitsGenerated > 0
+                ? "Kampanya tamamlandı."
+                : "Operasyon tamamlandı."),
           },
           handlers,
         );

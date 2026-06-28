@@ -64,11 +64,26 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     if (baitCount > 0) {
+      const fallbackResult = {
+        success: true,
+        campaignId,
+        status: "complete" as const,
+        baitsGenerated: baitCount,
+        message: "Kampanya tamamlandı.",
+        metrics: {
+          visibilityRate: 0,
+          estimatedTraffic: 0,
+          spentBudget: 0,
+          totalBudget: 0,
+        },
+      };
+
       return NextResponse.json({
         success: true,
         campaignId,
         status: "complete",
         terminalLogs: [],
+        result: fallbackResult,
         baitsGenerated: baitCount,
       });
     }

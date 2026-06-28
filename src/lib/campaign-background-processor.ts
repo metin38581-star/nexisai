@@ -17,9 +17,11 @@ import {
 import { releaseCampaignProcessingLock } from "@/lib/campaign-store";
 import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import {
+  buildBaitRecordsFromSelectedQuestions,
   buildBaitRecordsFromSelectedQuestionsAsync,
   type SelectedQuestionPair,
 } from "@/lib/selected-questions";
+import { LLM_BAIT_GENERATION_TIMEOUT_MS } from "@/lib/campaign-distribution-timeout";
 import { buildForumHubUrl } from "@/lib/forum-hub-url";
 import { summarizeCampaignOutcome } from "@/lib/campaign-outcome";
 import { revalidatePath } from "next/cache";
@@ -83,6 +85,34 @@ async function pushProgressLog(
 }
 
 const LLM_INQUIRY_FAST_TIMEOUT_MS = 10_000;
+
+async function buildBaitRecordsWithLlmFallback(
+  pairs: SelectedQuestionPair[],
+  context: {
+    targetCity: string;
+    targetNiche: string;
+    targetBrand: string;
+    targetDomain?: string | null;
+    slugPrefix?: string;
+  },
+) {
+  try {
+    return await Promise.race([
+      buildBaitRecordsFromSelectedQuestionsAsync(pairs, context),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("LLM_BAIT_TIMEOUT"));
+        }, LLM_BAIT_GENERATION_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.warn(
+      "[CAMPAIGN_BG]: LLM makale üretimi zaman aşımı/hata — şablon fallback:",
+      error,
+    );
+    return buildBaitRecordsFromSelectedQuestions(pairs, context);
+  }
+}
 
 async function queryLlmInquiryWithFastFallback(
   sehir: string,
@@ -231,7 +261,7 @@ export async function processCampaignInBackground(
     await pushProgressLog(
       campaignId,
       "YEMLEME",
-      `[YEMLEME] ${makaleSayisi} adet GEO makalesi ve forum yorumları paralel üretiliyor...`,
+      `[YEMLEME] ${makaleSayisi} adet GEO makalesi üretiliyor (LLM, max ${Math.round(LLM_BAIT_GENERATION_TIMEOUT_MS / 1000)}sn)...`,
     );
 
     const usedSlugs = new Set<string>();
@@ -245,7 +275,7 @@ export async function processCampaignInBackground(
 
     const baitRecords =
       questionPairsForBaits.length > 0
-        ? await buildBaitRecordsFromSelectedQuestionsAsync(
+        ? await buildBaitRecordsWithLlmFallback(
             questionPairsForBaits,
             baitContext,
           )

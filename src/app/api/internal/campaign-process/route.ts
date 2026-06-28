@@ -5,6 +5,10 @@ import {
   processCampaignInBackground,
   type CampaignBackgroundJobInput,
 } from "@/lib/campaign-background-processor";
+import {
+  failCampaignProcessingState,
+  getCampaignProcessingState,
+} from "@/lib/campaign-terminal-log-store";
 import { cronUnauthorizedResponse, isCronAuthorized } from "@/lib/cron-auth";
 
 export const maxDuration = 300;
@@ -27,6 +31,8 @@ function isCampaignBackgroundJobInput(
 }
 
 export async function POST(request: Request) {
+  let campaignId: string | null = null;
+
   try {
     if (!isCronAuthorized(request)) {
       return cronUnauthorizedResponse();
@@ -39,6 +45,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    campaignId = body.campaignId;
 
     await Promise.race([
       processCampaignInBackground(body),
@@ -53,6 +61,16 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "CAMPAIGN_JOB_TIMEOUT") {
       console.error("[CAMPAIGN_PROCESS]: Zaman aşımı:", error.message);
+
+      if (campaignId) {
+        const processingState = await getCampaignProcessingState(campaignId);
+        await failCampaignProcessingState(
+          campaignId,
+          processingState?.terminalLogs ?? [],
+          "Kampanya arka plan işlemi zaman aşımına uğradı.",
+        );
+      }
+
       return NextResponse.json(
         { success: false, error: "Kampanya işlemi zaman aşımına uğradı." },
         { status: 504 },

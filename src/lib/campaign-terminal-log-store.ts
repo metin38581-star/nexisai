@@ -3,6 +3,7 @@ import "server-only";
 import type { CampaignResponse, TerminalLogEntry } from "@/types/campaign";
 import {
   CAMPAIGN_DISTRIBUTION_TIMEOUT_MS,
+  CAMPAIGN_PIPELINE_STALE_MS,
   DISTRIBUTION_INTERRUPTED_MESSAGE,
 } from "@/lib/campaign-distribution-timeout";
 import { prisma } from "@/lib/db";
@@ -147,22 +148,23 @@ export function isCampaignProcessingStale(
     return false;
   }
 
+  const updatedAt = new Date(state.updatedAt).getTime();
+  if (!Number.isFinite(updatedAt)) {
+    return false;
+  }
+
+  const elapsed = now - updatedAt;
   const lastLog = state.terminalLogs[state.terminalLogs.length - 1];
   const inDistributionPhase =
     lastLog?.category === "DAĞITIM" ||
     (typeof lastLog?.message === "string" &&
       lastLog.message.includes("[DAĞITIM]"));
 
-  if (!inDistributionPhase) {
-    return false;
+  if (inDistributionPhase && elapsed >= CAMPAIGN_DISTRIBUTION_TIMEOUT_MS) {
+    return true;
   }
 
-  const updatedAt = new Date(state.updatedAt).getTime();
-  if (!Number.isFinite(updatedAt)) {
-    return false;
-  }
-
-  return now - updatedAt >= CAMPAIGN_DISTRIBUTION_TIMEOUT_MS;
+  return elapsed >= CAMPAIGN_PIPELINE_STALE_MS;
 }
 
 export async function interruptCampaignProcessingState(

@@ -1,6 +1,11 @@
 /** Kampanya dağıtım aşaması maksimum bekleme süresi (Make.com webhook yanıtı). */
 export const CAMPAIGN_DISTRIBUTION_TIMEOUT_MS = 60_000;
 
+/** Arka plan pipeline (LLM + billing + forum) için üst sınır. */
+export const CAMPAIGN_PIPELINE_STALE_MS = 270_000;
+
+export const LLM_BAIT_GENERATION_TIMEOUT_MS = 90_000;
+
 export const DISTRIBUTION_INTERRUPTED_TITLE =
   "Dağıtım Kesintiye Uğradı — Yeniden Deneyin";
 

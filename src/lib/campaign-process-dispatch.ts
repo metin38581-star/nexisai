@@ -35,7 +35,7 @@ export function dispatchCampaignBackgroundJob(
   if (!authHeader) {
     if (process.env.NODE_ENV === "production") {
       console.error(
-        "[CAMPAIGN_DISPATCH]: CRON_SECRET tanımlı değil — internal route devreye alınamıyor.",
+        "[CAMPAIGN_DISPATCH]: CRON_SECRET tanımlı değil — inline fallback kullanılıyor.",
       );
     }
     scheduleInlineFallback(input);
@@ -49,11 +49,23 @@ export function dispatchCampaignBackgroundJob(
       Authorization: authHeader,
     },
     body: JSON.stringify(input),
-  }).catch((error) => {
-    console.error(
-      "[CAMPAIGN_DISPATCH]: Internal process tetiklenemedi, inline fallback:",
-      error,
-    );
-    scheduleInlineFallback(input);
-  });
+  })
+    .then(async (response) => {
+      if (response.ok) {
+        return;
+      }
+
+      const body = await response.text().catch(() => "");
+      console.error(
+        `[CAMPAIGN_DISPATCH]: Internal process HTTP ${response.status}${body ? ` — ${body.slice(0, 200)}` : ""}; inline fallback.`,
+      );
+      scheduleInlineFallback(input);
+    })
+    .catch((error) => {
+      console.error(
+        "[CAMPAIGN_DISPATCH]: Internal process tetiklenemedi, inline fallback:",
+        error,
+      );
+      scheduleInlineFallback(input);
+    });
 }
