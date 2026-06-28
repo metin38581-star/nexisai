@@ -77,4 +77,4 @@ export function serializeMakeWebhookPayload(payload: GeoWebhookPayload): string 
   return body;
 }
 
-export const MAKE_WEBHOOK_CONTENT_TYPE = "application/json; charset=utf-8";
+export const MAKE_WEBHOOK_CONTENT_TYPE = "application/json";
