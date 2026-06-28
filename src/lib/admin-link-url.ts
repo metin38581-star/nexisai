@@ -48,6 +48,7 @@ export function rewriteAdminLinkSet(
     blogUrl: rewriteAdminPublicationUrl(links.blogUrl, siteOrigin),
     wpUrl: rewriteAdminPublicationUrl(links.wpUrl, siteOrigin),
     forumUrl: rewriteAdminPublicationUrl(links.forumUrl, siteOrigin),
+    devToUrl: rewriteAdminPublicationUrl(links.devToUrl, siteOrigin),
     externalUrl: rewriteAdminPublicationUrl(links.externalUrl, siteOrigin),
   };
 }
@@ -61,6 +62,7 @@ export function rewriteAdminPublicationSummary(
     wordpressUrl: rewriteAdminPublicationUrl(summary.wordpressUrl, siteOrigin),
     forumUrl: rewriteAdminPublicationUrl(summary.forumUrl, siteOrigin),
     blogUrl: rewriteAdminPublicationUrl(summary.blogUrl, siteOrigin),
+    devToUrl: rewriteAdminPublicationUrl(summary.devToUrl, siteOrigin),
     primaryAuthorityUrl: rewriteAdminPublicationUrl(
       summary.primaryAuthorityUrl,
       siteOrigin,

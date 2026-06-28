@@ -166,6 +166,7 @@ model Bait {
   wpUrl            String?  @map("wp_url")
   blogUrl          String?  @map("blog_url")
   forumUrl         String?  @map("forum_url")
+  devToUrl         String?  @map("dev_to_url")
   createdAt        DateTime @default(now())
   campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   intent           CampaignIntent?

@@ -50,6 +50,7 @@ export default function ChannelDistributionMatrix({
       <ChannelLinkBadge label="Hub" url={row.hubUrl} title="Makale Hub" />
       <ChannelLinkBadge label="Forum" url={row.forumUrl} title="Soru-Cevap Hub" />
       <ChannelLinkBadge label="Blog" url={row.blogUrl} title="Merkezi Blog" />
+      <ChannelLinkBadge label="Dev.to" url={row.devToUrl} title="Dev.to Yayını" />
       <ChannelLinkBadge
         label="Otorite"
         url={row.primaryAuthorityUrl}

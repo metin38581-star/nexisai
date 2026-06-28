@@ -15,6 +15,7 @@ export interface AdminContentLinkSet {
   blogUrl: string | null;
   wpUrl: string | null;
   forumUrl: string | null;
+  devToUrl: string | null;
   externalUrl: string | null;
 }
 
@@ -36,6 +37,7 @@ export interface AdminCampaignPublicationSummary {
   wordpressUrl: string | null;
   forumUrl: string | null;
   blogUrl: string | null;
+  devToUrl: string | null;
   primaryAuthorityUrl: string | null;
 }
 
@@ -50,6 +52,7 @@ export interface AdminBaitPublication {
   wpUrl: string | null;
   blogUrl: string | null;
   forumUrl: string | null;
+  devToUrl: string | null;
   links: AdminContentLinkSet;
 }
 
@@ -118,6 +121,7 @@ export interface AdminCampaignOverviewRow {
   wordpressUrl: string | null;
   forumUrl: string | null;
   blogUrl: string | null;
+  devToUrl: string | null;
   primaryAuthorityUrl: string | null;
   createdAt: string;
 }

@@ -12,6 +12,7 @@ export interface BaitPublicationUpdate {
   wpUrl?: string;
   blogUrl?: string;
   forumUrl?: string;
+  devToUrl?: string;
 }
 
 export async function updateBaitPublication(
@@ -28,6 +29,7 @@ export async function updateBaitPublication(
     ...(update.wpUrl ? { wpUrl: update.wpUrl } : {}),
     ...(update.blogUrl ? { blogUrl: update.blogUrl } : {}),
     ...(update.forumUrl ? { forumUrl: update.forumUrl } : {}),
+    ...(update.devToUrl ? { devToUrl: update.devToUrl } : {}),
   };
 
   if (hasDatabaseUrl()) {
@@ -56,6 +58,7 @@ export async function updateBaitPublication(
       ...(update.wpUrl ? { wp_url: update.wpUrl } : {}),
       ...(update.blogUrl ? { blog_url: update.blogUrl } : {}),
       ...(update.forumUrl ? { forum_url: update.forumUrl } : {}),
+      ...(update.devToUrl ? { dev_to_url: update.devToUrl } : {}),
     })
     .eq("id", update.baitId);
 

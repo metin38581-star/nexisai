@@ -2,7 +2,7 @@ import "server-only";
 
 /**
  * NexisAI Hub — hibrid dağıtım motoru.
- * Medium · WordPress · Blogger + 3'lü Dominasyon Ağı (Telegra.ph · GitHub Pages · Nostr)
+ * Medium · WordPress · Blogger (Dev.to doğrudan + Make.com fallback) + 3'lü Dominasyon Ağı
  */
 
 import {
@@ -11,8 +11,10 @@ import {
   type GeoDistributionContext,
 } from "@/lib/distribution-core";
 import {
+  dispatchDevToDirectForArticles,
   dispatchMakeWebhooksForArticles,
   dispatchToCentralWebhook,
+  isDevToDirectConfigured,
   type GeoDistributionResult,
 } from "@/lib/geo-distribution-client";
 import type { WebhookArticleSource } from "@/lib/make-webhook-payload";
@@ -289,12 +291,15 @@ async function markBaitPublished(
   liveUrl?: string,
   externalLiveUrl?: string,
   forumUrl?: string,
+  devToUrl?: string,
 ): Promise<void> {
   const platform = normalizePlatform(bait.platform);
   const resolvedExternal = externalLiveUrl ?? liveUrl;
   const hubUrl = buildHubArticleUrl(bait.slug);
+  const resolvedDevTo = devToUrl?.trim() || undefined;
+  const effectivePlatform = resolvedDevTo ? "DEVTO" : bait.platform;
   const blogUrl =
-    platform === "BLOGGER" && resolvedExternal
+    platform === "BLOGGER" && resolvedExternal && !resolvedDevTo
       ? resolvedExternal
       : buildBlogPostUrl(bait.slug);
 
@@ -302,10 +307,11 @@ async function markBaitPublished(
     baitId: bait.id,
     liveUrl: liveUrl ?? hubUrl,
     externalLiveUrl: resolvedExternal ?? hubUrl,
-    platform: bait.platform,
+    platform: effectivePlatform,
     blogUrl,
     wpUrl: platform === "WORDPRESS" ? resolvedExternal : undefined,
     forumUrl,
+    devToUrl: resolvedDevTo,
   });
 }
 
@@ -595,10 +601,70 @@ export async function distributeBaitsToNetwork(
     (bait) => normalizePlatform(bait.platform) === "BLOGGER",
   );
 
-  const makeWebhookResults =
-    bloggerBaits.length > 0
-      ? await dispatchMakeWebhooksForArticles(
+  const devToDirectResults =
+    bloggerBaits.length > 0 && isDevToDirectConfigured()
+      ? await dispatchDevToDirectForArticles(
           bloggerBaits.map((bait) => baitToWebhookArticle(bait)),
+          context,
+        )
+      : new Map<string, { ok: boolean; url?: string }>();
+
+  const bloggerMakeFallbackBaits = bloggerBaits.filter((bait) => {
+    const devToResult = devToDirectResults.get(bait.id);
+    return !devToResult?.ok || !devToResult.url;
+  });
+
+  for (const bait of bloggerBaits) {
+    const devToResult = devToDirectResults.get(bait.id);
+    if (!devToResult?.ok || !devToResult.url) {
+      continue;
+    }
+
+    try {
+      await markBaitPublished(
+        bait,
+        devToResult.url,
+        devToResult.url,
+        resolveBaitForumUrl(bait, context),
+        devToResult.url,
+      );
+
+      await maybeSaveCampaignUrl(
+        context.campaignId,
+        devToResult.url,
+        campaignExternalUrlSaved,
+      );
+
+      console.log(
+        `[DEVTO DIRECT]: /p/${bait.slug} — Bait ${bait.id} SUCCESS → ${devToResult.url}`,
+      );
+
+      results.push({
+        baitId: bait.id,
+        slug: bait.slug,
+        ok: true,
+        externalLiveUrl: devToResult.url,
+        platform: "DEVTO",
+      });
+    } catch (dbError) {
+      console.error(
+        `[DEVTO DIRECT] Başarılı ancak kayıt güncellenemedi (${bait.id}):`,
+        dbError,
+      );
+      results.push({
+        baitId: bait.id,
+        slug: bait.slug,
+        ok: true,
+        externalLiveUrl: devToResult.url,
+        platform: "DEVTO",
+      });
+    }
+  }
+
+  const makeWebhookResults =
+    bloggerMakeFallbackBaits.length > 0
+      ? await dispatchMakeWebhooksForArticles(
+          bloggerMakeFallbackBaits.map((bait) => baitToWebhookArticle(bait)),
           context,
         )
       : new Map<string, GeoDistributionResult>();
@@ -631,12 +697,12 @@ export async function distributeBaitsToNetwork(
     );
   }
 
-  if (bloggerBaits.length === 0) {
+  if (bloggerMakeFallbackBaits.length === 0) {
     await publishDominanceNetworkForBaits(baits, results, context.campaignId);
     return results;
   }
 
-  const articles: WebhookArticleSource[] = bloggerBaits.map((bait) =>
+  const articles: WebhookArticleSource[] = bloggerMakeFallbackBaits.map((bait) =>
     baitToWebhookArticle(bait),
   );
 
@@ -644,7 +710,9 @@ export async function distributeBaitsToNetwork(
     articles,
     context,
     async (payload) => {
-      const bait = bloggerBaits.find((entry) => entry.slug === payload.slug);
+      const bait = bloggerMakeFallbackBaits.find(
+        (entry) => entry.slug === payload.slug,
+      );
       const cached = bait ? makeWebhookResults.get(bait.id) : undefined;
       if (cached) {
         return { ok: cached.ok, externalLiveUrl: cached.externalLiveUrl };
@@ -659,7 +727,7 @@ export async function distributeBaitsToNetwork(
     {
       latencyMs: 0,
       onArticleResult: async (index, result) => {
-        const bait = bloggerBaits[index];
+        const bait = bloggerMakeFallbackBaits[index];
         if (!bait) {
           return;
         }

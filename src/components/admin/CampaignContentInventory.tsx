@@ -109,6 +109,7 @@ function ContentLinks({ links }: { links: AdminContentLinkSet }) {
     { label: "Blog", url: links.blogUrl },
     { label: "WP", url: links.wpUrl },
     { label: "Forum", url: links.forumUrl },
+    { label: "Dev.to", url: links.devToUrl },
     { label: "Dış", url: links.externalUrl },
   ].filter((chip) => chip.url);
 
@@ -158,6 +159,10 @@ export default function CampaignContentInventory({
         <CampaignSummaryLink
           label="Kampanya Blog"
           url={publicationSummary.blogUrl}
+        />
+        <CampaignSummaryLink
+          label="Dev.to"
+          url={publicationSummary.devToUrl}
         />
         <CampaignSummaryLink
           label="Otorite"

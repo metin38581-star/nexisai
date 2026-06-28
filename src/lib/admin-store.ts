@@ -15,7 +15,7 @@ import type {
   AdminPaymentRecord,
 } from "@/types/admin";
 import { SECTOR_OPTIONS } from "@/lib/constants";
-import { resolveBaitPublicationUrls } from "@/lib/bait-publication-urls";
+import { resolveBaitPublicationUrls, normalizeDevToUrl } from "@/lib/bait-publication-urls";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { buildForumHubUrl, normalizeForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
@@ -273,6 +273,7 @@ type CampaignOverviewSource = {
     slug: string;
     externalLiveUrl: string | null;
     wpUrl?: string | null;
+    devToUrl?: string | null;
     platform?: string | null;
   }>;
   intents: Array<{
@@ -301,6 +302,7 @@ async function listAllCampaignsOverviewViaPrisma(): Promise<
           slug: true,
           externalLiveUrl: true,
           wpUrl: true,
+          devToUrl: true,
           platform: true,
         },
       },
@@ -335,7 +337,7 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
     const [{ data: baits }, { data: intents }] = await Promise.all([
       supabase
         .from("Bait")
-        .select("slug, external_live_url, wp_url, platform")
+        .select("slug, external_live_url, wp_url, dev_to_url, platform")
         .eq("campaignId", campaignId)
         .order("createdAt", { ascending: true }),
       supabase
@@ -360,6 +362,7 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
         slug: bait.slug as string,
         externalLiveUrl: (bait.external_live_url as string | null) ?? null,
         wpUrl: (bait.wp_url as string | null) ?? null,
+        devToUrl: (bait.dev_to_url as string | null) ?? null,
         platform: (bait.platform as string | null) ?? null,
       })),
       intents: (intents ?? []).map((intent) => ({
@@ -414,6 +417,29 @@ async function listWalletBalances(): Promise<Map<string, number>> {
   }
 
   return listWalletBalancesViaSupabase();
+}
+
+function resolveCampaignDevToUrl(
+  campaign: CampaignOverviewSource,
+): string | null {
+  for (const bait of campaign.baits) {
+    const stored = normalizeDevToUrl(bait.devToUrl);
+    if (stored) {
+      return stored;
+    }
+
+    if (
+      bait.platform?.trim().toUpperCase() === "DEVTO" &&
+      bait.externalLiveUrl?.trim()
+    ) {
+      const fromExternal = normalizeDevToUrl(bait.externalLiveUrl);
+      if (fromExternal) {
+        return fromExternal;
+      }
+    }
+  }
+
+  return null;
 }
 
 function resolveCampaignHubUrl(campaign: CampaignOverviewSource): string | null {
@@ -639,6 +665,9 @@ function buildOverviewStats(
     if (row.hubUrl) {
       totalLinksPublished += 1;
     }
+    if (row.devToUrl) {
+      totalLinksPublished += 1;
+    }
     if (row.wordpressUrl) {
       totalLinksPublished += 1;
     }
@@ -673,6 +702,7 @@ function applySiteOriginToOverviewRow(
     wordpressUrl: rewriteAdminPublicationUrl(row.wordpressUrl, siteOrigin),
     forumUrl: rewriteAdminPublicationUrl(row.forumUrl, siteOrigin),
     blogUrl: rewriteAdminPublicationUrl(row.blogUrl, siteOrigin),
+    devToUrl: rewriteAdminPublicationUrl(row.devToUrl, siteOrigin),
     primaryAuthorityUrl: rewriteAdminPublicationUrl(
       row.primaryAuthorityUrl,
       siteOrigin,
@@ -705,6 +735,7 @@ function applySiteOriginToCampaignHistory(
             wpUrl: rewriteAdminPublicationUrl(pair.bait.wpUrl, siteOrigin),
             blogUrl: rewriteAdminPublicationUrl(pair.bait.blogUrl, siteOrigin),
             forumUrl: rewriteAdminPublicationUrl(pair.bait.forumUrl, siteOrigin),
+            devToUrl: rewriteAdminPublicationUrl(pair.bait.devToUrl, siteOrigin),
             links: rewriteAdminLinkSet(pair.bait.links, siteOrigin),
           }
         : null,
@@ -782,6 +813,7 @@ export async function listAdminCampaignOverview(
       amountSpent: log?.amountSpent ?? spendByCampaign.get(campaign.id) ?? 0,
       hubUrl: resolveCampaignHubUrl(campaign),
       wordpressUrl: log?.wordpressUrl ?? resolveCampaignWordpressUrl(campaign),
+      devToUrl: resolveCampaignDevToUrl(campaign),
       forumUrl: normalizeForumHubUrl(
         log?.forumUrl ??
           forumUrlByCampaignId.get(campaign.id) ??
@@ -850,6 +882,7 @@ type CampaignWithRelations = {
     wpUrl?: string | null;
     blogUrl?: string | null;
     forumUrl?: string | null;
+    devToUrl?: string | null;
   }>;
   intents: Array<{
     id: string;
@@ -869,6 +902,7 @@ type CampaignWithRelations = {
       wpUrl?: string | null;
       blogUrl?: string | null;
       forumUrl?: string | null;
+      devToUrl?: string | null;
       platform?: string | null;
     } | null;
   }>;
@@ -1009,6 +1043,7 @@ async function getCampaignsForUserViaSupabase(
         wpUrl: (bait.wp_url as string | null) ?? null,
         blogUrl: (bait.blog_url as string | null) ?? null,
         forumUrl: (bait.forum_url as string | null) ?? null,
+        devToUrl: (bait.dev_to_url as string | null) ?? null,
       })),
       intents: (intents ?? []).map((intent) => {
         const baitId = intent.baitId as string | null;
@@ -1034,6 +1069,7 @@ async function getCampaignsForUserViaSupabase(
                 wpUrl: (baitRow.wp_url as string | null) ?? null,
                 blogUrl: (baitRow.blog_url as string | null) ?? null,
                 forumUrl: (baitRow.forum_url as string | null) ?? null,
+                devToUrl: (baitRow.dev_to_url as string | null) ?? null,
                 platform: (baitRow.platform as string | null) ?? null,
               }
             : null,
@@ -1100,6 +1136,7 @@ function mapBaitLinkSet(
       wpUrl: bait.wpUrl,
       blogUrl: bait.blogUrl,
       forumUrl: bait.forumUrl,
+      devToUrl: bait.devToUrl,
     },
     campaignForumUrl,
   );
@@ -1109,6 +1146,7 @@ function mapBaitLinkSet(
     blogUrl: resolved.blogUrl,
     wpUrl: resolved.wpUrl,
     forumUrl: resolved.forumUrl,
+    devToUrl: resolved.devToUrl,
     externalUrl: resolved.externalUrl,
   };
 }
@@ -1130,6 +1168,7 @@ function buildCampaignPublicationSummary(
       slug: bait.slug,
       externalLiveUrl: bait.externalLiveUrl,
       wpUrl: bait.wpUrl,
+      devToUrl: bait.devToUrl,
       platform: bait.platform,
     })),
     intents: campaign.intents.map((intent) => ({ question: intent.question })),
@@ -1148,6 +1187,7 @@ function buildCampaignPublicationSummary(
     blogUrl: normalizeBlogPostUrl(
       campaign.campaignLog?.blogUrl ?? resolveCampaignBlogUrl(overviewSource),
     ),
+    devToUrl: resolveCampaignDevToUrl(overviewSource),
     primaryAuthorityUrl:
       campaign.campaignLog?.primaryAuthorityUrl ??
       resolveCampaignPrimaryAuthorityUrl(overviewSource),
@@ -1190,6 +1230,7 @@ function buildCampaignContentInventory(
             blogUrl: null,
             wpUrl: null,
             forumUrl: intentForumUrl,
+            devToUrl: null,
             externalUrl: null,
           },
       relatedBaitId: intent.baitId,
@@ -1209,6 +1250,7 @@ function buildCampaignContentInventory(
         blogUrl: null,
         wpUrl: null,
         forumUrl: buildForumHubUrl(answer.questionHub.slug),
+        devToUrl: null,
         externalUrl: null,
       },
       relatedBaitId: null,
@@ -1239,6 +1281,7 @@ function mapBaitPublication(
     wpUrl: links.wpUrl,
     blogUrl: links.blogUrl,
     forumUrl: links.forumUrl,
+    devToUrl: links.devToUrl,
     links,
   };
 }
@@ -1432,6 +1475,7 @@ async function getCampaignWithRelationsByIdViaSupabase(
       wpUrl: (bait.wp_url as string | null) ?? null,
       blogUrl: (bait.blog_url as string | null) ?? null,
       forumUrl: (bait.forum_url as string | null) ?? null,
+      devToUrl: (bait.dev_to_url as string | null) ?? null,
     })),
     intents: (intents ?? []).map((intent) => {
       const baitId = intent.baitId as string | null;
@@ -1457,6 +1501,7 @@ async function getCampaignWithRelationsByIdViaSupabase(
               wpUrl: (baitRow.wp_url as string | null) ?? null,
               blogUrl: (baitRow.blog_url as string | null) ?? null,
               forumUrl: (baitRow.forum_url as string | null) ?? null,
+              devToUrl: (baitRow.dev_to_url as string | null) ?? null,
               platform: (baitRow.platform as string | null) ?? null,
             }
           : null,
