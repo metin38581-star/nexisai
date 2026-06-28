@@ -10,15 +10,46 @@ import { ADMIN_DASHBOARD_PATH } from "@/lib/admin-routes";
 const inputClass =
   "w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 transition focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/20";
 
-export default function AdminLoginClient() {
+interface AdminLoginClientProps {
+  authReadiness: {
+    passwordConfigured: boolean;
+    secretConfigured: boolean;
+    isReady: boolean;
+  };
+}
+
+function resolveAuthSetupError(authReadiness: AdminLoginClientProps["authReadiness"]): string | null {
+  if (authReadiness.isReady) {
+    return null;
+  }
+
+  if (!authReadiness.passwordConfigured) {
+    return "Admin girişi sunucuda yapılandırılmamış. ADMIN_STANDALONE_PASSWORD tanımlayın.";
+  }
+
+  if (!authReadiness.secretConfigured) {
+    return "Admin oturum imzası yapılandırılmamış. ADMIN_STANDALONE_SECRET tanımlayın.";
+  }
+
+  return "Admin girişi şu an kullanılamıyor.";
+}
+
+export default function AdminLoginClient({ authReadiness }: AdminLoginClientProps) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const setupError = resolveAuthSetupError(authReadiness);
+  const authEnabled = authReadiness.isReady;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+
+    if (!authEnabled) {
+      setError(setupError ?? "Admin girişi şu an kullanılamıyor.");
+      return;
+    }
 
     if (!password.trim()) {
       setError("Admin şifresi zorunludur.");
@@ -32,7 +63,7 @@ export default function AdminLoginClient() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: password.trim() }),
       });
 
       const payload = (await response.json()) as {
@@ -89,7 +120,14 @@ export default function AdminLoginClient() {
             placeholder="••••••••••"
             autoComplete="current-password"
             autoFocus
+            disabled={!authEnabled || submitting}
           />
+
+          {setupError ? (
+            <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              {setupError}
+            </p>
+          ) : null}
 
           {error ? (
             <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
@@ -99,7 +137,7 @@ export default function AdminLoginClient() {
 
           <button
             type="submit"
-            disabled={submitting || !password.trim()}
+            disabled={!authEnabled || submitting || !password.trim()}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? (

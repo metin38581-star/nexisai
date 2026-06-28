@@ -7,7 +7,7 @@ import {
   hasValidStandaloneAdminSession,
 } from "@/lib/standalone-admin-auth";
 import {
-  isStandaloneAdminPasswordConfigured,
+  getStandaloneAdminAuthReadiness,
   verifyStandaloneAdminPassword,
 } from "@/lib/standalone-admin-password";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -34,11 +34,22 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (!isStandaloneAdminPasswordConfigured()) {
+    const authReadiness = getStandaloneAdminAuthReadiness();
+    if (!authReadiness.passwordConfigured) {
       return NextResponse.json(
         {
           success: false,
           error: "Admin girişi yapılandırılmamış. ADMIN_STANDALONE_PASSWORD tanımlayın.",
+        },
+        { status: 503 },
+      );
+    }
+
+    if (!authReadiness.secretConfigured) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Admin oturum imzası yapılandırılmamış. ADMIN_STANDALONE_SECRET tanımlayın.",
         },
         { status: 503 },
       );

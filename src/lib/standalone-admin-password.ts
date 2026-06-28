@@ -7,6 +7,7 @@ function resolveConfiguredPassword(): string | null {
   return fromEnv || null;
 }
 
+/** Girilen şifreyi ADMIN_STANDALONE_PASSWORD ile sabit süreli karşılaştırır. */
 export function verifyStandaloneAdminPassword(input: string): boolean {
   const expected = resolveConfiguredPassword();
   if (!expected || !input.trim()) {
@@ -25,4 +26,27 @@ export function verifyStandaloneAdminPassword(input: string): boolean {
 
 export function isStandaloneAdminPasswordConfigured(): boolean {
   return Boolean(resolveConfiguredPassword());
+}
+
+export function isStandaloneAdminSecretConfigured(): boolean {
+  if (process.env.ADMIN_STANDALONE_SECRET?.trim()) {
+    return true;
+  }
+
+  return process.env.NODE_ENV !== "production";
+}
+
+export function getStandaloneAdminAuthReadiness(): {
+  passwordConfigured: boolean;
+  secretConfigured: boolean;
+  isReady: boolean;
+} {
+  const passwordConfigured = isStandaloneAdminPasswordConfigured();
+  const secretConfigured = isStandaloneAdminSecretConfigured();
+
+  return {
+    passwordConfigured,
+    secretConfigured,
+    isReady: passwordConfigured && secretConfigured,
+  };
 }
