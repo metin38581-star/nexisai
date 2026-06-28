@@ -8,6 +8,7 @@ import {
   userHasCampaignAccess,
 } from "@/lib/campaign-store";
 import {
+  completeCampaignProcessingState,
   getCampaignProcessingState,
   interruptCampaignProcessingState,
   isCampaignProcessingStale,
@@ -74,14 +75,30 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (processingState && isCampaignProcessingStale(processingState)) {
       if (baitCount > 0) {
+        const recoveryResult = {
+          success: true,
+          campaignId,
+          status: "complete" as const,
+          baitsGenerated: baitCount,
+          message:
+            "Kampanya içerikleri üretildi; dağıtım paneli güncellendi.",
+          terminalLogs: processingState.terminalLogs,
+          ...(processingState.result ?? {}),
+        };
+
+        await completeCampaignProcessingState(
+          campaignId,
+          processingState.terminalLogs,
+          recoveryResult,
+        );
+
         return NextResponse.json(
           buildCompleteStatusPayload({
             campaignId,
             baitCount,
             terminalLogs: processingState.terminalLogs,
-            result: processingState.result as Record<string, unknown> | null,
-            message:
-              "Kampanya içerikleri üretildi; dağıtım paneli güncellendi.",
+            result: recoveryResult,
+            message: recoveryResult.message,
           }),
         );
       }

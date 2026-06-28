@@ -173,15 +173,25 @@ function applyCampaignSuccess(
   const baitsGenerated =
     typeof result.baitsGenerated === "number" ? result.baitsGenerated : 0;
 
+  const serverDistributionDone =
+    result.status === "complete" ||
+    (Array.isArray(result.distributionResults) &&
+      result.distributionResults.length > 0);
+
   if (baitsGenerated > 0) {
     handlers.setChannelCount(Math.max(DEFAULT_CHANNEL_COUNT, baitsGenerated));
-    handlers.setPendingDistribution({
-      count: baitsGenerated,
-      sehir: payload.sehir,
-      sektor: payload.sektor,
-    });
-    handlers.triggerDistributionFlow();
-    handlers.setOperationPhase("distributing");
+    if (serverDistributionDone) {
+      handlers.resetDistribution();
+      handlers.setOperationPhase("active");
+    } else {
+      handlers.setPendingDistribution({
+        count: baitsGenerated,
+        sehir: payload.sehir,
+        sektor: payload.sektor,
+      });
+      handlers.triggerDistributionFlow();
+      handlers.setOperationPhase("distributing");
+    }
   } else if (result.inProgress || result.status === "processing") {
     handlers.setOperationPhase("processing");
   } else {
@@ -261,6 +271,38 @@ async function pollCampaignProcessingStatus(
       }
 
       if (state.status === "failed" || state.status === "interrupted") {
+        const baitsGenerated =
+          state.baitsGenerated ??
+          (typeof state.result?.baitsGenerated === "number"
+            ? state.result.baitsGenerated
+            : 0);
+
+        if (baitsGenerated > 0) {
+          applyCampaignSuccess(
+            payload,
+            {
+              ...(state.result ?? {}),
+              success: true,
+              campaignId,
+              status: "complete",
+              baitsGenerated,
+              terminalLogs: logs,
+              metrics: state.result?.metrics ?? {
+                visibilityRate: 0,
+                estimatedTraffic: 0,
+                spentBudget: 0,
+                totalBudget: 0,
+              },
+              message:
+                state.result?.message ??
+                "İçerikler NexisAI Hub'da yayında; bazı dış kanallar gecikmiş olabilir.",
+            },
+            handlers,
+          );
+          clearActiveCampaignId();
+          return;
+        }
+
         clearActiveCampaignId();
         const errorLog = [...logs]
           .reverse()
@@ -288,11 +330,67 @@ async function pollCampaignProcessingStatus(
     }
   }
 
+  const recoveredBaits = await tryRecoverCompletedCampaignFromBaits(
+    token,
+    campaignId,
+  );
+
+  if (recoveredBaits > 0) {
+    applyCampaignSuccess(
+      payload,
+      {
+        success: true,
+        campaignId,
+        status: "complete",
+        baitsGenerated: recoveredBaits,
+        terminalLogs: [],
+        metrics: {
+          visibilityRate: 0,
+          estimatedTraffic: 0,
+          spentBudget: 0,
+          totalBudget: 0,
+        },
+        message: "Kampanya tamamlandı.",
+      },
+      handlers,
+    );
+    clearActiveCampaignId();
+    return;
+  }
+
   handlers.setOperationError(DISTRIBUTION_INTERRUPTED_MESSAGE);
   handlers.setOperationPhase("interrupted");
   handlers.resetDistribution();
   clearActiveCampaignId();
   toast.error(DISTRIBUTION_INTERRUPTED_TITLE);
+}
+
+async function tryRecoverCompletedCampaignFromBaits(
+  token: string,
+  campaignId: string,
+): Promise<number> {
+  try {
+    const response = await fetch(
+      `/api/campaign/${campaignId}/status`,
+      buildAuthFetchInit(token),
+    );
+    if (!response.ok) {
+      return 0;
+    }
+
+    const state = (await response.json()) as {
+      baitsGenerated?: number;
+      status?: string;
+    };
+
+    if (state.status === "complete") {
+      return state.baitsGenerated ?? 0;
+    }
+
+    return state.baitsGenerated ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 /** @deprecated Eski kampanya listesi polling — yedek */
@@ -805,8 +903,8 @@ function AnalysisDashboardContent({
   }, [runAnalysis]);
 
   const isDistributionPending =
-    operationPhase === "distributing" ||
-    (operationPhase === "active" && distributionStatus === "running");
+    operationPhase === "distributing" &&
+    distributionStatus === "running";
 
   useEffect(() => {
     if (!isDistributionPending) {

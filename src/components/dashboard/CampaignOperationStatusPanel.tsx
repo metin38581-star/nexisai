@@ -55,9 +55,17 @@ function resolveOperationLabel(
   tone: "emerald" | "violet" | "amber" | "rose";
   pulse: boolean;
 } {
-  if (phase === "failed" || phase === "interrupted") {
+  if (phase === "interrupted") {
     return {
       title: "Dağıtım Kesintiye Uğradı — Yeniden Deneyin",
+      tone: "rose",
+      pulse: false,
+    };
+  }
+
+  if (phase === "failed") {
+    return {
+      title: "Operasyon Tamamlanamadı",
       tone: "rose",
       pulse: false,
     };

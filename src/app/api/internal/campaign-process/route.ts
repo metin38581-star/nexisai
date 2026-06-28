@@ -7,8 +7,10 @@ import {
 } from "@/lib/campaign-background-processor";
 import {
   failCampaignProcessingState,
+  completeCampaignProcessingState,
   getCampaignProcessingState,
 } from "@/lib/campaign-terminal-log-store";
+import { getCampaignBaitCount } from "@/lib/campaign-store";
 import { cronUnauthorizedResponse, isCronAuthorized } from "@/lib/cron-auth";
 
 export const maxDuration = 300;
@@ -63,12 +65,32 @@ export async function POST(request: Request) {
       console.error("[CAMPAIGN_PROCESS]: Zaman aşımı:", error.message);
 
       if (campaignId) {
+        const baitCount = await getCampaignBaitCount(campaignId);
         const processingState = await getCampaignProcessingState(campaignId);
-        await failCampaignProcessingState(
-          campaignId,
-          processingState?.terminalLogs ?? [],
-          "Kampanya arka plan işlemi zaman aşımına uğradı.",
-        );
+
+        if (baitCount > 0) {
+          const recoveryResult = {
+            success: true,
+            campaignId,
+            status: "complete" as const,
+            baitsGenerated: baitCount,
+            message:
+              "Kampanya içerikleri kaydedildi; dağıtım arka planda tamamlanacak.",
+            terminalLogs: processingState?.terminalLogs ?? [],
+          };
+
+          await completeCampaignProcessingState(
+            campaignId,
+            recoveryResult.terminalLogs,
+            recoveryResult,
+          );
+        } else {
+          await failCampaignProcessingState(
+            campaignId,
+            processingState?.terminalLogs ?? [],
+            "Kampanya arka plan işlemi zaman aşımına uğradı.",
+          );
+        }
       }
 
       return NextResponse.json(

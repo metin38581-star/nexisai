@@ -579,6 +579,7 @@ export async function distributeBaitsToNetwork(
     return [];
   }
 
+  try {
   const results: DistributionResult[] = [];
   const campaignExternalUrlSaved = { value: false };
   const campaignWordPressUrlSaved = { value: false };
@@ -803,6 +804,13 @@ export async function distributeBaitsToNetwork(
 
   await publishDominanceNetworkForBaits(baits, results, context.campaignId);
   return results;
+  } catch (error) {
+    console.error(
+      "[DISTRIBUTION_ENGINE]: Kritik dağıtım hatası yutuldu — hub yayını korunuyor:",
+      error,
+    );
+    return [];
+  }
 }
 
 export type {

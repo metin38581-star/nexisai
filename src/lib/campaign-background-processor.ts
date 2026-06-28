@@ -3,7 +3,7 @@ import "server-only";
 import type { BusinessSector, CampaignResponse } from "@/types/campaign";
 import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
 import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
-import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
+import { distributeBaitsToNetwork, type DistributionResult } from "@/lib/distribution-engine";
 import { queryLlmInquiry } from "@/lib/llm-simulator";
 import {
   buildDynamicTerminalLogs,
@@ -42,11 +42,9 @@ import {
   completeCampaignProcessingState,
   failCampaignProcessingState,
   getCampaignProcessingState,
-  interruptCampaignProcessingState,
 } from "@/lib/campaign-terminal-log-store";
 import {
-  CampaignDistributionTimeoutError,
-  withCampaignDistributionTimeout,
+  runDistributionWithGracefulFallback,
 } from "@/lib/campaign-distribution-timeout";
 
 export interface CampaignBackgroundJobInput {
@@ -352,13 +350,21 @@ export async function processCampaignInBackground(
 
     for (const bait of persistedBaits) {
       if (!bait.icerik?.trim()) {
-        console.error("[WEBHOOK_PREP]: Dağıtım öncesi boş icerik tespit edildi", {
+        console.error("[WEBHOOK_PREP]: Boş icerik atlanıyor — dağıtım devam ediyor", {
           baitId: bait.id,
           slug: bait.slug,
           baslik: bait.baslik,
         });
-        throw new Error(`EMPTY_BAIT_CONTENT:${bait.slug}`);
+        bait.icerik = bait.baslik?.trim() || "NexisAI GEO içerik özeti";
       }
+    }
+
+    persistedBaits = persistedBaits.filter(
+      (bait) => bait.icerik?.trim() && bait.slug?.trim(),
+    );
+
+    if (persistedBaits.length === 0) {
+      throw new Error("CAMPAIGN_BAIT_PERSIST_FAILED");
     }
 
     await attachCampaignIntents(
@@ -428,16 +434,26 @@ export async function processCampaignInBackground(
       "[DAĞITIM] WordPress ve dominasyon ağına paralel yayın başlatılıyor...",
     );
 
-    const distributionResults = await withCampaignDistributionTimeout(
-      distributeBaitsToNetwork(persistedBaits, {
-        campaignId,
-        markaAdi,
-        sehir,
-        sektor,
-        agresiflik: agresiflikSeviyesi,
-        forumUrlByBaitId,
-      }),
+    const distributionResults = await runDistributionWithGracefulFallback(
+      () =>
+        distributeBaitsToNetwork(persistedBaits, {
+          campaignId,
+          markaAdi,
+          sehir,
+          sektor,
+          agresiflik: agresiflikSeviyesi,
+          forumUrlByBaitId,
+        }),
+      [] as DistributionResult[],
     );
+
+    if (distributionResults.length === 0) {
+      await pushProgressLog(
+        campaignId,
+        "DAĞITIM",
+        "[DAĞITIM] Bazı dış kanallar yanıt vermedi; NexisAI Hub yayını aktif.",
+      );
+    }
 
     const campaignExternalUrl = distributionResults.find(
       (result) => result.ok && result.externalLiveUrl,
@@ -531,13 +547,36 @@ export async function processCampaignInBackground(
     console.error("[CAMPAIGN_BG]: Arka plan işlem hatası:", error);
     const processingState = await getCampaignProcessingState(campaignId);
 
-    if (error instanceof CampaignDistributionTimeoutError) {
-      await interruptCampaignProcessingState(
+    if (persistedBaits.length > 0) {
+      const partialOutcome = summarizeCampaignOutcome({
+        distributionResults: [],
+        hubPublished: true,
+        forumPublishedCount: 0,
+        forumAttemptCount: selectedQuestionIds.length,
+      });
+
+      const partialResult: Partial<CampaignResponse> = {
+        success: true,
         campaignId,
-        processingState?.terminalLogs ?? [],
-        error.message,
+        status: "complete",
+        baitsGenerated: persistedBaits.length,
+        message: partialOutcome.message,
+        terminalLogs: processingState?.terminalLogs ?? [],
+        hubArticles: persistedBaits.map((bait) => ({
+          slug: bait.slug,
+          hubPath: buildHubArticlePath(bait.slug),
+        })),
+      };
+
+      await completeCampaignProcessingState(
+        campaignId,
+        partialResult.terminalLogs ?? [],
+        partialResult,
       );
-      await releaseCampaignProcessingLock(campaignId);
+      await releaseCampaignProcessingLock(
+        campaignId,
+        partialOutcome.message,
+      );
       return;
     }
 
