@@ -9,7 +9,6 @@ import {
   type CampaignSessionPayload,
 } from "@/lib/campaign-session";
 import { getCampaignMeta } from "@/lib/agresiflik";
-import { buildTahsilatLog } from "@/lib/tahsilat-log";
 import {
   DistributionProvider,
   useDistribution,
@@ -17,24 +16,54 @@ import {
 import CampaignCreationStudio from "@/components/campaign/CampaignCreationStudio";
 import DashboardHolographicPanel from "@/components/dashboard/DashboardHolographicPanel";
 import AnalysisInsightsPanel from "@/components/dashboard/AnalysisInsightsPanel";
+import CampaignOperationStatusPanel, {
+  type CampaignOperationPhase,
+} from "@/components/dashboard/CampaignOperationStatusPanel";
 import DistributionStatusPanel from "@/components/dashboard/DistributionStatusPanel";
 import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
-import CyberTerminal from "@/components/terminal/CyberTerminal";
 import CyberWalletBar from "@/components/wallet/CyberWalletBar";
 import TargetedQuestionsGrowthPanel from "@/components/campaign/TargetedQuestionsGrowthPanel";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import { runCampaignPostOnce } from "@/lib/campaign-post-lock";
 
-function formatLogTimestamp(): string {
-  return new Date().toLocaleTimeString("tr-TR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+const DUPLICATE_RECOVERY_WINDOW_MS = 120_000;
+const DEFAULT_CHANNEL_COUNT = 7;
+
+interface CampaignFlowHandlers {
+  setActiveCampaignId: (id: string) => void;
+  setLlmResult: (value: LlmInquiryResult | null) => void;
+  setAuthorityScore: (value: number | null) => void;
+  setChannelCount: (value: number) => void;
+  setOperationPhase: (phase: CampaignOperationPhase) => void;
+  setOperationError: (value: string | null) => void;
+  setPendingDistribution: (
+    value: { count: number; sehir: string; sektor: string } | null,
+  ) => void;
+  triggerDistributionFlow: () => void;
+  onWalletRefresh?: () => void;
+  runRadarScan: () => Promise<void>;
+  fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
 }
 
-const DUPLICATE_RECOVERY_WINDOW_MS = 120_000;
+function normalizeOperationError(message: string): string {
+  return message
+    .replace(/^⚠️\s*\[SİBER HATA\]:\s*/i, "")
+    .replace(/^⚠️\s*\[OTURUM HATASI\]:\s*/i, "")
+    .replace(/^⚠️\s*\[SİBER KRİZ\]:\s*/i, "")
+    .trim();
+}
+
+function resolveAuthorityScore(
+  result: Pick<CampaignResponse, "llmResult" | "metrics">,
+): number | null {
+  const score =
+    result.llmResult?.confidence ??
+    result.llmResult?.yapayZekaGorunurlukOrani ??
+    result.metrics?.visibilityRate;
+
+  return typeof score === "number" && Number.isFinite(score) ? score : null;
+}
 
 function normalizeMatchText(value: string): string {
   return value.trim().toLocaleLowerCase("tr-TR");
@@ -99,16 +128,7 @@ async function recoverDuplicateCampaignResult(
           spentBudget: match.gunlukButce * match.gunSayisi,
           totalBudget: match.gunlukButce * match.gunSayisi,
         },
-        terminalLogs: [
-          {
-            id: `recover-${Date.now()}`,
-            timestamp: formatLogTimestamp(),
-            category: "SİSTEM",
-            message: inProgress
-              ? `✓ [OTURUM]: ${payload.markaAdi} kampanyası işleniyor — operasyon devam ediyor.`
-              : `✓ [OTURUM]: ${payload.markaAdi} kampanyası bulundu — operasyon devam ediyor.`,
-          },
-        ],
+        terminalLogs: [],
         message: "Kampanya zaten başlatılmış.",
       };
     } catch {
@@ -122,19 +142,7 @@ async function recoverDuplicateCampaignResult(
 function applyCampaignSuccess(
   payload: CampaignSessionPayload,
   result: CampaignResponse,
-  handlers: {
-    setActiveCampaignId: (id: string) => void;
-    setLlmResult: (value: LlmInquiryResult | null) => void;
-    setTerminalLogs: (logs: TerminalLogEntry[]) => void;
-    setPendingDistribution: (value: {
-      count: number;
-      sehir: string;
-      sektor: string;
-    } | null) => void;
-    onWalletRefresh?: () => void;
-    runRadarScan: () => Promise<void>;
-    fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
-  },
+  handlers: CampaignFlowHandlers,
 ): void {
   if (result.campaignId) {
     handlers.setActiveCampaignId(result.campaignId);
@@ -143,20 +151,27 @@ function applyCampaignSuccess(
     handlers.setLlmResult(result.llmResult);
   }
 
-  const logs: TerminalLogEntry[] = payload.withTahsilat
-    ? [buildTahsilatLog(), ...(result.terminalLogs ?? [])]
-    : (result.terminalLogs ?? []);
-  handlers.setTerminalLogs(logs);
+  const authorityScore = resolveAuthorityScore(result);
+  if (authorityScore !== null) {
+    handlers.setAuthorityScore(authorityScore);
+  }
 
   const baitsGenerated =
     typeof result.baitsGenerated === "number" ? result.baitsGenerated : 0;
 
   if (baitsGenerated > 0) {
+    handlers.setChannelCount(Math.max(DEFAULT_CHANNEL_COUNT, baitsGenerated));
     handlers.setPendingDistribution({
       count: baitsGenerated,
       sehir: payload.sehir,
       sektor: payload.sektor,
     });
+    handlers.triggerDistributionFlow();
+    handlers.setOperationPhase("distributing");
+  } else if (result.inProgress || result.status === "processing") {
+    handlers.setOperationPhase("processing");
+  } else {
+    handlers.setOperationPhase("active");
   }
 
   handlers.onWalletRefresh?.();
@@ -168,22 +183,9 @@ async function pollCampaignProcessingStatus(
   token: string,
   payload: CampaignSessionPayload,
   campaignId: string,
-  handlers: {
-    setActiveCampaignId: (id: string) => void;
-    setLlmResult: (value: LlmInquiryResult | null) => void;
-    setTerminalLogs: (logs: TerminalLogEntry[]) => void;
-    setPendingDistribution: (value: {
-      count: number;
-      sehir: string;
-      sektor: string;
-    } | null) => void;
-    onWalletRefresh?: () => void;
-    runRadarScan: () => Promise<void>;
-    fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
-    setIsActive: (value: boolean) => void;
-  },
+  handlers: CampaignFlowHandlers,
 ): Promise<void> {
-  let lastLogCount = 0;
+  handlers.setOperationPhase("processing");
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     await new Promise((resolve) => {
@@ -206,14 +208,6 @@ async function pollCampaignProcessingStatus(
       };
 
       const logs = state.terminalLogs ?? [];
-      if (logs.length > lastLogCount) {
-        handlers.setTerminalLogs(
-          payload.withTahsilat
-            ? [buildTahsilatLog(), ...logs]
-            : logs,
-        );
-        lastLogCount = logs.length;
-      }
 
       if (state.status === "complete" && state.result) {
         applyCampaignSuccess(
@@ -236,14 +230,26 @@ async function pollCampaignProcessingStatus(
       }
 
       if (state.status === "failed") {
-        handlers.setTerminalLogs(logs);
-        handlers.setIsActive(false);
+        const errorLog = [...logs]
+          .reverse()
+          .find((entry) => entry.category === "HATA");
+        const message = normalizeOperationError(
+          errorLog?.message ?? "Operasyon tamamlanamadı.",
+        );
+        handlers.setOperationError(message);
+        handlers.setOperationPhase("failed");
+        toast.error(message);
         return;
       }
     } catch {
       // Sonraki denemeye geç.
     }
   }
+
+  handlers.setOperationError(
+    "Operasyon yanıt vermedi. Lütfen birkaç dakika sonra tekrar kontrol edin.",
+  );
+  handlers.setOperationPhase("failed");
 }
 
 /** @deprecated Eski kampanya listesi polling — yedek */
@@ -251,20 +257,10 @@ async function pollCampaignCompletion(
   token: string,
   payload: CampaignSessionPayload,
   campaignId: string,
-  handlers: {
-    setActiveCampaignId: (id: string) => void;
-    setLlmResult: (value: LlmInquiryResult | null) => void;
-    setTerminalLogs: (logs: TerminalLogEntry[]) => void;
-    setPendingDistribution: (value: {
-      count: number;
-      sehir: string;
-      sektor: string;
-    } | null) => void;
-    onWalletRefresh?: () => void;
-    runRadarScan: () => Promise<void>;
-    fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
-  },
+  handlers: CampaignFlowHandlers,
 ): Promise<void> {
+  handlers.setOperationPhase("processing");
+
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await new Promise((resolve) => {
       window.setTimeout(resolve, 2000);
@@ -302,14 +298,7 @@ async function pollCampaignCompletion(
             spentBudget: match.gunlukButce * match.gunSayisi,
             totalBudget: match.gunlukButce * match.gunSayisi,
           },
-          terminalLogs: [
-            {
-              id: `poll-ready-${Date.now()}`,
-              timestamp: formatLogTimestamp(),
-              category: "SİSTEM",
-              message: `✓ [OTURUM]: ${payload.markaAdi} kampanyası hazır — operasyon devam ediyor.`,
-            },
-          ],
+          terminalLogs: [],
         },
         handlers,
       );
@@ -375,19 +364,20 @@ function AnalysisDashboardContent({
   const {
     startDistribution,
     resetDistribution,
-    status: distributionStatus,
   } = useDistribution();
   const { accessToken, isAuthReady, isLoggedIn, userEmail } = useAuth();
 
   const [session, setSession] = useState<CampaignSessionPayload | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [terminalLogs, setTerminalLogs] = useState<TerminalLogEntry[]>([]);
   const [llmResult, setLlmResult] = useState<LlmInquiryResult | null>(null);
+  const [operationPhase, setOperationPhase] =
+    useState<CampaignOperationPhase>("idle");
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [authorityScore, setAuthorityScore] = useState<number | null>(null);
+  const [channelCount, setChannelCount] = useState(DEFAULT_CHANNEL_COUNT);
   const [isLoading, setIsLoading] = useState(false);
-  const [isActive, setIsActive] = useState(false);
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
-  const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const analysisInFlightRef = useRef(false);
   const dashboardBootstrapRef = useRef<string | null>(null);
@@ -458,24 +448,7 @@ function AnalysisDashboardContent({
         buildAuthFetchInit(accessToken),
       );
       if (response.ok) {
-        const report = (await response.json()) as {
-          scanLogs?: Array<{ status: string; message: string }>;
-        };
-
-        if (report.scanLogs?.length) {
-          const radarTerminalLogs = report.scanLogs
-            .filter((entry) => entry.status === "scanned")
-            .map((entry, index) => ({
-              id: `radar-${Date.now()}-${index}`,
-              timestamp: formatLogTimestamp(),
-              category: "ARAMA" as const,
-              message: entry.message,
-            }));
-
-          if (radarTerminalLogs.length > 0) {
-            setTerminalLogs((prev) => [...prev, ...radarTerminalLogs]);
-          }
-        }
+        await response.json();
       }
     } catch {
       // Radar arka planda sessizce çalışır.
@@ -519,51 +492,49 @@ function AnalysisDashboardContent({
     };
   }, [isAuthReady, accessToken]);
 
-  const appendDistributionLog = useCallback((message: string, id: string) => {
-    setTerminalLogs((prev) => [
-      ...prev,
-      {
-        id,
-        timestamp: formatLogTimestamp(),
-        category: "DAĞITIM",
-        message,
-      },
-    ]);
-  }, []);
-
   const runDistributionFlow = useCallback(async () => {
     const pending = pendingDistributionRef.current;
     if (!pending || pending.count <= 0) {
-      setIsActive(false);
+      setOperationPhase("active");
       return;
     }
 
     distributionRunningRef.current = true;
     pendingDistributionRef.current = null;
+    setOperationPhase("distributing");
 
-    await startDistribution(
-      pending.count,
-      pending.sehir,
-      pending.sektor,
-      (event) => {
-        if (event.phase === "started" || event.phase === "publishing") {
-          appendDistributionLog(
-            event.terminalMessage,
-            `dist-${event.phase}-${event.currentIndex}`,
-          );
-        }
-
-        if (event.phase === "completed") {
-          appendDistributionLog(
-            event.terminalMessage,
-            `dist-completed-${event.totalCount}`,
-          );
-        }
-      },
-    );
+    await startDistribution(pending.count, pending.sehir, pending.sektor);
 
     distributionRunningRef.current = false;
-  }, [appendDistributionLog, startDistribution]);
+    setOperationPhase("active");
+  }, [startDistribution]);
+
+  const runDistributionFlowRef = useRef(runDistributionFlow);
+
+  useEffect(() => {
+    runDistributionFlowRef.current = runDistributionFlow;
+  }, [runDistributionFlow]);
+
+  const buildCampaignFlowHandlers = useCallback(
+    (): CampaignFlowHandlers => ({
+      setActiveCampaignId,
+      setLlmResult,
+      setAuthorityScore,
+      setChannelCount,
+      setOperationPhase,
+      setOperationError,
+      setPendingDistribution: (value) => {
+        pendingDistributionRef.current = value;
+      },
+      triggerDistributionFlow: () => {
+        void runDistributionFlowRef.current();
+      },
+      onWalletRefresh,
+      runRadarScan: () => runRadarScanRef.current(),
+      fetchCampaigns: (options) => fetchCampaignsRef.current(options),
+    }),
+    [onWalletRefresh],
+  );
 
   const runAnalysis = useCallback(
     async (payload: CampaignSessionPayload) => {
@@ -573,26 +544,23 @@ function AnalysisDashboardContent({
       if (!token) {
         analysisInFlightRef.current = false;
         setIsLoading(false);
-        setTerminalLogs([
-          {
-            id: `error-${Date.now()}`,
-            timestamp: formatLogTimestamp(),
-            category: "SİSTEM",
-            message:
-              "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor.",
-          },
-        ]);
+        const message =
+          "Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor.";
+        setOperationError(message);
+        setOperationPhase("failed");
+        toast.error(message);
         return;
       }
 
       resetDistribution();
-      setTerminalLogs([]);
       setLlmResult(null);
-      setTerminalSessionKey((key) => key + 1);
+      setOperationError(null);
+      setAuthorityScore(null);
+      setChannelCount(DEFAULT_CHANNEL_COUNT);
       pendingDistributionRef.current = null;
       distributionRunningRef.current = false;
       setIsLoading(true);
-      setIsActive(true);
+      setOperationPhase("launching");
 
       try {
         await runCampaignPostOnce(async () => {
@@ -642,22 +610,7 @@ function AnalysisDashboardContent({
                 payload,
               );
               if (recovered?.success) {
-                const recoveryHandlers = {
-                  setActiveCampaignId,
-                  setLlmResult,
-                  setTerminalLogs,
-                  setPendingDistribution: (value: {
-                    count: number;
-                    sehir: string;
-                    sektor: string;
-                  } | null) => {
-                    pendingDistributionRef.current = value;
-                  },
-                  onWalletRefresh,
-                  runRadarScan: () => runRadarScanRef.current(),
-                  fetchCampaigns: (options?: { silent?: boolean }) =>
-                    fetchCampaignsRef.current(options),
-                };
+                const recoveryHandlers = buildCampaignFlowHandlers();
 
                 applyCampaignSuccess(payload, recovered, recoveryHandlers);
 
@@ -726,43 +679,30 @@ function AnalysisDashboardContent({
               );
             }
 
-            setTerminalLogs([
-              {
-                id: `error-${Date.now()}`,
-                timestamp: formatLogTimestamp(),
-                category: isInsufficientBalance ? "HATA" : "SİSTEM",
-                message: isInsufficientBalance
-                  ? "⚠️ [SİBER KRİZ]: Yetersiz bakiye nedeniyle GEO Enjeksiyon Motoru bloke edildi. Lütfen bakiye yükleyin."
-                  : isDuplicate
-                    ? "⚠️ [KORUMA]: Yinelenen kampanya isteği engellendi. Operasyon zaten başlatıldı."
-                    : isUnauthorized
-                      ? "⚠️ [OTURUM HATASI]: Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor."
-                      : `⚠️ [SİBER HATA]: ${result.error ?? "Operasyon başlatılamadı."}`,
-              },
-            ]);
+            const errorMessage = isInsufficientBalance
+              ? "Yetersiz bakiye nedeniyle operasyon başlatılamadı. Lütfen bakiye yükleyin."
+              : isDuplicate
+                ? "Operasyon zaten başlatıldı. Durum paneli birkaç saniye içinde güncellenir."
+                : isUnauthorized
+                  ? "Kampanya oluşturmak için tekrar giriş yapmanız gerekiyor."
+                  : (result.error ?? "Operasyon başlatılamadı.");
 
+            if (isDuplicate) {
+              toast.info(
+                "Kampanya isteği zaten işleniyor. Birkaç saniye bekleyip tekrar deneyin.",
+              );
+            } else {
+              toast.error(errorMessage);
+            }
+
+            setOperationError(errorMessage);
+            setOperationPhase("failed");
             resetDistribution();
-            setIsActive(false);
             return;
           }
 
           if (result.success) {
-            const successHandlers = {
-              setActiveCampaignId,
-              setLlmResult,
-              setTerminalLogs,
-              setPendingDistribution: (value: {
-                count: number;
-                sehir: string;
-                sektor: string;
-              } | null) => {
-                pendingDistributionRef.current = value;
-              },
-              onWalletRefresh,
-              runRadarScan: () => runRadarScanRef.current(),
-              fetchCampaigns: (options?: { silent?: boolean }) =>
-                fetchCampaignsRef.current(options),
-            };
+            const successHandlers = buildCampaignFlowHandlers();
 
             applyCampaignSuccess(payload, result, successHandlers);
 
@@ -776,40 +716,30 @@ function AnalysisDashboardContent({
                 token,
                 payload,
                 result.campaignId,
-                { ...successHandlers, setIsActive },
+                successHandlers,
               );
             }
             return;
           }
 
-          setTerminalLogs([
-            {
-              id: `error-${Date.now()}`,
-              timestamp: formatLogTimestamp(),
-              category: "SİSTEM",
-              message: `⚠️ [SİBER HATA]: ${result.error ?? "Beklenmeyen bir hata oluştu."}`,
-            },
-          ]);
+          const unexpectedError = result.error ?? "Beklenmeyen bir hata oluştu.";
+          setOperationError(unexpectedError);
+          setOperationPhase("failed");
+          toast.error(unexpectedError);
           resetDistribution();
-          setIsActive(false);
         });
       } catch {
-        setTerminalLogs([
-          {
-            id: `error-${Date.now()}`,
-            timestamp: formatLogTimestamp(),
-            category: "SİSTEM",
-            message: "⚠️ [SİBER HATA]: Bağlantı hatası. Lütfen tekrar deneyin.",
-          },
-        ]);
+        const connectionError = "Bağlantı hatası. Lütfen tekrar deneyin.";
+        setOperationError(connectionError);
+        setOperationPhase("failed");
+        toast.error(connectionError);
         resetDistribution();
-        setIsActive(false);
       } finally {
         analysisInFlightRef.current = false;
         setIsLoading(false);
       }
     },
-    [resetDistribution, onWalletRefresh],
+    [resetDistribution, onWalletRefresh, buildCampaignFlowHandlers],
   );
 
   useEffect(() => {
@@ -854,20 +784,12 @@ function AnalysisDashboardContent({
     onPendingCampaignHandledRef.current?.();
   }, []);
 
-  const handleFlowComplete = useCallback(() => {
-    if (pendingDistributionRef.current) {
-      void runDistributionFlow();
-      return;
-    }
-
-    if (distributionRunningRef.current || distributionStatus === "running") {
-      return;
-    }
-
-    setIsActive(false);
-  }, [distributionStatus, runDistributionFlow]);
-
   const activeMeta = session ? getCampaignMeta(session.gunlukButce) : null;
+  const displayPhase: CampaignOperationPhase = isLoading
+    ? operationPhase === "idle"
+      ? "launching"
+      : operationPhase
+    : operationPhase;
 
   if (!sessionReady) {
     return (
@@ -945,42 +867,35 @@ function AnalysisDashboardContent({
       </section>
 
       {session && (
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
-          <CyberTerminal
-            key={terminalSessionKey}
-            logs={terminalLogs}
-            isActive={isActive}
-            onFlowComplete={handleFlowComplete}
+        <div className="mb-8 flex flex-col gap-6 sm:mb-10">
+          <CampaignOperationStatusPanel
+            markaAdi={session.markaAdi}
+            sehir={session.sehir}
+            phase={displayPhase}
+            authorityScore={authorityScore}
+            channelCount={channelCount}
+            errorMessage={operationError}
           />
 
-          <div className="flex flex-col gap-5">
+          <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
             <AnalysisInsightsPanel
               llmResult={llmResult}
               markaAdi={session.markaAdi}
               isLoading={isLoading}
             />
-            <DistributionStatusPanel />
-            <TargetedQuestionsGrowthPanel
-              campaignId={activeCampaignId}
-              brandName={session.markaAdi}
-              selectedCity={session.sehir}
-              sectorSlug={session.sectorSlug}
-              sectorLabel={session.sektor}
-              selectedQuestionIds={session.selectedQuestionIds}
-              accessToken={accessToken}
-            />
+            <div className="flex flex-col gap-5">
+              <DistributionStatusPanel />
+              <TargetedQuestionsGrowthPanel
+                campaignId={activeCampaignId}
+                brandName={session.markaAdi}
+                selectedCity={session.sehir}
+                sectorSlug={session.sectorSlug}
+                sectorLabel={session.sektor}
+                selectedQuestionIds={session.selectedQuestionIds}
+                accessToken={accessToken}
+              />
+            </div>
           </div>
-        </div>
-      )}
-
-      {!session && terminalLogs.length > 0 && (
-        <div className="mb-10 grid gap-8 lg:grid-cols-2 lg:gap-10">
-          <CyberTerminal
-            key={terminalSessionKey}
-            logs={terminalLogs}
-            isActive={false}
-            onFlowComplete={() => undefined}
-          />
         </div>
       )}
 

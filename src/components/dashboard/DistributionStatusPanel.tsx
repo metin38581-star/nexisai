@@ -18,10 +18,10 @@ export default function DistributionStatusPanel() {
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-400">
-            Real-time
+            Dağıtım Durumu
           </p>
           <h3 className="mt-1 text-sm font-semibold text-white">
-            Yapay Zeka Yemleme Durumu
+            Dijital Otorite Ağları
           </h3>
           <p className="mt-1 text-xs text-zinc-500">{statusLabel}</p>
         </div>
@@ -41,13 +41,13 @@ export default function DistributionStatusPanel() {
         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)] animate-pulse" />
       </div>
 
-      <div className="mt-3 flex items-center justify-between font-mono text-[11px]">
+      <div className="mt-3 flex items-center justify-between text-[11px]">
         <span className="text-zinc-500">
           {totalSteps > 0
-            ? `Adım ${currentStep}/${totalSteps}`
+            ? `İlerleme ${currentStep}/${totalSteps}`
             : "Hazırlanıyor"}
         </span>
-        <span className="text-cyan-300">%{progress}</span>
+        <span className="font-medium text-cyan-300">%{progress}</span>
       </div>
     </div>
   );
