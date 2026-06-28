@@ -17,6 +17,7 @@ import type {
   AdminOverviewStats,
 } from "@/types/admin";
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
+import { ADMIN_BUSINESS_PATH, ADMIN_LOGIN_PATH } from "@/lib/admin-routes";
 import { normalizeForumHubUrl } from "@/lib/forum-hub-url";
 
 function formatDate(iso: string): string {
@@ -122,7 +123,7 @@ export default function SuperAdminDashboard() {
 
       if (!response.ok) {
         if (payload.needsLogin) {
-          window.location.href = "/admin-login";
+          window.location.href = ADMIN_LOGIN_PATH;
           return;
         }
         setError(payload.error ?? "Veri özeti alınamadı.");
@@ -200,7 +201,7 @@ export default function SuperAdminDashboard() {
       method: "DELETE",
       credentials: "include",
     });
-    window.location.href = "/admin-login";
+    window.location.href = ADMIN_LOGIN_PATH;
   };
 
   return (
@@ -224,7 +225,7 @@ export default function SuperAdminDashboard() {
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/admin"
+              href={ADMIN_BUSINESS_PATH}
               className="rounded-full border border-white/10 bg-zinc-900/60 px-4 py-2 text-sm text-zinc-300 transition hover:border-violet-500/30 hover:text-white"
             >
               İşletme Paneli

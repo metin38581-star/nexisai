@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Shield } from "lucide-react";
 
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
+import { ADMIN_DASHBOARD_PATH } from "@/lib/admin-routes";
 
 const inputClass =
   "w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-white placeholder:text-zinc-600 transition focus:border-violet-500/40 focus:outline-none focus:ring-1 focus:ring-violet-500/20";
@@ -44,7 +45,7 @@ export default function AdminLoginClient() {
         return;
       }
 
-      router.replace("/admin-dashboard-secret-nexis");
+      router.replace(ADMIN_DASHBOARD_PATH);
       router.refresh();
     } catch {
       setError("Bağlantı hatası. Lütfen tekrar deneyin.");

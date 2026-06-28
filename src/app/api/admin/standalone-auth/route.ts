@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     const rateLimit = checkRateLimit(
-      `admin-login:${resolveClientKey(request)}`,
+      `admin-panel-om:${resolveClientKey(request)}`,
       8,
       15 * 60 * 1000,
     );

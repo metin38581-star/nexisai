@@ -6,7 +6,7 @@ import { hasValidStandaloneAdminSession } from "@/lib/standalone-admin-auth";
 export default async function AdminPage() {
   const authenticated = await hasValidStandaloneAdminSession();
   if (!authenticated) {
-    redirect("/admin-login");
+    redirect("/");
   }
 
   return <AdminBusinessDashboard />;
