@@ -615,8 +615,12 @@ function AnalysisDashboardContent({
                 campaignDays: payload.gunSayisi,
                 sectorSlug: payload.sectorSlug,
                 selectedQuestionIds: payload.selectedQuestionIds,
-                businessDomain: payload.businessWebsite,
-                businessWebsite: payload.businessWebsite,
+                ...(payload.businessWebsite?.trim()
+                  ? {
+                      businessDomain: payload.businessWebsite.trim(),
+                      businessWebsite: payload.businessWebsite.trim(),
+                    }
+                  : {}),
               }),
             }),
           );

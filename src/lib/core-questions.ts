@@ -10,6 +10,7 @@ import {
   type QuestionTemplate,
 } from "@/constants/campaign";
 import { EXTENDED_SECTOR_LABELS } from "@/constants/sector-data";
+import { enrichPlainTextWithAuthorityLink } from "@/lib/business-domain";
 import type { SelectedQuestionPair } from "@/lib/selected-questions";
 import { buildFallbackSimulatedAnswer } from "@/lib/selected-questions";
 
@@ -148,6 +149,7 @@ export function buildCoreQuestionPairs(
   cityLabel: string,
   brandName: string,
   sectorLabel: string,
+  businessDomain?: string | null,
 ): SelectedQuestionPair[] {
   const coreSector = resolveCoreQuestionSector(sectorSlug);
   if (!coreSector) {
@@ -168,14 +170,22 @@ export function buildCoreQuestionPairs(
 
       const question = fillQuestionTemplate(template.template, cityLabel);
 
-      return {
-        question,
-        simulatedAnswer: buildFallbackSimulatedAnswer(
+      const simulatedAnswer = enrichPlainTextWithAuthorityLink(
+        buildFallbackSimulatedAnswer(
           question,
           brandName,
           cityLabel,
           sectorLabel,
         ),
+        brandName,
+        cityLabel,
+        sectorLabel,
+        businessDomain,
+      );
+
+      return {
+        question,
+        simulatedAnswer,
       };
     })
     .filter((pair): pair is SelectedQuestionPair => pair !== null);

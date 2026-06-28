@@ -343,14 +343,17 @@ function finalizeGeneratedArticle(
 ): GeneratedIntentArticle {
   let html = article.html;
 
-  if (enrich?.businessDomain) {
-    html = enrichArticleWithAuthorityLinks(
-      html,
-      enrich.markaAdi,
-      enrich.sehir,
-      enrich.sektor,
-      resolvePrimaryAuthority(enrich.businessDomain),
-    );
+  if (enrich) {
+    const authority = resolvePrimaryAuthority(enrich.businessDomain);
+    if (authority.primaryAuthorityUrl) {
+      html = enrichArticleWithAuthorityLinks(
+        html,
+        enrich.markaAdi,
+        enrich.sehir,
+        enrich.sektor,
+        authority,
+      );
+    }
   }
 
   return {

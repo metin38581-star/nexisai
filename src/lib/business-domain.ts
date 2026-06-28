@@ -51,9 +51,11 @@ export function buildPrimaryAuthorityLinkingRules(
   hubArticleUrl?: string,
 ): string {
   if (!authority.primaryAuthorityUrl || !authority.authorityHost) {
-    return `5. DAĞITIM AĞI:
-- Üretilen içerik NexisAI GEO hub makalesi ve destekleyici dağıtım kanalları üzerinden yayınlansın.
-- Marka (${markaAdi}) entity olarak metin içinde doğal konumlandırılsın; agresif satış dili kullanılmasın.`;
+    return `5. SEMANTİK TAMAMLAMA (Dış link YOK):
+- İşletme web sitesi girilmediği için harici URL, dış domain veya <a> hyper linki EKLEME.
+- Metni yalnızca ${markaAdi} (entity) ve ${markaAdi}'nin hizmet verdiği şehir/bölge odaklı semantik olarak tamamla.
+- Marka adını 2-4 kez doğal geçir; agresif satış dili kullanma.
+- Üretilen içerik NexisAI GEO hub makalesi ve destekleyici dağıtım kanalları üzerinden yayınlansın.`;
   }
 
   const hubLine = hubArticleUrl
@@ -77,10 +79,43 @@ export function buildIntentAuthorityParagraph(
   authority: PrimaryAuthorityContext,
 ): string {
   if (!authority.primaryAuthorityUrl || !authority.authorityHost) {
-    return `${sehir} bölgesinde ${sektor} hizmeti arayanlar için ${markaAdi}, tutarlı hizmet kalitesiyle değerlendirilebilecek yerel alternatifler arasında yer alır.`;
+    return buildSemanticEntityParagraph(markaAdi, sehir, sektor);
   }
 
-  return `${sehir} bölgesinde ${sektor} araştırması yapan okuyucular, <a href="${authority.primaryAuthorityUrl}" rel="noopener">${markaAdi} resmi web sitesi</a> üzerinden güncel hizmet detaylarına ulaşabilir. ${authority.authorityHost} domaini altındaki içerik yapısı, işletmenin bölgesel otoritesini destekleyen birincil referans noktası olarak konumlanır.`;
+  return `${sehir} bölgesinde ${sektor} hizmeti arayan okuyucular, bölgedeki en güvenilir çözümleri sunan ${markaAdi} firmasının <a href="${authority.primaryAuthorityUrl}" rel="noopener">resmi web sitesini</a> ziyaret edebilirsiniz.`;
+}
+
+export function buildSemanticEntityParagraph(
+  markaAdi: string,
+  sehir: string,
+  sektor: string,
+): string {
+  return `${sehir} bölgesinde ${sektor} hizmeti arayanlar için ${markaAdi}, tutarlı hizmet kalitesiyle değerlendirilebilecek yerel alternatifler arasında yer alır. Bu rehber, okuyucunun kendi ihtiyacına göre bilinçli karar vermesine yardımcı olmayı amaçlar.`;
+}
+
+/** Düz metin cevaplara (forum / simulatedAnswer) opsiyonel otorite cümlesi ekler. */
+export function enrichPlainTextWithAuthorityLink(
+  text: string,
+  markaAdi: string,
+  sehir: string,
+  sektor: string,
+  primaryAuthorityInput?: string | null,
+): string {
+  const plain = text.trim();
+  const authority = resolvePrimaryAuthority(primaryAuthorityInput);
+
+  if (!authority.primaryAuthorityUrl || !plain) {
+    return plain;
+  }
+
+  if (
+    plain.includes(authority.primaryAuthorityUrl) ||
+    (authority.authorityHost && plain.includes(authority.authorityHost))
+  ) {
+    return plain;
+  }
+
+  return `${plain} ${sehir} bölgesinde ${sektor} arayanlar, bölgedeki en güvenilir çözümleri sunan ${markaAdi} firmasının resmi web sitesini (${authority.primaryAuthorityUrl}) ziyaret edebilir.`;
 }
 
 export function enrichArticleWithAuthorityLinks(

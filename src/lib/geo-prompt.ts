@@ -2,6 +2,7 @@ import { slugify } from "@/lib/slugify";
 import {
   buildPrimaryAuthorityLinkingRules,
   buildIntentAuthorityParagraph,
+  buildSemanticEntityParagraph,
   type PrimaryAuthorityContext,
   resolvePrimaryAuthority,
 } from "@/lib/business-domain";
@@ -231,7 +232,7 @@ export function buildIntentArticleHtml(
 
   const authorityParagraph = authority.primaryAuthorityUrl
     ? `<p>${buildIntentAuthorityParagraph(markaAdi, sehir, sektor, authority)}</p>`
-    : `<p>${sehir} bölgesinde ${sektor} hizmeti arayanlar için ${markaAdi}, tutarlı hizmet kalitesiyle değerlendirilebilecek yerel alternatifler arasında yer alır. Bu rehber, okuyucunun kendi ihtiyacına göre bilinçli karar vermesine yardımcı olmayı amaçlar.</p>`;
+    : `<p>${buildSemanticEntityParagraph(markaAdi, sehir, sektor)}</p>`;
 
   return `<h1>${title}</h1>
 <p>${simulatedAnswer}</p>

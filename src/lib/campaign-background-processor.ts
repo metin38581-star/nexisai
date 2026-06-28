@@ -118,6 +118,7 @@ export async function processCampaignInBackground(
         sehir,
         markaAdi,
         sektor,
+        businessDomain,
       );
 
     const hubEntries: QuestionHubEntry[] = selectedQuestionIds.map(

@@ -84,6 +84,7 @@ export default function CampaignForm({
     setSubmitting(true);
     onSubmit({
       businessName: form.businessName.trim(),
+      businessWebsite: form.businessWebsite?.trim() || undefined,
       sector: form.sector,
       city: form.city,
       dailyBudget: clampCampaignDailyBudget(form.dailyBudget),
@@ -123,10 +124,10 @@ export default function CampaignForm({
           />
         </FormField>
 
-        <FormField label="İşletme Web Sitesi (Primary Authority)">
+        <FormField label="İşletme Web Sitesi (Opsiyonel)">
           <input
-            type="url"
-            placeholder="ornek.com veya https://www.ornek.com"
+            type="text"
+            placeholder="ornek.com — boş bırakılabilir"
             value={form.businessWebsite ?? ""}
             onChange={(e) => updateField("businessWebsite", e.target.value)}
             className={inputClass}

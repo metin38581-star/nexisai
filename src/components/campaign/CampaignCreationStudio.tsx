@@ -260,10 +260,10 @@ export default function CampaignCreationStudio({
             />
           </CyberScanField>
 
-          <CyberScanField label="İşletme Web Sitesi">
+          <CyberScanField label="İşletme Web Sitesi (Opsiyonel)">
             <input
-              type="url"
-              placeholder="ornek.com"
+              type="text"
+              placeholder="ornek.com — boş bırakılabilir"
               value={form.businessWebsite ?? ""}
               onChange={(e) => updateField("businessWebsite", e.target.value)}
               className={inputClass}
