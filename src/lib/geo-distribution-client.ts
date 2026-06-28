@@ -139,6 +139,27 @@ export function isDevToDirectConfigured(): boolean {
   return Boolean(process.env.DEVTO_API_KEY?.trim());
 }
 
+const DEVTO_SAFE_TAGS = ["automation", "seo"] as const;
+const DEVTO_SAFE_TITLE_MAX = 140;
+const DEVTO_SAFE_FALLBACK_TITLE = "NexisAI Sektörel Analiz";
+
+function sterilizeDevToRequestPayload(
+  payload: DevToArticlePayload,
+  articleData: DevToDirectArticleData,
+): DevToArticlePayload {
+  const cleanTitle = String(articleData.baslik || DEVTO_SAFE_FALLBACK_TITLE)
+    .trim()
+    .substring(0, DEVTO_SAFE_TITLE_MAX);
+
+  return {
+    article: {
+      ...payload.article,
+      title: cleanTitle || DEVTO_SAFE_FALLBACK_TITLE,
+      tags: [...DEVTO_SAFE_TAGS],
+    },
+  };
+}
+
 /** Dev.to Forem API — Make.com olmadan doğrudan makale yayını. Asla throw etmez. */
 export async function publishToDevToDirect(
   articleData: DevToDirectArticleData,
@@ -157,7 +178,10 @@ export async function publishToDevToDirect(
       return null;
     }
 
-    const payload = buildDevToArticlePayload(articleData);
+    const payload = sterilizeDevToRequestPayload(
+      buildDevToArticlePayload(articleData),
+      articleData,
+    );
     const title = payload.article.title;
     const body_markdown = payload.article.body_markdown;
 
