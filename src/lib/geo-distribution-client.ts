@@ -10,6 +10,11 @@ import "server-only";
  */
 
 import type { GeoWebhookPayload } from "@/lib/distribution-core";
+import {
+  MAKE_WEBHOOK_CONTENT_TYPE,
+  normalizeMakeWebhookPayload,
+  serializeMakeWebhookPayload,
+} from "@/lib/make-webhook-payload";
 
 const WEBHOOK_TIMEOUT_MS = 15_000;
 
@@ -117,8 +122,27 @@ export async function dispatchToCentralWebhook(
     return { ok: false, status: 0, error: error.message };
   }
 
+  let requestBody: string;
+
+  try {
+    requestBody = serializeMakeWebhookPayload(payload);
+  } catch (error) {
+    console.error("Make Webhook Failed:", error, {
+      slug: payload.slug,
+      campaignId: payload.campaignId,
+    });
+    return {
+      ok: false,
+      status: 0,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Webhook JSON serileştirme hatası",
+    };
+  }
+
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    "Content-Type": MAKE_WEBHOOK_CONTENT_TYPE,
     Accept: "application/json",
   };
 
@@ -138,7 +162,7 @@ export async function dispatchToCentralWebhook(
     const response = await fetch(apiUrl, {
       method: "POST",
       headers,
-      body: JSON.stringify(payload),
+      body: requestBody,
       signal: controller.signal,
     });
 
@@ -222,7 +246,7 @@ export async function dispatchMakeWebhooksForArticles(
 
   await Promise.all(
     articles.map(async (article) => {
-      const payload: GeoWebhookPayload = {
+      const payload: GeoWebhookPayload = normalizeMakeWebhookPayload({
         campaignId: context.campaignId,
         baslik: article.baslik,
         icerik: article.icerik,
@@ -231,7 +255,7 @@ export async function dispatchMakeWebhooksForArticles(
         sehir: context.sehir,
         sektor: context.sektor,
         agresiflik: context.agresiflik,
-      };
+      });
 
       const result = await dispatchToCentralWebhook(payload);
       const key = article.id ?? article.slug;

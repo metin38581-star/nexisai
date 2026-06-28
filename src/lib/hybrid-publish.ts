@@ -1,6 +1,7 @@
 import "server-only";
 
 import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
+import { normalizeMakeWebhookPayload } from "@/lib/make-webhook-payload";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 import { prisma } from "@/lib/db";
@@ -35,16 +36,18 @@ export async function publishToHubAndMake(
 ): Promise<HybridPublishResult> {
   const nexisUrl = buildHubArticleUrl(input.slug);
 
-  const makeResult = await dispatchToCentralWebhook({
-    campaignId: input.campaignId,
-    baslik: input.baslik,
-    icerik: input.icerik,
-    slug: input.slug,
-    markaAdi: input.markaAdi,
-    sehir: input.sehir,
-    sektor: input.sektor,
-    agresiflik: input.agresiflik,
-  });
+  const makeResult = await dispatchToCentralWebhook(
+    normalizeMakeWebhookPayload({
+      campaignId: input.campaignId,
+      baslik: input.baslik,
+      icerik: input.icerik,
+      slug: input.slug,
+      markaAdi: input.markaAdi,
+      sehir: input.sehir,
+      sektor: input.sektor,
+      agresiflik: input.agresiflik,
+    }),
+  );
 
   let externalUrl: string | null = null;
 
