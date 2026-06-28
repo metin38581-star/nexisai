@@ -13,6 +13,7 @@ import type { GeoWebhookPayload } from "@/lib/distribution-core";
 import {
   MAKE_WEBHOOK_CONTENT_TYPE,
   buildMakeWebhookPayload,
+  buildMakeWebhookTransportPayload,
   resolveWebhookArticleFields,
   type WebhookArticleSource,
 } from "@/lib/make-webhook-payload";
@@ -82,11 +83,11 @@ function resolveWebhookAuthToken(): string | undefined {
 }
 
 function validateWebhookPayload(payload: GeoWebhookPayload): string | null {
-  if (!payload.baslik) {
-    return "baslik eksik";
+  if (!payload.title && !payload.baslik) {
+    return "title/baslik eksik";
   }
-  if (!payload.icerik) {
-    return "icerik eksik";
+  if (!payload.content && !payload.icerik) {
+    return "content/icerik eksik";
   }
   if (!payload.slug) {
     return "slug eksik";
@@ -116,21 +117,14 @@ export async function dispatchToCentralWebhook(
     return { ok: false, status: 0, error: error.message };
   }
 
-  const webhookPayload: GeoWebhookPayload = {
-    baslik: String(payload.baslik ?? "").trim(),
-    icerik: String(payload.icerik ?? "").trim(),
-    slug: String(payload.slug ?? "").trim(),
-    sehir: String(payload.sehir ?? "").trim(),
-    sektor: String(payload.sektor ?? "").trim(),
-    markaAdi: String(payload.markaAdi ?? "").trim(),
-    campaignId: String(payload.campaignId ?? "").trim(),
-    agresiflik: String(payload.agresiflik ?? "").trim(),
-  };
+  const webhookPayload = buildMakeWebhookTransportPayload(payload);
 
   const validationError = validateWebhookPayload(webhookPayload);
   if (validationError) {
     const error = new Error(`Webhook payload geçersiz: ${validationError}`);
     console.error("Make Webhook Failed:", error, {
+      titleLength: webhookPayload.title.length,
+      contentLength: webhookPayload.content.length,
       baslikLength: webhookPayload.baslik.length,
       icerikLength: webhookPayload.icerik.length,
       slug: webhookPayload.slug,
@@ -147,11 +141,11 @@ export async function dispatchToCentralWebhook(
 
   try {
     console.log(
-      `[MAKE_WEBHOOK]: Tetikleniyor → "${webhookPayload.baslik}" [${webhookPayload.slug}] (${webhookPayload.sehir} / ${webhookPayload.sektor})`,
+      `[MAKE_WEBHOOK]: Tetikleniyor → "${webhookPayload.title}" [${webhookPayload.slug}] (${webhookPayload.sehir} / ${webhookPayload.sektor})`,
     );
     console.log("Sending Payload to Make:", requestBody);
     console.log(
-      `[MAKE_WEBHOOK]: baslik=${webhookPayload.baslik.length} char, icerik=${webhookPayload.icerik.length} char`,
+      `[MAKE_WEBHOOK]: title=${webhookPayload.title.length} char, content=${webhookPayload.content.length} char, baslik=${webhookPayload.baslik.length} char, icerik=${webhookPayload.icerik.length} char`,
     );
 
     const response = await fetch(apiUrl, {
@@ -170,7 +164,7 @@ export async function dispatchToCentralWebhook(
       const { externalLiveUrl } = parseMakeWebhookResponse(responseBody);
 
       console.log(
-        `[MAKE_WEBHOOK]: OK (${response.status}) — "${webhookPayload.baslik}" [${webhookPayload.slug}]${externalLiveUrl ? ` → ${externalLiveUrl}` : ""}`,
+        `[MAKE_WEBHOOK]: OK (${response.status}) — "${webhookPayload.title}" [${webhookPayload.slug}]${externalLiveUrl ? ` → ${externalLiveUrl}` : ""}`,
       );
 
       return { ok: true, status: response.status, externalLiveUrl };

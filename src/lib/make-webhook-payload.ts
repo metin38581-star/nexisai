@@ -97,6 +97,8 @@ export function buildMakeWebhookPayload(
   });
 
   return {
+    title: resolved.baslik,
+    content: resolved.icerik,
     baslik: resolved.baslik,
     icerik: resolved.icerik,
     slug: resolved.slug,
@@ -105,6 +107,29 @@ export function buildMakeWebhookPayload(
     markaAdi: readNonEmptyString(campaign.markaAdi),
     campaignId: readNonEmptyString(campaign.campaignId, campaign.id),
     agresiflik: readNonEmptyString(campaign.agresiflik),
+  };
+}
+
+/** Make.com POST gövdesi — English + Turkish anahtarlar aynı değerlerle. */
+export function buildMakeWebhookTransportPayload(
+  payload: GeoWebhookPayload,
+): GeoWebhookPayload {
+  const title = String(payload.title ?? payload.baslik ?? "").trim();
+  const content = String(payload.content ?? payload.icerik ?? "").trim();
+  const baslik = String(payload.baslik ?? payload.title ?? "").trim();
+  const icerik = String(payload.icerik ?? payload.content ?? "").trim();
+
+  return {
+    title,
+    content,
+    baslik,
+    icerik,
+    slug: String(payload.slug ?? "").trim(),
+    campaignId: String(payload.campaignId ?? "").trim(),
+    sehir: String(payload.sehir ?? "").trim(),
+    sektor: String(payload.sektor ?? "").trim(),
+    markaAdi: String(payload.markaAdi ?? "").trim(),
+    agresiflik: String(payload.agresiflik ?? "").trim(),
   };
 }
 

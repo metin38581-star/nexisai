@@ -19,7 +19,10 @@ export type DistributionProgressListener = (
 
 /** Merkezi GEO webhook'una gönderilen kurumsal dağıtım paketi. */
 export interface GeoWebhookPayload {
-  campaignId: string;
+  /** Blogger / Make.com birincil başlık alanı */
+  title: string;
+  /** Blogger / Make.com birincil içerik alanı */
+  content: string;
   baslik: string;
   icerik: string;
   slug: string;
@@ -27,6 +30,7 @@ export interface GeoWebhookPayload {
   sehir: string;
   sektor: string;
   agresiflik: string;
+  campaignId: string;
 }
 
 /** Dağıtım hattındaki makale kaynağı (webhook article alanları). */
