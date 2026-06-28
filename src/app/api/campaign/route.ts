@@ -555,10 +555,29 @@ export async function POST(request: Request) {
         );
       }
 
+      if (
+        dbError instanceof Error &&
+        dbError.message === "WALLET_NOT_FOUND"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Cüzdan kaydı bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const errorMessage =
+        dbError instanceof Error ? dbError.message : String(dbError);
+
       return NextResponse.json(
         {
           success: false,
           error: "Kampanya kaydedilemedi. Lütfen tekrar deneyin.",
+          ...(process.env.NODE_ENV !== "production"
+            ? { debug: errorMessage }
+            : {}),
         },
         { status: 500 },
       );

@@ -4,16 +4,17 @@ import type { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/db";
 import { buildHubArticleUrl } from "@/lib/hub-url";
-import { SECTOR_OPTIONS } from "@/lib/constants";
-import { sumUserPaidTopUpsInPayments } from "@/lib/payment-store";
-import type { CreateCampaignInput, CreatedCampaignResult } from "@/lib/campaign-store";
+import {
+  completeCampaignWithBaits,
+  type CreateCampaignInput,
+  type CreatedCampaignResult,
+} from "@/lib/campaign-store";
+import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
+import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
+import { debitWalletForCampaign } from "@/lib/user-wallet-service";
 
 const WALLET_DEBIT_CODE = "WALLET_DEBIT";
-const SUCCESS_STATUSES = new Set(["success", "succeeded", "paid"]);
-
-function resolveSectorLabel(sektor: string): string {
-  return SECTOR_OPTIONS.find((option) => option.value === sektor)?.label ?? sektor;
-}
+const SUCCESS_STATUSES = ["success", "succeeded", "paid"] as const;
 
 function buildPublishedBaitFields(slug: string) {
   const hubUrl = buildHubArticleUrl(slug);
@@ -29,6 +30,15 @@ async function completeCampaignWithBaitsInTransaction(
   campaignId: string,
   input: Omit<CreateCampaignInput, "userId">,
 ): Promise<CreatedCampaignResult> {
+  const existing = await tx.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
   await tx.campaign.update({
     where: { id: campaignId },
     data: {
@@ -59,6 +69,65 @@ async function completeCampaignWithBaitsInTransaction(
   return { id: campaignId, baits };
 }
 
+async function debitWalletInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    userId: string;
+    campaignId: string;
+    amountSpent: number;
+    description: string;
+  },
+): Promise<{ balance: number; alreadyDebited: boolean }> {
+  const existingDebit = await tx.payment.findFirst({
+    where: {
+      campaignId: input.campaignId,
+      providerStatusCode: WALLET_DEBIT_CODE,
+      status: { in: [...SUCCESS_STATUSES] },
+    },
+  });
+
+  if (existingDebit) {
+    const wallet = await tx.wallet.findUnique({ where: { id: input.userId } });
+    return { balance: wallet?.balance ?? 0, alreadyDebited: true };
+  }
+
+  const wallet = await tx.wallet.findUnique({ where: { id: input.userId } });
+  if (!wallet) {
+    throw new Error("WALLET_NOT_FOUND");
+  }
+
+  const updated = await tx.wallet.updateMany({
+    where: {
+      id: input.userId,
+      balance: { gte: input.amountSpent },
+    },
+    data: { balance: { decrement: input.amountSpent } },
+  });
+
+  if (updated.count === 0) {
+    throw new Error("INSUFFICIENT_BALANCE");
+  }
+
+  await tx.payment.create({
+    data: {
+      userId: input.userId,
+      amount: input.amountSpent,
+      currency: "TRY",
+      status: "success",
+      provider: "internal",
+      providerStatusCode: WALLET_DEBIT_CODE,
+      description: input.description,
+      campaignId: input.campaignId,
+    },
+  });
+
+  const refreshed = await tx.wallet.findUniqueOrThrow({
+    where: { id: input.userId },
+  });
+
+  return { balance: refreshed.balance, alreadyDebited: false };
+}
+
 export interface CampaignBillingLogInput {
   campaignId: string;
   userId: string;
@@ -79,104 +148,27 @@ export interface CampaignBillingResult {
   campaign?: CreatedCampaignResult;
 }
 
-async function debitWalletAndWriteLogInTransaction(
-  tx: Prisma.TransactionClient,
-  input: CampaignBillingLogInput,
-): Promise<Omit<CampaignBillingResult, "campaign">> {
-  const existingDebit = await tx.payment.findFirst({
-    where: {
-      campaignId: input.campaignId,
-      providerStatusCode: WALLET_DEBIT_CODE,
-      status: { in: [...SUCCESS_STATUSES] },
-    },
+async function writeCampaignBillingLog(
+  billing: CampaignBillingLogInput,
+  balance: number,
+  amountDeposited: number,
+): Promise<void> {
+  await recordCampaignOperationalLog({
+    campaignId: billing.campaignId,
+    userId: billing.userId,
+    userEmail: billing.userEmail,
+    businessName: billing.businessName,
+    sector: billing.sector,
+    city: billing.city,
+    walletBalance: balance,
+    amountSpent: billing.amountSpent,
+    amountDeposited,
+    wordpressUrl: billing.wordpressUrl ?? null,
+    forumUrl: billing.forumUrl ?? null,
   });
-
-  let alreadyDebited = false;
-
-  await tx.wallet.upsert({
-    where: { id: input.userId },
-    create: { id: input.userId, balance: 0 },
-    update: {},
-  });
-
-  if (!existingDebit) {
-    const updated = await tx.wallet.updateMany({
-      where: {
-        id: input.userId,
-        balance: { gte: input.amountSpent },
-      },
-      data: { balance: { decrement: input.amountSpent } },
-    });
-
-    if (updated.count === 0) {
-      throw new Error("INSUFFICIENT_BALANCE");
-    }
-
-    await tx.payment.create({
-      data: {
-        userId: input.userId,
-        amount: input.amountSpent,
-        currency: "TRY",
-        status: "success",
-        provider: "internal",
-        providerStatusCode: WALLET_DEBIT_CODE,
-        description: input.description,
-        campaignId: input.campaignId,
-      },
-    });
-  } else {
-    alreadyDebited = true;
-  }
-
-  const wallet = await tx.wallet.findUnique({ where: { id: input.userId } });
-  const remainingBalance = wallet?.balance ?? 0;
-
-  const payments = await tx.payment.findMany({
-    where: { userId: input.userId },
-    select: {
-      amount: true,
-      status: true,
-      provider: true,
-      providerStatusCode: true,
-    },
-  });
-  const amountDeposited = sumUserPaidTopUpsInPayments(payments);
-
-  await tx.campaignLog.upsert({
-    where: { campaignId: input.campaignId },
-    create: {
-      campaignId: input.campaignId,
-      userId: input.userId,
-      userEmail: input.userEmail,
-      businessName: input.businessName,
-      sector: input.sector,
-      sectorLabel: resolveSectorLabel(input.sector),
-      city: input.city,
-      walletBalance: remainingBalance,
-      amountSpent: input.amountSpent,
-      amountDeposited,
-      wordpressUrl: input.wordpressUrl ?? null,
-      forumUrl: input.forumUrl ?? null,
-    },
-    update: {
-      userEmail: input.userEmail,
-      businessName: input.businessName,
-      sector: input.sector,
-      sectorLabel: resolveSectorLabel(input.sector),
-      city: input.city,
-      walletBalance: remainingBalance,
-      amountSpent: input.amountSpent,
-      amountDeposited,
-      wordpressUrl: input.wordpressUrl ?? null,
-      forumUrl: input.forumUrl ?? null,
-    },
-  });
-
-  return { balance: remainingBalance, amountDeposited, alreadyDebited };
 }
 
-/** Kampanya kaydı + cüzdan kesintisi + CampaignLog — tek Prisma transaction. */
-export async function finalizeCampaignCreationWithBilling(input: {
+async function runTransactionalCampaignBilling(input: {
   campaignId: string;
   campaign: Omit<CreateCampaignInput, "userId">;
   billing: CampaignBillingLogInput;
@@ -188,22 +180,103 @@ export async function finalizeCampaignCreationWithBilling(input: {
       input.campaign,
     );
 
-    const billing = await debitWalletAndWriteLogInTransaction(tx, {
-      ...input.billing,
+    const walletResult = await debitWalletInTransaction(tx, {
+      userId: input.billing.userId,
       campaignId: input.campaignId,
+      amountSpent: input.billing.amountSpent,
+      description: input.billing.description,
     });
 
-    return { ...billing, campaign };
+    return {
+      campaign,
+      balance: walletResult.balance,
+      alreadyDebited: walletResult.alreadyDebited,
+      amountDeposited: 0,
+    };
   });
 }
 
-/** Mevcut kampanya için cüzdan kesintisi + CampaignLog — tek Prisma transaction. */
+async function runFallbackCampaignBilling(input: {
+  campaignId: string;
+  campaign: Omit<CreateCampaignInput, "userId">;
+  billing: CampaignBillingLogInput;
+}): Promise<CampaignBillingResult> {
+  const campaign = await completeCampaignWithBaits(
+    input.campaignId,
+    input.campaign,
+  );
+
+  const walletResult = await debitWalletForCampaign(
+    input.billing.userId,
+    input.billing.amountSpent,
+    input.campaignId,
+    input.billing.description,
+  );
+
+  const amountDeposited = await sumUserPaidTopUpsByUserId(input.billing.userId);
+
+  return {
+    campaign,
+    balance: walletResult.balance,
+    alreadyDebited: walletResult.alreadyDebited,
+    amountDeposited,
+  };
+}
+
+/** Kampanya + cüzdan kesintisi atomik; log yazımı kampanyayı bloklamaz. */
+export async function finalizeCampaignCreationWithBilling(input: {
+  campaignId: string;
+  campaign: Omit<CreateCampaignInput, "userId">;
+  billing: CampaignBillingLogInput;
+}): Promise<CampaignBillingResult> {
+  let result: CampaignBillingResult;
+
+  try {
+    result = await runTransactionalCampaignBilling(input);
+    result.amountDeposited = await sumUserPaidTopUpsByUserId(
+      input.billing.userId,
+    );
+  } catch (transactionError) {
+    console.error(
+      "[CAMPAIGN_BILLING]: Transaction başarısız, sıralı fallback deneniyor:",
+      transactionError,
+    );
+    result = await runFallbackCampaignBilling(input);
+  }
+
+  await writeCampaignBillingLog(
+    input.billing,
+    result.balance,
+    result.amountDeposited,
+  );
+
+  return result;
+}
+
+/** Mevcut kampanya için cüzdan kesintisi + log. */
 export async function finalizeExistingCampaignBilling(
   input: CampaignBillingLogInput,
 ): Promise<CampaignBillingResult> {
-  return prisma.$transaction(async (tx) => {
-    return debitWalletAndWriteLogInTransaction(tx, input);
-  });
+  const walletResult = await debitWalletForCampaign(
+    input.userId,
+    input.amountSpent,
+    input.campaignId,
+    input.description,
+  );
+
+  const amountDeposited = await sumUserPaidTopUpsByUserId(input.userId);
+
+  await writeCampaignBillingLog(
+    input,
+    walletResult.balance,
+    amountDeposited,
+  );
+
+  return {
+    balance: walletResult.balance,
+    amountDeposited,
+    alreadyDebited: walletResult.alreadyDebited,
+  };
 }
 
 export async function updateCampaignLogPublicationUrls(

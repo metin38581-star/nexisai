@@ -6,6 +6,43 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl } from "@/lib/server-env";
 import type { AdminCampaignOverviewRow } from "@/types/admin";
 
+let campaignLogTableEnsured = false;
+
+async function ensureCampaignLogTable(): Promise<void> {
+  if (campaignLogTableEnsured || !hasDatabaseUrl()) {
+    return;
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "CampaignLog" (
+        "id" TEXT NOT NULL,
+        "campaign_id" TEXT NOT NULL,
+        "user_id" TEXT NOT NULL,
+        "user_email" TEXT NOT NULL,
+        "business_name" TEXT NOT NULL,
+        "sector" TEXT NOT NULL,
+        "sector_label" TEXT,
+        "city" TEXT NOT NULL,
+        "wallet_balance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "amount_spent" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "amount_deposited" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "wordpress_url" TEXT,
+        "forum_url" TEXT,
+        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "CampaignLog_pkey" PRIMARY KEY ("id")
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS "CampaignLog_campaign_id_key" ON "CampaignLog"("campaign_id");
+      CREATE INDEX IF NOT EXISTS "CampaignLog_user_id_idx" ON "CampaignLog"("user_id");
+      CREATE INDEX IF NOT EXISTS "CampaignLog_city_idx" ON "CampaignLog"("city");
+      CREATE INDEX IF NOT EXISTS "CampaignLog_sector_idx" ON "CampaignLog"("sector");
+    `);
+    campaignLogTableEnsured = true;
+  } catch (error) {
+    console.error("[CAMPAIGN_LOG]: CampaignLog tablosu oluşturulamadı:", error);
+  }
+}
+
 function resolveSectorLabel(sektor: string): string {
   return SECTOR_OPTIONS.find((option) => option.value === sektor)?.label ?? sektor;
 }
@@ -27,6 +64,7 @@ export interface RecordCampaignLogInput {
 async function recordCampaignLogViaPrisma(
   input: RecordCampaignLogInput,
 ): Promise<void> {
+  await ensureCampaignLogTable();
   const amountDeposited = input.amountDeposited ?? 0;
 
   await prisma.campaignLog.upsert({
