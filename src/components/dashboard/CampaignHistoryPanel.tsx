@@ -1,31 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { StoredCampaign } from "@/types/campaign";
 import { getCampaignMetaFromDb } from "@/lib/agresiflik";
-import { buildHubArticleUrl } from "@/lib/hub-url";
 
 interface CampaignHistoryPanelProps {
   campaigns: StoredCampaign[];
   isLoading: boolean;
 }
 
-function hasLiveUrl(url: string | null | undefined): url is string {
-  return typeof url === "string" && url.trim().length > 0;
+interface VisibilityMetric {
+  id: string;
+  title: string;
+  currentScore: number;
+  projectedScore: number;
+  description: string;
 }
 
-function resolveExternalUrl(
-  externalLiveUrl: string | null | undefined,
-  liveUrl: string | null | undefined,
-): string | undefined {
-  if (hasLiveUrl(externalLiveUrl)) {
-    return externalLiveUrl;
-  }
-  if (hasLiveUrl(liveUrl)) {
-    return liveUrl;
-  }
-  return undefined;
-}
+const VISIBILITY_METRICS: VisibilityMetric[] = [
+  {
+    id: "gptbot",
+    title: "ChatGPT (GPTBot) Önerilme Endeksi",
+    currentScore: 33,
+    projectedScore: 78,
+    description:
+      "Lokasyon bazlı aramalarda yapay zekanın ilk 3 önerisine giriş simülasyonu.",
+  },
+  {
+    id: "gemini",
+    title: "Google Gemini (AI Overviews) Görünürlük Skor",
+    currentScore: 12,
+    projectedScore: 64,
+    description:
+      "Google yerel arama haritaları ve Gemini GEO indeksleme ivmesi.",
+  },
+  {
+    id: "perplexity",
+    title: "Perplexity & Claude Doğruluk Oranı",
+    currentScore: 20,
+    projectedScore: 85,
+    description:
+      "Sektörel otorite ve semantik LSI bloklarının yapay zeka hafızasına işlenme başarısı.",
+  },
+];
 
 function resolveScoreStyle(skor: number): {
   ring: string;
@@ -166,6 +184,127 @@ function resolveSiberSignalGucu(gunlukButce: number): string {
   return "15/15 GHz";
 }
 
+function useCountUp(target: number, durationMs: number, active: boolean): number {
+  const [value, setValue] = useState(0);
+  const hasAnimatedRef = useRef(false);
+
+  useEffect(() => {
+    if (!active) {
+      setValue(0);
+      hasAnimatedRef.current = false;
+      return;
+    }
+
+    if (hasAnimatedRef.current) {
+      setValue(target);
+      return;
+    }
+
+    hasAnimatedRef.current = true;
+    const start = performance.now();
+
+    let frameId = 0;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / durationMs);
+      setValue(Math.round(progress * target));
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+      } else {
+        setValue(target);
+      }
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [active, durationMs, target]);
+
+  return value;
+}
+
+function ProjectedScore({
+  target,
+  animate,
+}: {
+  target: number;
+  animate: boolean;
+}) {
+  const value = useCountUp(target, 2000, animate);
+  const isComplete = animate && value >= target;
+
+  return (
+    <span
+      className={`text-sm font-bold tabular-nums transition-all duration-300 ${
+        isComplete
+          ? "text-emerald-300 drop-shadow-[0_0_12px_rgba(52,211,153,0.85)]"
+          : "text-emerald-400/80"
+      }`}
+    >
+      %{value}
+    </span>
+  );
+}
+
+function VisibilityMetricRow({
+  metric,
+  animate,
+}: {
+  metric: VisibilityMetric;
+  animate: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-violet-500/15 bg-slate-950/50 px-4 py-3.5 backdrop-blur-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-300/90">
+        {metric.title}
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
+        <span className="text-sm font-medium text-zinc-400">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500">
+            Mevcut Skor:
+          </span>{" "}
+          <span className="font-bold text-zinc-200">%{metric.currentScore}</span>
+        </span>
+
+        <span
+          className="text-lg font-bold text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.7)]"
+          aria-hidden
+        >
+          ➔
+        </span>
+
+        <span className="text-sm font-medium text-zinc-400">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500">
+            Tahmini Skor:
+          </span>{" "}
+          <ProjectedScore target={metric.projectedScore} animate={animate} />
+        </span>
+      </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+        {metric.description}
+      </p>
+    </div>
+  );
+}
+
+function AiVisibilityAnalysisPanel({ isOpen }: { isOpen: boolean }) {
+  return (
+    <div
+      className={`grid transition-all duration-500 ease-out ${
+        isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+      }`}
+    >
+      <div className="overflow-hidden">
+        <div className="space-y-3 px-5 pb-5 pt-1">
+          {VISIBILITY_METRICS.map((metric) => (
+            <VisibilityMetricRow key={metric.id} metric={metric} animate={isOpen} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CyberMetricsGrid({ campaign }: { campaign: StoredCampaign }) {
   const botRadar = resolveBotRadar(campaign);
   const signalGucu = resolveSiberSignalGucu(campaign.gunlukButce);
@@ -269,94 +408,6 @@ function RadarTrackingStatus({
   );
 }
 
-function formatPublicationLabel(count: number): string {
-  if (count <= 0) {
-    return "Yayın bekleniyor";
-  }
-  if (count === 1) {
-    return "1 Canlı GEO İçeriği";
-  }
-  return `${count} Canlı GEO İçeriği`;
-}
-
-function resolveActivePublicationCount(campaign: StoredCampaign): number {
-  if (campaign.baits.length > 0) {
-    return campaign.baits.length;
-  }
-  return campaign.makaleSayisi ?? 0;
-}
-
-function resolveBaitStatusLabel(bait: StoredCampaign["baits"][number]): {
-  text: string;
-  className: string;
-} {
-  const hasPublishedContent =
-    bait.yayinlandi ||
-    Boolean(bait.baslik?.trim()) ||
-    Boolean(bait.slug?.trim()) ||
-    Boolean(bait.icerik?.trim());
-
-  if (hasPublishedContent) {
-    return { text: "Yayında", className: "text-emerald-400" };
-  }
-
-  return { text: "Aktif", className: "text-emerald-400" };
-}
-
-function BaitPublicationRow({
-  bait,
-  index,
-}: {
-  bait: StoredCampaign["baits"][number];
-  index: number;
-}) {
-  const status = resolveBaitStatusLabel(bait);
-  const hubUrl = bait.slug?.trim() ? buildHubArticleUrl(bait.slug) : null;
-  const externalUrl = resolveExternalUrl(bait.externalLiveUrl, bait.liveUrl);
-
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-zinc-900/50 px-4 py-3 transition-colors hover:border-violet-500/20 hover:bg-zinc-900/70">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">{bait.baslik}</p>
-        <p className="mt-0.5 text-[10px] text-zinc-500">
-          Yayın {index + 1}
-          <span className={`ml-2 font-medium ${status.className}`}>
-            · {status.text}
-          </span>
-        </p>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
-        {hubUrl ? (
-          <a
-            href={hubUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400/50 hover:bg-indigo-500/20"
-          >
-            İçeriği Gör
-          </a>
-        ) : null}
-        {externalUrl ? (
-          <a
-            href={externalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
-          >
-            Yayın Linki
-          </a>
-        ) : null}
-        {!hubUrl && !externalUrl ? (
-          <span className="text-[10px] font-medium text-zinc-500">
-            Link bekleniyor
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function LlmInjectionStatus({
   isOptimized,
   lastCheckedAt,
@@ -414,15 +465,11 @@ function LlmInjectionStatus({
 }
 
 function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
+  const [visibilityOpen, setVisibilityOpen] = useState(true);
   const scoreStyle = resolveScoreStyle(campaign.skor);
   const toplamButce = campaign.gunlukButce * campaign.gunSayisi;
   const meta = getCampaignMetaFromDb(campaign);
   const badgeClass = `inline-flex rounded-full border bg-zinc-950/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${meta.renk}`;
-  const publicationCount = resolveActivePublicationCount(campaign);
-  const sortedBaits = [...campaign.baits].sort(
-    (a, b) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
 
   return (
     <article className="glass-card overflow-hidden border border-violet-500/15 transition-colors hover:border-violet-500/30">
@@ -454,14 +501,6 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
             </p>
             <p className="mt-2 text-[11px] text-zinc-500">
               {formatCampaignDate(campaign.createdAt)}
-              {publicationCount > 0 ? (
-                <>
-                  <span className="mx-2 text-zinc-600">·</span>
-                  <span className="font-medium text-emerald-400/90">
-                    {formatPublicationLabel(publicationCount)}
-                  </span>
-                </>
-              ) : null}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
@@ -495,32 +534,29 @@ function CampaignCard({ campaign }: { campaign: StoredCampaign }) {
         </div>
       </div>
 
-      {(sortedBaits.length > 0 || publicationCount > 0) && (
-        <div className="border-t border-violet-500/10 bg-zinc-950/40 px-5 py-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-cyan-400">
-            Canlı GEO Yayınları
-            {sortedBaits.length > 0 ? (
-              <span className="ml-2 normal-case tracking-normal text-zinc-500">
-                · {sortedBaits.length} aktif içerik
-              </span>
-            ) : null}
-          </p>
-
-          {sortedBaits.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {sortedBaits.map((bait, index) => (
-                <BaitPublicationRow key={bait.id} bait={bait} index={index} />
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90">
-              Bu operasyon için {publicationCount} içerik üretildi; yayın
-              kayıtları henüz senkronize edilmedi. Sayfayı yenileyin veya birkaç
-              dakika sonra tekrar deneyin.
+      <div className="border-t border-violet-500/10 bg-gradient-to-b from-zinc-950/20 to-zinc-950/60">
+        <button
+          type="button"
+          onClick={() => setVisibilityOpen((open) => !open)}
+          className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-violet-500/5"
+        >
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-cyan-400">
+              Yapay Zeka Motorları Görünürlük Analizi
             </p>
-          )}
-        </div>
-      )}
+            <p className="mt-1 text-[11px] text-zinc-500">
+              Mevcut ➔ tahmini LLM görünürlük dönüşüm simülasyonu
+            </p>
+          </div>
+          <ChevronDown
+            className={`h-5 w-5 shrink-0 text-violet-400 transition-transform duration-300 ${
+              visibilityOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+
+        <AiVisibilityAnalysisPanel isOpen={visibilityOpen} />
+      </div>
     </article>
   );
 }
