@@ -12,8 +12,8 @@ import "server-only";
 import type { GeoWebhookPayload } from "@/lib/distribution-core";
 import {
   MAKE_WEBHOOK_CONTENT_TYPE,
+  buildMakeWebhookRequestBody,
   normalizeMakeWebhookPayload,
-  serializeMakeWebhookPayload,
 } from "@/lib/make-webhook-payload";
 
 const WEBHOOK_TIMEOUT_MS = 15_000;
@@ -125,9 +125,12 @@ export async function dispatchToCentralWebhook(
   }
 
   let requestBody: string;
+  let requestByteLength: number;
 
   try {
-    requestBody = serializeMakeWebhookPayload(normalizedPayload);
+    const built = buildMakeWebhookRequestBody(normalizedPayload);
+    requestBody = built.json;
+    requestByteLength = built.byteLength;
   } catch (error) {
     console.error("Make Webhook Failed:", error, {
       slug: normalizedPayload.slug,
@@ -144,6 +147,7 @@ export async function dispatchToCentralWebhook(
   }
 
   const token = resolveWebhookAuthToken();
+  const bodyBytes = new TextEncoder().encode(requestBody);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
@@ -152,16 +156,20 @@ export async function dispatchToCentralWebhook(
     console.log(
       `[MAKE_WEBHOOK]: Tetikleniyor → "${normalizedPayload.baslik}" [${normalizedPayload.slug}] (${normalizedPayload.sehir} / ${normalizedPayload.sektor})`,
     );
-    console.log("Sending Payload to Make:", JSON.stringify(normalizedPayload));
+    console.log("Sending Payload to Make:", requestBody);
+    console.log(
+      `[MAKE_WEBHOOK]: JSON doğrulandı — ${requestByteLength} byte, Content-Type: ${MAKE_WEBHOOK_CONTENT_TYPE}`,
+    );
 
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": MAKE_WEBHOOK_CONTENT_TYPE,
         Accept: "application/json",
+        "Content-Length": String(bodyBytes.byteLength),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: requestBody,
+      body: bodyBytes,
       signal: controller.signal,
     });
 
