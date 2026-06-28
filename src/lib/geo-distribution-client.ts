@@ -12,9 +12,7 @@ import "server-only";
 import type { GeoWebhookPayload } from "@/lib/distribution-core";
 import {
   MAKE_WEBHOOK_CONTENT_TYPE,
-  buildMakeWebhookRequestBody,
-  escapeJSONString,
-  normalizeMakeWebhookPayload,
+  buildMakeWebhookPayload,
 } from "@/lib/make-webhook-payload";
 
 const WEBHOOK_TIMEOUT_MS = 15_000;
@@ -82,22 +80,22 @@ function resolveWebhookAuthToken(): string | undefined {
 }
 
 function validateWebhookPayload(payload: GeoWebhookPayload): string | null {
-  if (!payload.baslik?.trim()) {
+  if (!payload.baslik) {
     return "baslik eksik";
   }
-  if (!payload.icerik?.trim()) {
+  if (!payload.icerik) {
     return "icerik eksik";
   }
-  if (!payload.slug?.trim()) {
+  if (!payload.slug) {
     return "slug eksik";
   }
-  if (!payload.sehir?.trim()) {
+  if (!payload.sehir) {
     return "sehir eksik";
   }
-  if (!payload.sektor?.trim()) {
+  if (!payload.sektor) {
     return "sektor eksik";
   }
-  if (!payload.markaAdi?.trim()) {
+  if (!payload.markaAdi) {
     return "markaAdi eksik";
   }
   return null;
@@ -116,55 +114,42 @@ export async function dispatchToCentralWebhook(
     return { ok: false, status: 0, error: error.message };
   }
 
-  const normalizedPayload = normalizeMakeWebhookPayload(payload);
-
-  const safePayload: GeoWebhookPayload = {
-    ...normalizedPayload,
-    icerik: escapeJSONString(String(payload.icerik ?? "")),
+  const webhookPayload: GeoWebhookPayload = {
+    baslik: String(payload.baslik ?? "").trim(),
+    icerik: String(payload.icerik ?? "").trim(),
+    slug: String(payload.slug ?? "").trim(),
+    sehir: String(payload.sehir ?? "").trim(),
+    sektor: String(payload.sektor ?? "").trim(),
+    markaAdi: String(payload.markaAdi ?? "").trim(),
+    campaignId: String(payload.campaignId ?? "").trim(),
+    agresiflik: String(payload.agresiflik ?? "").trim(),
   };
 
-  const validationError = validateWebhookPayload(safePayload);
+  const validationError = validateWebhookPayload(webhookPayload);
   if (validationError) {
     const error = new Error(`Webhook payload geçersiz: ${validationError}`);
-    console.error("Make Webhook Failed:", error, safePayload);
+    console.error("Make Webhook Failed:", error, {
+      baslikLength: webhookPayload.baslik.length,
+      icerikLength: webhookPayload.icerik.length,
+      slug: webhookPayload.slug,
+      campaignId: webhookPayload.campaignId,
+    });
     return { ok: false, status: 0, error: error.message };
   }
 
-  let requestBody: string;
-  let requestByteLength: number;
-
-  try {
-    const built = buildMakeWebhookRequestBody(safePayload);
-    requestBody = built.json;
-    requestByteLength = built.byteLength;
-  } catch (error) {
-    console.error("Make Webhook Failed:", error, {
-      slug: safePayload.slug,
-      campaignId: safePayload.campaignId,
-    });
-    return {
-      ok: false,
-      status: 0,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Webhook JSON serileştirme hatası",
-    };
-  }
-
+  const requestBody = JSON.stringify(webhookPayload);
   const token = resolveWebhookAuthToken();
-  const bodyBytes = new TextEncoder().encode(requestBody);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
   try {
     console.log(
-      `[MAKE_WEBHOOK]: Tetikleniyor → "${safePayload.baslik}" [${safePayload.slug}] (${safePayload.sehir} / ${safePayload.sektor})`,
+      `[MAKE_WEBHOOK]: Tetikleniyor → "${webhookPayload.baslik}" [${webhookPayload.slug}] (${webhookPayload.sehir} / ${webhookPayload.sektor})`,
     );
     console.log("Sending Payload to Make:", requestBody);
     console.log(
-      `[MAKE_WEBHOOK]: JSON doğrulandı — ${requestByteLength} byte, Content-Type: ${MAKE_WEBHOOK_CONTENT_TYPE}`,
+      `[MAKE_WEBHOOK]: baslik=${webhookPayload.baslik.length} char, icerik=${webhookPayload.icerik.length} char`,
     );
 
     const response = await fetch(apiUrl, {
@@ -172,10 +157,9 @@ export async function dispatchToCentralWebhook(
       headers: {
         "Content-Type": MAKE_WEBHOOK_CONTENT_TYPE,
         Accept: "application/json",
-        "Content-Length": String(bodyBytes.byteLength),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: bodyBytes,
+      body: requestBody,
       signal: controller.signal,
     });
 
@@ -184,7 +168,7 @@ export async function dispatchToCentralWebhook(
       const { externalLiveUrl } = parseMakeWebhookResponse(responseBody);
 
       console.log(
-        `[MAKE_WEBHOOK]: OK (${response.status}) — "${safePayload.baslik}" [${safePayload.slug}]${externalLiveUrl ? ` → ${externalLiveUrl}` : ""}`,
+        `[MAKE_WEBHOOK]: OK (${response.status}) — "${webhookPayload.baslik}" [${webhookPayload.slug}]${externalLiveUrl ? ` → ${externalLiveUrl}` : ""}`,
       );
 
       return { ok: true, status: response.status, externalLiveUrl };
@@ -195,8 +179,8 @@ export async function dispatchToCentralWebhook(
       `HTTP ${response.status}${errorBody ? `: ${errorBody.slice(0, 300)}` : ""}`,
     );
     console.error("Make Webhook Failed:", error, {
-      slug: safePayload.slug,
-      campaignId: safePayload.campaignId,
+      slug: webhookPayload.slug,
+      campaignId: webhookPayload.campaignId,
     });
 
     return {
@@ -206,10 +190,10 @@ export async function dispatchToCentralWebhook(
     };
   } catch (error) {
     console.error("Make Webhook Failed:", error, {
-      slug: safePayload.slug,
-      campaignId: safePayload.campaignId,
-      sehir: safePayload.sehir,
-      sektor: safePayload.sektor,
+      slug: webhookPayload.slug,
+      campaignId: webhookPayload.campaignId,
+      sehir: webhookPayload.sehir,
+      sektor: webhookPayload.sektor,
     });
 
     return {
@@ -226,9 +210,11 @@ export async function dispatchToCentralWebhook(
 export async function dispatchMakeWebhooksForArticles(
   articles: Array<{
     id?: string;
-    baslik: string;
-    icerik: string;
-    slug: string;
+    baslik?: string;
+    title?: string;
+    icerik?: string;
+    content?: string;
+    slug?: string;
   }>,
   context: {
     campaignId: string;
@@ -259,19 +245,9 @@ export async function dispatchMakeWebhooksForArticles(
 
   await Promise.all(
     articles.map(async (article) => {
-      const payload: GeoWebhookPayload = normalizeMakeWebhookPayload({
-        campaignId: context.campaignId,
-        baslik: article.baslik,
-        icerik: article.icerik,
-        slug: article.slug,
-        markaAdi: context.markaAdi,
-        sehir: context.sehir,
-        sektor: context.sektor,
-        agresiflik: context.agresiflik,
-      });
-
+      const payload = buildMakeWebhookPayload(article, context);
       const result = await dispatchToCentralWebhook(payload);
-      const key = article.id ?? article.slug;
+      const key = article.id ?? article.slug ?? payload.slug;
       results.set(key, result);
     }),
   );

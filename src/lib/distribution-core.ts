@@ -1,5 +1,5 @@
 import { buildGeoPostTitle } from "@/lib/geo-prompt";
-import { normalizeMakeWebhookPayload } from "@/lib/make-webhook-payload";
+import { buildMakeWebhookPayload } from "@/lib/make-webhook-payload";
 
 export type DistributionPhase = "idle" | "started" | "publishing" | "completed";
 
@@ -69,16 +69,7 @@ export function buildGeoWebhookPayload(
   article: GeoDistributionArticle,
   context: GeoDistributionContext,
 ): GeoWebhookPayload {
-  return normalizeMakeWebhookPayload({
-    campaignId: context.campaignId,
-    baslik: article.baslik,
-    icerik: article.icerik,
-    slug: article.slug,
-    markaAdi: context.markaAdi,
-    sehir: context.sehir,
-    sektor: context.sektor,
-    agresiflik: context.agresiflik,
-  });
+  return buildMakeWebhookPayload(article, context);
 }
 
 export function buildDistributionTerminalMessage(
