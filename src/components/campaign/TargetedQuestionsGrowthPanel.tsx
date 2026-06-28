@@ -66,8 +66,12 @@ export default function TargetedQuestionsGrowthPanel({
       }
       const data = (await response.json()) as CampaignGrowthLoopResponse & {
         success?: boolean;
+        status?: "pending" | "ready";
       };
-      if (data.questionScores) {
+      if (data.status === "pending") {
+        return;
+      }
+      if (data.questionScores?.length) {
         setGrowthLoop(data);
       }
     } finally {
@@ -77,10 +81,26 @@ export default function TargetedQuestionsGrowthPanel({
 
   useEffect(() => {
     void fetchGrowthLoop();
-    const interval = window.setInterval(() => {
+
+    let slowIntervalId: number | undefined;
+    const fastIntervalId = window.setInterval(() => {
       void fetchGrowthLoop();
-    }, 60_000);
-    return () => window.clearInterval(interval);
+    }, 5_000);
+
+    const slowTimeoutId = window.setTimeout(() => {
+      window.clearInterval(fastIntervalId);
+      slowIntervalId = window.setInterval(() => {
+        void fetchGrowthLoop();
+      }, 60_000);
+    }, 120_000);
+
+    return () => {
+      window.clearInterval(fastIntervalId);
+      window.clearTimeout(slowTimeoutId);
+      if (slowIntervalId !== undefined) {
+        window.clearInterval(slowIntervalId);
+      }
+    };
   }, [fetchGrowthLoop]);
 
   const questionRows = useMemo((): QuestionRow[] => {

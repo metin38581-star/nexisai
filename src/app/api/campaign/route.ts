@@ -24,7 +24,9 @@ import { MIN_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import {
   validateCoreQuestionSelection,
+  buildCoreQuestionPairs,
 } from "@/lib/core-questions";
+import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
 import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
@@ -373,6 +375,30 @@ export async function POST(request: Request) {
 
     const startupLogs = buildStartupTerminalLogs(trimmedMarka, trimmedSehir);
     await initCampaignProcessingState(reservedCampaignId, startupLogs);
+
+    if (sectorSlug && selectedQuestionIds.length > 0) {
+      try {
+        const growthQuestions = buildCoreQuestionPairs(
+          selectedQuestionIds,
+          sectorSlug,
+          trimmedSehir,
+          trimmedMarka,
+          trimmedSektor,
+          businessDomain,
+        ).map((pair) => pair.question);
+
+        await ensureCampaignGrowthLoop(
+          reservedCampaignId,
+          activeUserId,
+          growthQuestions,
+        );
+      } catch (growthLoopError) {
+        console.error(
+          "[CAMPAIGN_POST]: Growth loop erken oluşturma başarısız:",
+          growthLoopError,
+        );
+      }
+    }
 
     after(() => {
       void processCampaignInBackground({

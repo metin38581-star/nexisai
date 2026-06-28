@@ -70,6 +70,32 @@ export async function createCampaignGrowthLoop(
   });
 }
 
+/** Growth loop yoksa oluşturur; mevcut kaydı korur. */
+export async function ensureCampaignGrowthLoop(
+  campaignId: string,
+  userId: string,
+  questions: string[],
+): Promise<void> {
+  const normalizedQuestions = questions
+    .map((question) => question.trim())
+    .filter(Boolean);
+
+  if (normalizedQuestions.length === 0) {
+    return;
+  }
+
+  const existing = await prisma.campaignGrowthLoop.findUnique({
+    where: { campaignId },
+    select: { id: true },
+  });
+
+  if (existing) {
+    return;
+  }
+
+  await createCampaignGrowthLoop(campaignId, userId, normalizedQuestions);
+}
+
 export async function getCampaignGrowthLoop(campaignId: string) {
   let loop = await prisma.campaignGrowthLoop.findUnique({
     where: { campaignId },

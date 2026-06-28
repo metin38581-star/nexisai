@@ -15,7 +15,7 @@ import {
   updateCampaignLogPublicationUrls,
 } from "@/lib/campaign-billing";
 import { releaseCampaignProcessingLock } from "@/lib/campaign-store";
-import { createCampaignGrowthLoop } from "@/lib/growth-loop-store";
+import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import {
   buildBaitRecordsFromSelectedQuestionsAsync,
   type SelectedQuestionPair,
@@ -259,7 +259,7 @@ export async function processCampaignInBackground(
       selectedQuestionPairs.length > 0
         ? selectedQuestionPairs.map((pair) => pair.question)
         : buildFixedVisibilityQuestionList(sehir);
-    await createCampaignGrowthLoop(
+    await ensureCampaignGrowthLoop(
       yeniKampanya.id,
       userId,
       growthQuestions,
