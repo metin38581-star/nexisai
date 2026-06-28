@@ -7,6 +7,7 @@ import {
   buildVisibilitySimulationContent,
   type LlmEngine,
 } from "@/lib/llm-visibility-ui";
+import type { BusinessSector } from "@/types/campaign";
 
 const TYPING_INTERVAL_MS = 16;
 
@@ -14,6 +15,8 @@ interface LiveLlmVisibilitySimulatorProps {
   question: string;
   brandName: string;
   selectedCity?: string | null;
+  sectorSlug?: BusinessSector | "";
+  sectorLabel?: string | null;
   llmEngine: LlmEngine;
   isActive: boolean;
 }
@@ -62,6 +65,8 @@ export default function LiveLlmVisibilitySimulator({
   question,
   brandName,
   selectedCity,
+  sectorSlug = "",
+  sectorLabel = "",
   llmEngine,
   isActive,
 }: LiveLlmVisibilitySimulatorProps) {
@@ -78,6 +83,7 @@ export default function LiveLlmVisibilitySimulator({
     selectedCity,
     brandName,
     llmEngine.name,
+    { sectorSlug, sectorLabel },
   );
   const questionText = question.trim();
 

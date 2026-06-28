@@ -264,6 +264,8 @@ export default function TargetedQuestionsGrowthPanel({
                 question={activeSimulation.question}
                 brandName={brandName}
                 selectedCity={selectedCity}
+                sectorSlug={sectorSlug}
+                sectorLabel={sectorLabel}
                 llmEngine={activeSimulation.llmEngine}
                 isActive
               />
