@@ -13,6 +13,8 @@ import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { resolvePrimaryAuthority } from "@/lib/business-domain";
 import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { debitWalletForCampaign } from "@/lib/user-wallet-service";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { hasSupabaseAdminEnv } from "@/lib/server-env";
 
 const WALLET_DEBIT_CODE = "WALLET_DEBIT";
 const SUCCESS_STATUSES = ["success", "succeeded", "paid"] as const;
@@ -331,9 +333,46 @@ export async function updateCampaignLogPublicationUrls(
       data,
     });
   } catch (error) {
-    console.error("[CAMPAIGN_BILLING]: Yayın URL güncellenemedi:", {
+    console.error("[CAMPAIGN_BILLING]: Prisma yayın URL güncellenemedi:", {
       campaignId,
       error,
     });
+  }
+
+  if (!hasSupabaseAdminEnv()) {
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const patch: Record<string, string | null> = {};
+
+    if ("wordpressUrl" in urls) {
+      patch.wordpress_url = urls.wordpressUrl ?? null;
+    }
+    if ("forumUrl" in urls) {
+      patch.forum_url = urls.forumUrl ?? null;
+    }
+    if ("blogUrl" in urls) {
+      patch.blog_url = urls.blogUrl ?? null;
+    }
+    if ("primaryAuthorityUrl" in urls) {
+      patch.primary_authority_url = urls.primaryAuthorityUrl ?? null;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("CampaignLog")
+      .update(patch)
+      .eq("campaign_id", campaignId);
+
+    if (error) {
+      console.error("[CAMPAIGN_BILLING]: Supabase yayın URL güncellenemedi:", error);
+    }
+  } catch (error) {
+    console.error("[CAMPAIGN_BILLING]: Supabase yayın URL fallback hatası:", error);
   }
 }

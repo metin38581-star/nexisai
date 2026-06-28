@@ -17,9 +17,12 @@ import {
 import { releaseCampaignProcessingLock } from "@/lib/campaign-store";
 import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import {
-  buildBaitRecordsFromSelectedQuestions,
+  buildBaitRecordsFromSelectedQuestionsAsync,
   type SelectedQuestionPair,
 } from "@/lib/selected-questions";
+import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { summarizeCampaignOutcome } from "@/lib/campaign-outcome";
+import { revalidatePath } from "next/cache";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
 import { applyDistributionPlatforms } from "@/lib/distribution-platform";
 import { attachCampaignIntents } from "@/lib/campaign-intent-store";
@@ -173,16 +176,23 @@ export async function processCampaignInBackground(
         businessDomain,
       );
 
-    const hubEntries: QuestionHubEntry[] = selectedQuestionIds.map(
-      (coreQuestionId, index) => ({
-        coreQuestionId,
-        question: selectedQuestionPairs[index]?.question ?? "",
-        simulatedAnswer: selectedQuestionPairs[index]?.simulatedAnswer ?? "",
-        city: sehir,
-        sectorLabel: sektor,
-        sectorSlug: sectorSlug as BusinessSector,
-      }),
-    );
+    const hubEntries = selectedQuestionIds
+      .map((coreQuestionId, index) => {
+        const pair = selectedQuestionPairs[index];
+        if (!pair?.question?.trim()) {
+          return null;
+        }
+
+        return {
+          coreQuestionId,
+          question: pair.question,
+          simulatedAnswer: pair.simulatedAnswer ?? "",
+          city: sehir,
+          sectorLabel: sektor,
+          sectorSlug: sectorSlug as BusinessSector,
+        };
+      })
+      .filter((entry) => entry !== null) as QuestionHubEntry[];
 
     const aiBaits = generateAiBaits(markaAdi, sektor, sehir);
     const questionPairsForBaits = selectedQuestionPairs;
@@ -224,19 +234,21 @@ export async function processCampaignInBackground(
       `[YEMLEME] ${makaleSayisi} adet GEO makalesi ve forum yorumları paralel üretiliyor...`,
     );
 
-    const primaryForumSlug = hubEntries[0]?.question
-      ? buildQuestionHubSlug(hubEntries[0].question)
-      : null;
-
     const usedSlugs = new Set<string>();
+    const baitContext = {
+      targetCity,
+      targetNiche,
+      targetBrand,
+      targetDomain: businessDomain,
+      slugPrefix: campaignId.slice(0, 8),
+    };
+
     const baitRecords =
       questionPairsForBaits.length > 0
-        ? buildBaitRecordsFromSelectedQuestions(questionPairsForBaits, {
-            targetCity,
-            targetNiche,
-            targetBrand,
-            targetDomain: businessDomain,
-          })
+        ? await buildBaitRecordsFromSelectedQuestionsAsync(
+            questionPairsForBaits,
+            baitContext,
+          )
         : applyDistributionPlatforms(
             buildFallbackMakaleler(makaleSayisi).map((makale, index) => {
               const baslik = buildIntentPostTitle(
@@ -249,7 +261,7 @@ export async function processCampaignInBackground(
               return {
                 baslik,
                 icerik: makale,
-                slug,
+                slug: `${campaignId.slice(0, 8)}-${slug}`.slice(0, 120),
                 platform: "WORDPRESS",
               };
             }),
@@ -257,11 +269,8 @@ export async function processCampaignInBackground(
 
     const publicationUrls = buildCampaignPublicationUrls({
       primarySlug: baitRecords[0]?.slug,
-      forumSlug: primaryForumSlug,
       businessDomain,
     });
-
-    await updateCampaignLogPublicationUrls(campaignId, publicationUrls);
 
     const billingResult = await finalizeCampaignCreationWithBilling({
       campaignId,
@@ -288,7 +297,6 @@ export async function processCampaignInBackground(
         city: sehir,
         amountSpent: toplamMaliyet,
         description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
-        forumUrl: publicationUrls.forumUrl,
         blogUrl: publicationUrls.blogUrl,
         primaryAuthorityUrl: publicationUrls.primaryAuthorityUrl,
         businessDomain: businessDomain ?? null,
@@ -319,6 +327,7 @@ export async function processCampaignInBackground(
           slug: bait.slug,
           baslik: bait.baslik,
         });
+        throw new Error(`EMPTY_BAIT_CONTENT:${bait.slug}`);
       }
     }
 
@@ -334,11 +343,44 @@ export async function processCampaignInBackground(
       "[YEMLEME] Forum hub cevapları paralel LLM ile yazılıyor...",
     );
 
-    await appendCampaignAnswersToQuestionHub({
+    const hubPublishResult = await appendCampaignAnswersToQuestionHub({
       campaignId: yeniKampanya.id,
       brandName: targetBrand,
       entries: hubEntries,
     });
+
+    const forumUrlByBaitId: Record<string, string> = {};
+    for (const entry of hubEntries) {
+      const pairIndex = selectedQuestionIds.indexOf(entry.coreQuestionId);
+      const bait = pairIndex >= 0 ? persistedBaits[pairIndex] : undefined;
+      if (!bait) {
+        continue;
+      }
+
+      const forumSlug = buildQuestionHubSlug(entry.question);
+      if (forumSlug) {
+        forumUrlByBaitId[bait.id] = buildForumHubUrl(forumSlug);
+      }
+    }
+
+    const primaryForumSlug = hubPublishResult.publishedSlugs[0] ?? null;
+    await updateCampaignLogPublicationUrls(campaignId, {
+      ...(primaryForumSlug
+        ? { forumUrl: buildForumHubUrl(primaryForumSlug) }
+        : {}),
+      blogUrl: publicationUrls.blogUrl,
+      primaryAuthorityUrl: publicationUrls.primaryAuthorityUrl,
+    });
+
+    for (const slug of hubPublishResult.publishedSlugs) {
+      revalidatePath(`/forum/${slug}`);
+      revalidatePath(`/forum/topic/${slug}`);
+    }
+
+    for (const bait of persistedBaits) {
+      revalidatePath(`/p/${bait.slug}`);
+      revalidatePath(`/posts/${bait.slug}`);
+    }
 
     const growthQuestions =
       selectedQuestionPairs.length > 0
@@ -363,6 +405,7 @@ export async function processCampaignInBackground(
         sehir,
         sektor,
         agresiflik: agresiflikSeviyesi,
+        forumUrlByBaitId,
       }),
     );
 
@@ -372,10 +415,20 @@ export async function processCampaignInBackground(
 
     const wordpressUrl =
       distributionResults.find(
-        (result) => result.ok && result.externalLiveUrl,
+        (result) =>
+          result.ok &&
+          result.externalLiveUrl &&
+          result.platform?.toUpperCase() === "WORDPRESS",
       )?.externalLiveUrl ?? null;
 
     await updateCampaignLogPublicationUrls(campaignId, { wordpressUrl });
+
+    const outcome = summarizeCampaignOutcome({
+      distributionResults,
+      hubPublished: persistedBaits.length > 0,
+      forumPublishedCount: hubPublishResult.publishedSlugs.length,
+      forumAttemptCount: hubEntries.length,
+    });
 
     const primarySlug = persistedBaits[0]?.slug;
     const hubArticles = persistedBaits.map((bait) => ({
@@ -419,9 +472,9 @@ export async function processCampaignInBackground(
     ];
 
     const result: Partial<CampaignResponse> = {
-      success: true,
+      success: outcome.success,
       campaignId,
-      status: "complete",
+      status: outcome.status === "failed" ? "failed" : "complete",
       metrics,
       terminalLogs: mergedLogs,
       llmResult,
@@ -431,8 +484,8 @@ export async function processCampaignInBackground(
           : questionPairsForBaits.length > 0
             ? questionPairsForBaits.length
             : makaleSayisi,
-      message: "İçerikler başarıyla yayınlandı!",
-      liveUrl: campaignExternalUrl,
+      message: outcome.message,
+      liveUrl: campaignExternalUrl ?? (primarySlug ? buildHubArticleUrl(primarySlug) : undefined),
       externalUrl: campaignExternalUrl ?? null,
       nexisUrl: primarySlug ? buildHubArticleUrl(primarySlug) : undefined,
       hubArticles,

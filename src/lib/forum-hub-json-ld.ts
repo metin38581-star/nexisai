@@ -1,4 +1,5 @@
 import { resolveSiteOrigin } from "@/lib/site-origin";
+import { buildForumHubPath } from "@/lib/forum-hub-url";
 
 export interface ForumQaJsonLdInput {
   slug: string;
@@ -12,7 +13,7 @@ export interface ForumQaJsonLdInput {
 }
 
 export function buildForumQaPageJsonLd(input: ForumQaJsonLdInput): object {
-  const pageUrl = `${resolveSiteOrigin()}/forum/${encodeURIComponent(input.slug)}`;
+  const pageUrl = `${resolveSiteOrigin()}${buildForumHubPath(input.slug)}`;
 
   return {
     "@context": "https://schema.org",

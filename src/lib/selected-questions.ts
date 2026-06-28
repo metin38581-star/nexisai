@@ -71,10 +71,27 @@ export function buildBaitRecordsFromSelectedQuestions(
     targetNiche: string;
     targetBrand: string;
     targetDomain?: string | null;
+    slugPrefix?: string;
   },
   generatedArticles: Array<{ baslik: string; html: string }> = [],
 ): IntentBaitRecord[] {
   const usedSlugs = new Set<string>();
+  const slugPrefix = context.slugPrefix?.trim().slice(0, 8);
+
+  function finalizeSlug(slug: string, index: number, baslik: string): string {
+    let candidate = slugPrefix ? `${slugPrefix}-${slug}` : slug;
+    candidate = candidate.slice(0, 120).replace(/^-+|-+$/g, "") || slug;
+
+    if (usedSlugs.has(candidate)) {
+      candidate = buildUniqueArticleSlug(baslik, index, usedSlugs);
+      if (slugPrefix && !candidate.startsWith(slugPrefix)) {
+        candidate = `${slugPrefix}-${candidate}`.slice(0, 120);
+      }
+    }
+
+    usedSlugs.add(candidate);
+    return candidate;
+  }
 
   return applyDistributionPlatforms(
     pairs.map((pair, index) => {
@@ -104,10 +121,7 @@ export function buildBaitRecordsFromSelectedQuestions(
       index,
     );
 
-    if (usedSlugs.has(slug)) {
-      slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
-    }
-    usedSlugs.add(slug);
+    slug = finalizeSlug(slug, index, baslik);
 
     return {
       baslik,
@@ -135,6 +149,7 @@ export async function buildBaitRecordsFromSelectedQuestionsAsync(
     targetNiche: string;
     targetBrand: string;
     targetDomain?: string | null;
+    slugPrefix?: string;
   },
 ): Promise<IntentBaitRecord[]> {
   const generatedArticles = await generateIntentArticlesForSelections(

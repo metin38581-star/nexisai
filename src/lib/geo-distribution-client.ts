@@ -143,9 +143,8 @@ export async function dispatchToCentralWebhook(
     console.log(
       `[MAKE_WEBHOOK]: Tetikleniyor → "${webhookPayload.title}" [${webhookPayload.slug}] (${webhookPayload.sehir} / ${webhookPayload.sektor})`,
     );
-    console.log("Sending Payload to Make:", requestBody);
     console.log(
-      `[MAKE_WEBHOOK]: title=${webhookPayload.title.length} char, content=${webhookPayload.content.length} char, baslik=${webhookPayload.baslik.length} char, icerik=${webhookPayload.icerik.length} char`,
+      `[MAKE_WEBHOOK]: Payload boyutu ${requestBody.length} byte; title=${webhookPayload.title.length} char, content=${webhookPayload.content.length} char`,
     );
 
     const response = await fetch(apiUrl, {

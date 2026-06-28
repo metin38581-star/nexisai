@@ -42,6 +42,8 @@ export interface GeoDistributionContext {
   sehir: string;
   sektor: string;
   agresiflik: string;
+  /** Bait ID → soru bazlı forum URL */
+  forumUrlByBaitId?: Record<string, string>;
 }
 
 export type GeoWebhookDispatchResult = {

@@ -3,8 +3,9 @@ import "server-only";
 import { dispatchToCentralWebhook } from "@/lib/geo-distribution-client";
 import { buildMakeWebhookPayload } from "@/lib/make-webhook-payload";
 import { buildHubArticleUrl } from "@/lib/hub-url";
-import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 import { prisma } from "@/lib/db";
+import { hasDatabaseUrl } from "@/lib/server-env";
+import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
 export interface HybridPublishInput {
   campaignId: string;
@@ -58,33 +59,41 @@ export async function publishToHubAndMake(
   if (makeResult.ok && makeResult.externalLiveUrl) {
     externalUrl = makeResult.externalLiveUrl;
 
-    await updateCampaignExternalLiveUrl(input.campaignId, externalUrl);
+    if (hasDatabaseUrl()) {
+      await prisma.bait.update({
+        where: { id: input.baitId },
+        data: {
+          yayinlandi: true,
+          status: "PUBLISHED",
+          externalLiveUrl: externalUrl,
+          liveUrl: externalUrl,
+        },
+      });
 
-    await prisma.bait.update({
-      where: { id: input.baitId },
-      data: {
-        yayinlandi: true,
-        status: "SUCCESS",
-        externalLiveUrl: externalUrl,
-        liveUrl: externalUrl,
-      },
-    });
+      await prisma.campaign.update({
+        where: { id: input.campaignId },
+        data: {
+          externalLiveUrl: externalUrl,
+          liveUrl: externalUrl,
+        },
+      });
+    }
 
-    await prisma.campaign.update({
-      where: { id: input.campaignId },
-      data: {
-        externalLiveUrl: externalUrl,
-        liveUrl: externalUrl,
-      },
-    });
+    try {
+      await updateCampaignExternalLiveUrl(input.campaignId, externalUrl);
+    } catch (error) {
+      console.error("[HYBRID_PUBLISH]: Supabase URL güncellenemedi:", error);
+    }
   } else if (makeResult.ok) {
-    await prisma.bait.update({
-      where: { id: input.baitId },
-      data: {
-        yayinlandi: true,
-        status: "SUCCESS",
-      },
-    });
+    if (hasDatabaseUrl()) {
+      await prisma.bait.update({
+        where: { id: input.baitId },
+        data: {
+          yayinlandi: true,
+          status: "PUBLISHED",
+        },
+      });
+    }
   }
 
   return {

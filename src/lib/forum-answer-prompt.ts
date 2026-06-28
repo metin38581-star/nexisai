@@ -517,7 +517,58 @@ function normalizeThreadPayload(parsed: unknown): unknown[] {
     }
   }
 
+  if (typeof record.content === "string" && record.content.trim()) {
+    return [parsed];
+  }
+
   return [];
+}
+
+function normalizeForumCommentDraft(
+  item: unknown,
+  sectorKey: ForumSectorKey,
+): ForumThreadCommentDraft | null {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const record = item as { content?: string; isFeatured?: boolean };
+  const content = record.content?.trim().replace(/\s+/g, " ");
+  if (!content || content.length < 12) {
+    return null;
+  }
+  if (sectorKey !== "clinic" && isClinicContaminated(content)) {
+    return null;
+  }
+  if (isRoboticForumText(content)) {
+    return null;
+  }
+
+  return {
+    content: content.slice(0, 600),
+    isFeatured: Boolean(record.isFeatured),
+  };
+}
+
+/** Tek yorum JSON çıktısını ayrıştırır (paralel LLM çağrıları için). */
+export function parseSingleForumComment(
+  raw: string,
+  sectorKey: ForumSectorKey,
+): ForumThreadCommentDraft | null {
+  const parsed = extractJsonPayload(raw);
+  if (parsed === null) {
+    return null;
+  }
+
+  const items = normalizeThreadPayload(parsed);
+  for (const item of items) {
+    const comment = normalizeForumCommentDraft(item, sectorKey);
+    if (comment) {
+      return comment;
+    }
+  }
+
+  return normalizeForumCommentDraft(parsed, sectorKey);
 }
 
 export function parseForumThreadComments(
@@ -535,30 +586,15 @@ export function parseForumThreadComments(
   }
 
   const comments = items
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-      const record = item as { content?: string; isFeatured?: boolean };
-      const content = record.content?.trim().replace(/\s+/g, " ");
-      if (!content || content.length < 12) {
-        return null;
-      }
-      if (sectorKey !== "clinic" && isClinicContaminated(content)) {
-        return null;
-      }
-      if (isRoboticForumText(content)) {
-        return null;
-      }
-      return {
-        content: content.slice(0, 600),
-        isFeatured: Boolean(record.isFeatured),
-      };
-    })
+    .map((item) => normalizeForumCommentDraft(item, sectorKey))
     .filter((item): item is ForumThreadCommentDraft => item !== null);
 
-  if (comments.length < 3) {
+  if (comments.length === 0) {
     return [];
+  }
+
+  if (comments.length < 3) {
+    return comments.slice(0, 4);
   }
 
   const featuredCount = comments.filter((item) => item.isFeatured).length;
@@ -680,8 +716,19 @@ export function buildForumThreadFallback(input: {
   sectorLabel: string;
   sectorKey: ForumSectorKey;
   effectiveSectorLabel?: string;
+  simulatedAnswer?: string;
+  sectorSlug?: BusinessSector | "";
 }): ForumThreadCommentDraft[] {
-  const featured = buildForumAnswerFallback(input);
+  const featured =
+    buildForumAnswerContent({
+      question: input.question,
+      brandName: input.brandName,
+      city: input.city,
+      sectorLabel: input.sectorLabel,
+      sectorSlug: input.sectorSlug,
+      simulatedAnswer: input.simulatedAnswer,
+      effectiveSectorLabel: input.effectiveSectorLabel,
+    }) || buildForumAnswerFallback(input);
   const extras = buildSectorOrganicThreadExtras({
     city: input.city,
     sectorKey: input.sectorKey,

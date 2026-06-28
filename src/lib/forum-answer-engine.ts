@@ -6,7 +6,7 @@ import {
   buildForumAnswerContent,
   buildForumThreadFallback,
   buildSingleForumCommentPrompt,
-  parseForumThreadComments,
+  parseSingleForumComment,
   resolveEffectiveSectorLabel,
   resolveForumSectorKey,
   type ForumThreadCommentDraft,
@@ -132,15 +132,14 @@ async function generateSingleForumCommentViaLlm(
     return null;
   }
 
-  const parsed = parseForumThreadComments(text, sectorKey);
-  const comment = parsed[0];
-  if (!comment?.content) {
+  const parsed = parseSingleForumComment(text, sectorKey);
+  if (!parsed?.content) {
     return null;
   }
 
   return {
-    content: comment.content,
-    isFeatured: role === "featured",
+    content: parsed.content,
+    isFeatured: role === "featured" ? true : parsed.isFeatured,
   };
 }
 
@@ -160,10 +159,16 @@ async function generateForumThreadCommentsParallel(
         Boolean(comment?.content?.trim()),
     );
 
-    if (valid.length >= 3) {
+    if (valid.length >= 1) {
       const hasFeatured = valid.some((comment) => comment.isFeatured);
       if (!hasFeatured && valid[0]) {
         valid[0] = { ...valid[0], isFeatured: true };
+      }
+      while (valid.length < 3) {
+        valid.push({
+          content: valid[valid.length - 1]!.content,
+          isFeatured: false,
+        });
       }
       return valid.slice(0, 4);
     }
@@ -204,6 +209,8 @@ export async function generateForumThreadForEntry(
     city: input.city,
     sectorLabel: input.sectorLabel,
     sectorKey,
+    sectorSlug: input.sectorSlug,
+    simulatedAnswer: input.simulatedAnswer,
     effectiveSectorLabel: resolveEntrySectorLabel(input),
   });
 
@@ -233,6 +240,8 @@ export function buildForumAnswerFallbackForEntry(input: ForumAnswerInput): strin
     city: input.city,
     sectorLabel: input.sectorLabel,
     sectorKey,
+    sectorSlug: input.sectorSlug,
+    simulatedAnswer: input.simulatedAnswer,
     effectiveSectorLabel: resolveEntrySectorLabel(input),
   });
 

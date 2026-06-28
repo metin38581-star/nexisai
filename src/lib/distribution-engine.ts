@@ -32,6 +32,7 @@ import { recordChannelPublication } from "@/lib/distribution-status";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { buildBlogPostUrl } from "@/lib/blog-url";
 import { prisma } from "@/lib/db";
+import { hasDatabaseUrl } from "@/lib/server-env";
 import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
 export interface DistributionBait {
@@ -292,7 +293,10 @@ async function markBaitPublished(
   const platform = normalizePlatform(bait.platform);
   const resolvedExternal = externalLiveUrl ?? liveUrl;
   const hubUrl = buildHubArticleUrl(bait.slug);
-  const blogUrl = buildBlogPostUrl(bait.slug);
+  const blogUrl =
+    platform === "BLOGGER" && resolvedExternal
+      ? resolvedExternal
+      : buildBlogPostUrl(bait.slug);
 
   await updateBaitPublication({
     baitId: bait.id,
@@ -309,15 +313,28 @@ async function saveCampaignExternalUrl(
   campaignId: string,
   externalLiveUrl: string,
 ): Promise<void> {
-  await updateCampaignExternalLiveUrl(campaignId, externalLiveUrl);
+  if (hasDatabaseUrl()) {
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        externalLiveUrl,
+        liveUrl: externalLiveUrl,
+      },
+    });
+  }
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: {
-      externalLiveUrl,
-      liveUrl: externalLiveUrl,
-    },
-  });
+  try {
+    await updateCampaignExternalLiveUrl(campaignId, externalLiveUrl);
+  } catch (error) {
+    console.error("[DAĞITIM]: Supabase kampanya URL güncellemesi başarısız:", error);
+  }
+}
+
+function resolveBaitForumUrl(
+  bait: DistributionBait,
+  context: GeoDistributionContext,
+): string | undefined {
+  return context.forumUrlByBaitId?.[bait.id];
 }
 
 async function maybeSaveCampaignUrl(
@@ -343,6 +360,7 @@ function resolveBaitFields(bait: DistributionBait) {
 
 async function publishBaitToMedium(
   bait: DistributionBait,
+  forumUrl?: string,
 ): Promise<DistributionResult> {
   const { baslik, icerik } = resolveBaitFields(bait);
 
@@ -364,7 +382,7 @@ async function publishBaitToMedium(
       };
     }
 
-    await markBaitPublished(bait, result.url, result.url);
+    await markBaitPublished(bait, result.url, result.url, forumUrl);
 
     console.log(`[MEDIUM]: ${baslik} → ${result.url} (Bait ${bait.id})`);
 
@@ -418,6 +436,7 @@ async function publishBaitToWordPress(
   bait: DistributionBait,
   campaignId: string,
   campaignWordPressUrlSaved: { value: boolean },
+  forumUrl?: string,
 ): Promise<DistributionResult> {
   const { baslik, icerik } = resolveBaitFields(bait);
 
@@ -444,7 +463,7 @@ async function publishBaitToWordPress(
       };
     }
 
-    await markBaitPublished(bait, result.url, result.url);
+    await markBaitPublished(bait, result.url, result.url, forumUrl);
     await maybeSaveCampaignWordPressUrl(
       campaignId,
       result.url,
@@ -545,52 +564,6 @@ async function publishDominanceNetworkForBaits(
   return dominanceResults;
 }
 
-async function applyMakeWebhookResultsForBaits(
-  baits: DistributionBait[],
-  makeWebhookResults: Map<string, GeoDistributionResult>,
-  results: DistributionResult[],
-  campaignId: string,
-  campaignExternalUrlSaved: { value: boolean },
-): Promise<void> {
-  for (const bait of baits) {
-    const webhookResult = makeWebhookResults.get(bait.id);
-    if (!webhookResult?.ok) {
-      continue;
-    }
-
-    if (results.some((entry) => entry.baitId === bait.id)) {
-      continue;
-    }
-
-    try {
-      await markBaitPublished(
-        bait,
-        webhookResult.externalLiveUrl,
-        webhookResult.externalLiveUrl,
-      );
-
-      await maybeSaveCampaignUrl(
-        campaignId,
-        webhookResult.externalLiveUrl,
-        campaignExternalUrlSaved,
-      );
-
-      results.push({
-        baitId: bait.id,
-        slug: bait.slug,
-        ok: true,
-        externalLiveUrl: webhookResult.externalLiveUrl,
-        platform: bait.platform ?? "BLOGGER",
-      });
-    } catch (error) {
-      console.error("Make Webhook Failed:", error, {
-        baitId: bait.id,
-        slug: bait.slug,
-      });
-    }
-  }
-}
-
 export async function distributeBaitsToNetwork(
   baits: DistributionBait[],
   context: GeoDistributionContext,
@@ -609,13 +582,8 @@ export async function distributeBaitsToNetwork(
     phase: "started",
     currentIndex: 0,
     totalCount: baits.length,
-    terminalMessage: `${context.sehir} kampanyası için Make.com webhook'u anında tetikleniyor...`,
+    terminalMessage: `${context.sehir} kampanyası için dağıtım kanalları hazırlanıyor...`,
   });
-
-  const makeWebhookResults = await dispatchMakeWebhooksForArticles(
-    baits.map((bait) => baitToWebhookArticle(bait)),
-    context,
-  );
 
   const mediumBaits = baits.filter(
     (bait) => normalizePlatform(bait.platform) === "MEDIUM",
@@ -627,8 +595,19 @@ export async function distributeBaitsToNetwork(
     (bait) => normalizePlatform(bait.platform) === "BLOGGER",
   );
 
+  const makeWebhookResults =
+    bloggerBaits.length > 0
+      ? await dispatchMakeWebhooksForArticles(
+          bloggerBaits.map((bait) => baitToWebhookArticle(bait)),
+          context,
+        )
+      : new Map<string, GeoDistributionResult>();
+
   for (const bait of mediumBaits) {
-    const result = await publishBaitToMedium(bait);
+    const result = await publishBaitToMedium(
+      bait,
+      resolveBaitForumUrl(bait, context),
+    );
     results.push(result);
     await maybeSaveCampaignUrl(
       context.campaignId,
@@ -642,6 +621,7 @@ export async function distributeBaitsToNetwork(
       bait,
       context.campaignId,
       campaignWordPressUrlSaved,
+      resolveBaitForumUrl(bait, context),
     );
     results.push(result);
     await maybeSaveCampaignUrl(
@@ -652,13 +632,6 @@ export async function distributeBaitsToNetwork(
   }
 
   if (bloggerBaits.length === 0) {
-    await applyMakeWebhookResultsForBaits(
-      baits,
-      makeWebhookResults,
-      results,
-      context.campaignId,
-      campaignExternalUrlSaved,
-    );
     await publishDominanceNetworkForBaits(baits, results, context.campaignId);
     return results;
   }
@@ -697,6 +670,7 @@ export async function distributeBaitsToNetwork(
               bait,
               result.externalLiveUrl,
               result.externalLiveUrl,
+              resolveBaitForumUrl(bait, context),
             );
 
             await maybeSaveCampaignUrl(

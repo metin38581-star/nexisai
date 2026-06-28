@@ -31,7 +31,6 @@ import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
 import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
-import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { buildCampaignPublicationUrls } from "@/lib/publication-urls";
 
 function buildAlreadyProcessedResponse(
@@ -362,29 +361,9 @@ export async function POST(request: Request) {
 
     const amountDeposited = await sumUserPaidTopUpsByUserId(activeUserId);
 
-    let earlyPublication = buildCampaignPublicationUrls({
+    const earlyPublication = buildCampaignPublicationUrls({
       businessDomain,
     });
-    if (sectorSlug && selectedQuestionIds.length > 0) {
-      const pairs = buildCoreQuestionPairs(
-        selectedQuestionIds,
-        sectorSlug,
-        trimmedSehir,
-        trimmedMarka,
-        trimmedSektor,
-        businessDomain,
-      );
-      const firstQuestion = pairs[0]?.question?.trim();
-      if (firstQuestion) {
-        const slug = buildQuestionHubSlug(firstQuestion);
-        if (slug) {
-          earlyPublication = buildCampaignPublicationUrls({
-            forumSlug: slug,
-            businessDomain,
-          });
-        }
-      }
-    }
 
     void recordCampaignOperationalLog({
       campaignId: reservedCampaignId,
@@ -397,7 +376,6 @@ export async function POST(request: Request) {
       amountSpent: toplamMaliyet,
       amountDeposited,
       businessDomain: businessDomain ?? null,
-      forumUrl: earlyPublication.forumUrl,
       primaryAuthorityUrl: earlyPublication.primaryAuthorityUrl,
     });
 

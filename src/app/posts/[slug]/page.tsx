@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-
-import BlogPostPendingFallback from "@/components/hub/BlogPostPendingFallback";
+import { notFound } from "next/navigation";
 import HubArticlePageContent from "@/components/hub/HubArticlePageContent";
 import { buildBlogPostUrl } from "@/lib/blog-url";
 import { fetchHubArticleBySlug } from "@/lib/hub-article";
@@ -61,7 +60,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const article = await fetchHubArticleBySlug(slug);
 
   if (!article) {
-    return <BlogPostPendingFallback slug={slug} />;
+    notFound();
   }
 
   const jsonLd = buildTechArticleJsonLd(article);

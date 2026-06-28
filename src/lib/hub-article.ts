@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getSupabasePublic } from "@/lib/supabase-public";
 import { hasDatabaseUrl, hasSupabaseAdminEnv } from "@/lib/server-env";
+import { isPublishedBaitRecord } from "@/lib/bait-publish-status";
 
 export interface HubArticle {
   id: string;
@@ -33,7 +34,7 @@ async function fetchHubArticleViaSupabase(
   const { data: bait, error: baitError } = await client
     .from("Bait")
     .select(
-      "id, slug, baslik, icerik, createdAt, external_live_url, campaignId",
+      "id, slug, baslik, icerik, createdAt, external_live_url, campaignId, yayinlandi, status",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -43,7 +44,7 @@ async function fetchHubArticleViaSupabase(
     return null;
   }
 
-  if (!bait) {
+  if (!bait || !isPublishedBaitRecord(bait)) {
     return null;
   }
 
@@ -92,7 +93,7 @@ async function fetchHubArticleViaPrisma(
       include: { campaign: true },
     });
 
-    if (!bait) {
+    if (!bait || !isPublishedBaitRecord(bait)) {
       return null;
     }
 

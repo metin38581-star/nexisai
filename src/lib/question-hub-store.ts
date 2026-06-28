@@ -165,16 +165,50 @@ async function clearHubAnswersForQuestionViaSupabase(
   }
 }
 
+async function resolveQuestionHubId(
+  slug: string,
+  question: string,
+  coreQuestionId: string,
+): Promise<string | null> {
+  if (hasDatabaseUrl()) {
+    const prismaId = await upsertQuestionHubViaPrisma(
+      slug,
+      question,
+      coreQuestionId,
+    );
+    if (prismaId) {
+      return prismaId;
+    }
+  }
+
+  return upsertQuestionHubViaSupabase(slug, question, coreQuestionId);
+}
+
+export interface QuestionHubPublishResult {
+  publishedSlugs: string[];
+  failedCount: number;
+}
+
 async function clearHubAnswersForQuestion(
   questionId: string,
   campaignId: string,
-): Promise<void> {
+): Promise<boolean> {
   if (hasDatabaseUrl()) {
-    await clearHubAnswersForQuestionViaPrisma(questionId, campaignId);
-    return;
+    const cleared = await clearHubAnswersForQuestionViaPrisma(
+      questionId,
+      campaignId,
+    );
+    if (cleared) {
+      return true;
+    }
   }
 
-  await clearHubAnswersForQuestionViaSupabase(questionId, campaignId);
+  if (hasSupabaseAdminEnv()) {
+    await clearHubAnswersForQuestionViaSupabase(questionId, campaignId);
+    return true;
+  }
+
+  return false;
 }
 
 async function createHubAnswersBatchViaPrisma(
@@ -236,9 +270,9 @@ async function persistHubAnswers(input: {
   questionId: string;
   campaignId: string;
   comments: ForumThreadComment[];
-}): Promise<void> {
+}): Promise<boolean> {
   if (input.comments.length === 0) {
-    return;
+    return false;
   }
 
   await clearHubAnswersForQuestion(input.questionId, input.campaignId);
@@ -251,15 +285,20 @@ async function persistHubAnswers(input: {
     );
 
     if (prismaOk) {
-      return;
+      return true;
     }
   }
 
-  await createHubAnswersBatchViaSupabase(
-    input.questionId,
-    input.campaignId,
-    input.comments,
-  );
+  if (hasSupabaseAdminEnv()) {
+    await createHubAnswersBatchViaSupabase(
+      input.questionId,
+      input.campaignId,
+      input.comments,
+    );
+    return true;
+  }
+
+  return false;
 }
 
 async function upsertQuestionHubViaSupabase(
@@ -409,38 +448,34 @@ async function fetchQuestionHubViaSupabase(
   };
 }
 
-async function resolveQuestionHubId(
-  slug: string,
-  question: string,
-  coreQuestionId: string,
-): Promise<string | null> {
-  if (hasDatabaseUrl()) {
-    return upsertQuestionHubViaPrisma(slug, question, coreQuestionId);
-  }
-
-  return upsertQuestionHubViaSupabase(slug, question, coreQuestionId);
-}
-
 export async function appendCampaignAnswersToQuestionHub(input: {
   campaignId: string;
   brandName: string;
   entries: QuestionHubEntry[];
-}): Promise<void> {
+}): Promise<QuestionHubPublishResult> {
+  const publishedSlugs: string[] = [];
+  let failedCount = 0;
+
   if (input.entries.length === 0) {
-    return;
+    return { publishedSlugs, failedCount };
   }
 
   if (!hasDatabaseUrl() && !hasSupabaseAdminEnv()) {
     console.warn(
       "[QUESTION_HUB]: DATABASE_URL ve Supabase admin birlikte eksik — hub atlandi.",
     );
-    return;
+    return { publishedSlugs, failedCount: input.entries.length };
   }
 
+  const validEntries = input.entries.filter((entry) =>
+    entry.question.trim(),
+  );
+
   await Promise.all(
-    input.entries.map(async (entry) => {
+    validEntries.map(async (entry) => {
       const slug = buildQuestionHubSlug(entry.question);
       if (!slug) {
+        failedCount += 1;
         return;
       }
 
@@ -464,15 +499,24 @@ export async function appendCampaignAnswersToQuestionHub(input: {
         );
 
         if (!questionHubId) {
+          failedCount += 1;
           return;
         }
 
-        await persistHubAnswers({
+        const persisted = await persistHubAnswers({
           questionId: questionHubId,
           campaignId: input.campaignId,
           comments: thread,
         });
+
+        if (persisted) {
+          publishedSlugs.push(slug);
+          return;
+        }
+
+        failedCount += 1;
       } catch (error) {
+        failedCount += 1;
         console.error(
           `[QUESTION_HUB]: Hub kaydi atlandi (campaign=${input.campaignId}, slug=${slug}):`,
           error,
@@ -480,6 +524,10 @@ export async function appendCampaignAnswersToQuestionHub(input: {
       }
     }),
   );
+
+  failedCount += input.entries.length - validEntries.length;
+
+  return { publishedSlugs, failedCount };
 }
 
 export async function fetchQuestionHubBySlug(
@@ -493,7 +541,11 @@ export async function fetchQuestionHubBySlug(
     return prismaAttempt.data;
   }
 
-  if (!hasDatabaseUrl()) {
+  if (prismaAttempt.status === "not_found") {
+    return fetchQuestionHubViaSupabase(slug);
+  }
+
+  if (hasSupabaseAdminEnv()) {
     return fetchQuestionHubViaSupabase(slug);
   }
 

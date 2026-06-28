@@ -52,7 +52,7 @@ function mapBait(row: SupabaseBaitRow): StoredBait {
     icerik: row.icerik,
     slug: row.slug,
     platform: row.platform,
-    yayinlandi: row.yayinlandi || isPublishedStatus(status) || Boolean(row.slug?.trim()),
+    yayinlandi: row.yayinlandi || isPublishedStatus(status),
     status,
     liveUrl: row.live_url ?? null,
     externalLiveUrl: row.external_live_url ?? null,
