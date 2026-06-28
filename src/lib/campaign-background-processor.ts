@@ -37,7 +37,12 @@ import {
   completeCampaignProcessingState,
   failCampaignProcessingState,
   getCampaignProcessingState,
+  interruptCampaignProcessingState,
 } from "@/lib/campaign-terminal-log-store";
+import {
+  CampaignDistributionTimeoutError,
+  withCampaignDistributionTimeout,
+} from "@/lib/campaign-distribution-timeout";
 
 export interface CampaignBackgroundJobInput {
   campaignId: string;
@@ -337,13 +342,15 @@ export async function processCampaignInBackground(
       "[DAĞITIM] WordPress ve dominasyon ağına paralel yayın başlatılıyor...",
     );
 
-    const distributionResults = await distributeBaitsToNetwork(persistedBaits, {
-      campaignId,
-      markaAdi,
-      sehir,
-      sektor,
-      agresiflik: agresiflikSeviyesi,
-    });
+    const distributionResults = await withCampaignDistributionTimeout(
+      distributeBaitsToNetwork(persistedBaits, {
+        campaignId,
+        markaAdi,
+        sehir,
+        sektor,
+        agresiflik: agresiflikSeviyesi,
+      }),
+    );
 
     const campaignExternalUrl = distributionResults.find(
       (result) => result.ok && result.externalLiveUrl,
@@ -426,6 +433,17 @@ export async function processCampaignInBackground(
   } catch (error) {
     console.error("[CAMPAIGN_BG]: Arka plan işlem hatası:", error);
     const processingState = await getCampaignProcessingState(campaignId);
+
+    if (error instanceof CampaignDistributionTimeoutError) {
+      await interruptCampaignProcessingState(
+        campaignId,
+        processingState?.terminalLogs ?? [],
+        error.message,
+      );
+      await releaseCampaignProcessingLock(campaignId);
+      return;
+    }
+
     const message =
       error instanceof Error ? error.message : "Operasyon tamamlanamadı.";
     await failCampaignProcessingState(

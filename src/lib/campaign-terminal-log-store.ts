@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { CampaignResponse, TerminalLogEntry } from "@/types/campaign";
+import {
+  CAMPAIGN_DISTRIBUTION_TIMEOUT_MS,
+  DISTRIBUTION_INTERRUPTED_MESSAGE,
+} from "@/lib/campaign-distribution-timeout";
 import { prisma } from "@/lib/db";
 import { hasDatabaseUrl } from "@/lib/server-env";
 
@@ -8,7 +12,8 @@ export type CampaignProcessingStatus =
   | "started"
   | "processing"
   | "complete"
-  | "failed";
+  | "failed"
+  | "interrupted";
 
 export interface CampaignProcessingState {
   campaignId: string;
@@ -131,6 +136,67 @@ export async function completeCampaignProcessingState(
     `;
   } catch (error) {
     console.error("[CAMPAIGN_PROCESSING]: Tamamlanma durumu yazılamadı:", error);
+  }
+}
+
+export function isCampaignProcessingStale(
+  state: CampaignProcessingState,
+  now = Date.now(),
+): boolean {
+  if (state.status !== "started" && state.status !== "processing") {
+    return false;
+  }
+
+  const lastLog = state.terminalLogs[state.terminalLogs.length - 1];
+  const inDistributionPhase =
+    lastLog?.category === "DAĞITIM" ||
+    (typeof lastLog?.message === "string" &&
+      lastLog.message.includes("[DAĞITIM]"));
+
+  if (!inDistributionPhase) {
+    return false;
+  }
+
+  const updatedAt = new Date(state.updatedAt).getTime();
+  if (!Number.isFinite(updatedAt)) {
+    return false;
+  }
+
+  return now - updatedAt >= CAMPAIGN_DISTRIBUTION_TIMEOUT_MS;
+}
+
+export async function interruptCampaignProcessingState(
+  campaignId: string,
+  terminalLogs: TerminalLogEntry[],
+  errorMessage: string = DISTRIBUTION_INTERRUPTED_MESSAGE,
+): Promise<void> {
+  await ensureCampaignProcessingTable();
+
+  const logs = [
+    ...terminalLogs,
+    {
+      id: `interrupt-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString("tr-TR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+      category: "HATA" as const,
+      message: `⚠️ [SİBER HATA]: ${errorMessage}`,
+    },
+  ];
+
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "CampaignProcessingState" ("campaign_id", "status", "logs", "updated_at")
+      VALUES (${campaignId}, 'interrupted', ${JSON.stringify(logs)}::jsonb, NOW())
+      ON CONFLICT ("campaign_id") DO UPDATE SET
+        "status" = 'interrupted',
+        "logs" = ${JSON.stringify(logs)}::jsonb,
+        "updated_at" = NOW()
+    `;
+  } catch (error) {
+    console.error("[CAMPAIGN_PROCESSING]: Kesinti durumu yazılamadı:", error);
   }
 }
 

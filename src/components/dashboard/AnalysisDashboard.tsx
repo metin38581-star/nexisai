@@ -26,9 +26,16 @@ import TargetedQuestionsGrowthPanel from "@/components/campaign/TargetedQuestion
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import { runCampaignPostOnce } from "@/lib/campaign-post-lock";
+import {
+  CAMPAIGN_DISTRIBUTION_TIMEOUT_MS,
+  DISTRIBUTION_INTERRUPTED_MESSAGE,
+  DISTRIBUTION_INTERRUPTED_TITLE,
+} from "@/lib/campaign-distribution-timeout";
 
 const DUPLICATE_RECOVERY_WINDOW_MS = 120_000;
 const DEFAULT_CHANNEL_COUNT = 7;
+const CAMPAIGN_STATUS_POLL_INTERVAL_MS = 1500;
+const CAMPAIGN_PIPELINE_MAX_WAIT_MS = 5 * 60_000;
 
 interface CampaignFlowHandlers {
   setActiveCampaignId: (id: string) => void;
@@ -41,6 +48,7 @@ interface CampaignFlowHandlers {
     value: { count: number; sehir: string; sektor: string } | null,
   ) => void;
   triggerDistributionFlow: () => void;
+  resetDistribution: () => void;
   onWalletRefresh?: () => void;
   runRadarScan: () => Promise<void>;
   fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
@@ -187,9 +195,11 @@ async function pollCampaignProcessingStatus(
 ): Promise<void> {
   handlers.setOperationPhase("processing");
 
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < CAMPAIGN_PIPELINE_MAX_WAIT_MS) {
     await new Promise((resolve) => {
-      window.setTimeout(resolve, 1500);
+      window.setTimeout(resolve, CAMPAIGN_STATUS_POLL_INTERVAL_MS);
     });
 
     try {
@@ -229,16 +239,26 @@ async function pollCampaignProcessingStatus(
         return;
       }
 
-      if (state.status === "failed") {
+      if (state.status === "failed" || state.status === "interrupted") {
         const errorLog = [...logs]
           .reverse()
           .find((entry) => entry.category === "HATA");
-        const message = normalizeOperationError(
-          errorLog?.message ?? "Operasyon tamamlanamadı.",
-        );
+        const message =
+          state.status === "interrupted"
+            ? DISTRIBUTION_INTERRUPTED_MESSAGE
+            : normalizeOperationError(
+                errorLog?.message ?? "Operasyon tamamlanamadı.",
+              );
         handlers.setOperationError(message);
-        handlers.setOperationPhase("failed");
-        toast.error(message);
+        handlers.setOperationPhase(
+          state.status === "interrupted" ? "interrupted" : "failed",
+        );
+        handlers.resetDistribution();
+        toast.error(
+          state.status === "interrupted"
+            ? DISTRIBUTION_INTERRUPTED_TITLE
+            : message,
+        );
         return;
       }
     } catch {
@@ -246,10 +266,10 @@ async function pollCampaignProcessingStatus(
     }
   }
 
-  handlers.setOperationError(
-    "Operasyon yanıt vermedi. Lütfen birkaç dakika sonra tekrar kontrol edin.",
-  );
-  handlers.setOperationPhase("failed");
+  handlers.setOperationError(DISTRIBUTION_INTERRUPTED_MESSAGE);
+  handlers.setOperationPhase("interrupted");
+  handlers.resetDistribution();
+  toast.error(DISTRIBUTION_INTERRUPTED_TITLE);
 }
 
 /** @deprecated Eski kampanya listesi polling — yedek */
@@ -388,6 +408,8 @@ function AnalysisDashboardContent({
     sektor: string;
   } | null>(null);
   const distributionRunningRef = useRef(false);
+  const distributionAbortedRef = useRef(false);
+  const operationStartedAtRef = useRef<number | null>(null);
   const runAnalysisRef = useRef<
     (payload: CampaignSessionPayload) => Promise<void>
   >(async () => undefined);
@@ -496,17 +518,25 @@ function AnalysisDashboardContent({
   const runDistributionFlow = useCallback(async () => {
     const pending = pendingDistributionRef.current;
     if (!pending || pending.count <= 0) {
-      setOperationPhase("active");
+      if (!distributionAbortedRef.current) {
+        setOperationPhase("active");
+      }
       return;
     }
 
     distributionRunningRef.current = true;
+    distributionAbortedRef.current = false;
     pendingDistributionRef.current = null;
     setOperationPhase("distributing");
 
     await startDistribution(pending.count, pending.sehir, pending.sektor);
 
     distributionRunningRef.current = false;
+
+    if (distributionAbortedRef.current) {
+      return;
+    }
+
     setOperationPhase("active");
   }, [startDistribution]);
 
@@ -530,11 +560,12 @@ function AnalysisDashboardContent({
       triggerDistributionFlow: () => {
         void runDistributionFlowRef.current();
       },
+      resetDistribution,
       onWalletRefresh,
       runRadarScan: () => runRadarScanRef.current(),
       fetchCampaigns: (options) => fetchCampaignsRef.current(options),
     }),
-    [onWalletRefresh],
+    [onWalletRefresh, resetDistribution],
   );
 
   const runAnalysis = useCallback(
@@ -557,6 +588,8 @@ function AnalysisDashboardContent({
       setLlmResult(null);
       setOperationError(null);
       setAuthorityScore(null);
+      operationStartedAtRef.current = null;
+      distributionAbortedRef.current = false;
       setChannelCount(DEFAULT_CHANNEL_COUNT);
       pendingDistributionRef.current = null;
       distributionRunningRef.current = false;
@@ -747,6 +780,37 @@ function AnalysisDashboardContent({
     runAnalysisRef.current = runAnalysis;
   }, [runAnalysis]);
 
+  const isDistributionPending =
+    operationPhase === "distributing" ||
+    (operationPhase === "active" && distributionStatus === "running");
+
+  useEffect(() => {
+    if (!isDistributionPending) {
+      operationStartedAtRef.current = null;
+      return;
+    }
+
+    const startedAt = operationStartedAtRef.current ?? Date.now();
+    operationStartedAtRef.current = startedAt;
+    const remaining = Math.max(
+      0,
+      CAMPAIGN_DISTRIBUTION_TIMEOUT_MS - (Date.now() - startedAt),
+    );
+
+    const timerId = window.setTimeout(() => {
+      distributionAbortedRef.current = true;
+      distributionRunningRef.current = false;
+      setOperationError(DISTRIBUTION_INTERRUPTED_MESSAGE);
+      setOperationPhase("interrupted");
+      resetDistribution();
+      toast.error(DISTRIBUTION_INTERRUPTED_TITLE);
+    }, remaining);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [isDistributionPending, resetDistribution]);
+
   useEffect(() => {
     setSessionReady(true);
   }, []);
@@ -788,8 +852,8 @@ function AnalysisDashboardContent({
   const activeMeta = session ? getCampaignMeta(session.gunlukButce) : null;
 
   const displayPhase: CampaignOperationPhase = useMemo(() => {
-    if (operationPhase === "failed") {
-      return "failed";
+    if (operationPhase === "failed" || operationPhase === "interrupted") {
+      return operationPhase;
     }
 
     if (distributionStatus === "running" || distributionRunningRef.current) {

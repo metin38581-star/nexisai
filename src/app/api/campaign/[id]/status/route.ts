@@ -6,7 +6,12 @@ import {
   getCampaignBaitCount,
   userHasCampaignAccess,
 } from "@/lib/campaign-store";
-import { getCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
+import {
+  getCampaignProcessingState,
+  interruptCampaignProcessingState,
+  isCampaignProcessingStale,
+} from "@/lib/campaign-terminal-log-store";
+import { DISTRIBUTION_INTERRUPTED_MESSAGE } from "@/lib/campaign-distribution-timeout";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -32,8 +37,17 @@ export async function GET(request: Request, context: RouteContext) {
       );
     }
 
-    const processingState = await getCampaignProcessingState(campaignId);
+    let processingState = await getCampaignProcessingState(campaignId);
     const baitCount = await getCampaignBaitCount(campaignId);
+
+    if (processingState && isCampaignProcessingStale(processingState)) {
+      await interruptCampaignProcessingState(
+        campaignId,
+        processingState.terminalLogs,
+        DISTRIBUTION_INTERRUPTED_MESSAGE,
+      );
+      processingState = await getCampaignProcessingState(campaignId);
+    }
 
     if (processingState) {
       return NextResponse.json({

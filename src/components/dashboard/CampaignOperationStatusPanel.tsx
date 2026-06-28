@@ -14,7 +14,8 @@ export type CampaignOperationPhase =
   | "processing"
   | "distributing"
   | "active"
-  | "failed";
+  | "failed"
+  | "interrupted";
 
 export type DistributionUiStatus = "idle" | "running" | "completed";
 
@@ -39,7 +40,7 @@ function isOperationInProgress(
   phase: CampaignOperationPhase,
   distributionStatus: DistributionUiStatus,
 ): boolean {
-  if (phase === "failed" || phase === "active") {
+  if (phase === "failed" || phase === "interrupted" || phase === "active") {
     return distributionStatus === "running";
   }
 
@@ -54,9 +55,9 @@ function resolveOperationLabel(
   tone: "emerald" | "violet" | "amber" | "rose";
   pulse: boolean;
 } {
-  if (phase === "failed") {
+  if (phase === "failed" || phase === "interrupted") {
     return {
-      title: "Operasyon Tamamlanamadı",
+      title: "Dağıtım Kesintiye Uğradı — Yeniden Deneyin",
       tone: "rose",
       pulse: false,
     };
@@ -156,10 +157,12 @@ export default function CampaignOperationStatusPanel({
           <p className={`text-sm font-semibold leading-snug ${tone.text}`}>
             {operation.title}
           </p>
-          {phase === "failed" && errorMessage ? (
-            <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-              {errorMessage}
-            </p>
+          {phase === "failed" || phase === "interrupted" ? (
+            errorMessage ? (
+              <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                {errorMessage}
+              </p>
+            ) : null
           ) : null}
         </StatusCard>
 
