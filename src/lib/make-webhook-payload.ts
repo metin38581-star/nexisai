@@ -27,9 +27,27 @@ function toWellFormedString(text: string): string {
 }
 
 /**
- * JSON.stringify öncesi alanları temizler.
- * Ham satır sonları, tab ve kontrol karakterleri kaldırılır — Make.com
- * "bad control character in string literal" hatası vermemesi için.
+ * Make.com webhook icerik alanı — ham satır sonları ve kontrol karakterlerini temizler.
+ * JSON.stringify öncesi kullanılır; `"` ve `\` kaçışı stringify tarafından yapılır
+ * (çift escape / bozuk JSON oluşmaması için burada uygulanmaz).
+ */
+export function escapeJSONString(str: string): string {
+  const text = toWellFormedString(str == null ? "" : String(str));
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\n/g, " ")
+    .replace(/\t/g, " ")
+    .replace(/[\x00-\x1F]/g, "")
+    .replace(/[\u007F-\u009F\u2028\u2029\uFEFF]/g, "")
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * JSON.stringify öncesi kısa metin alanlarını temizler.
  */
 export function sanitizeWebhookField(value: unknown): string {
   const text = toWellFormedString(value == null ? "" : String(value));
@@ -42,13 +60,7 @@ export function sanitizeWebhookField(value: unknown): string {
 }
 
 function sanitizeIcerikField(value: unknown): string {
-  const text = toWellFormedString(value == null ? "" : String(value));
-
-  let sanitized = text
-    .replace(MAKE_JSON_UNSAFE_CHARS, " ")
-    .normalize("NFC")
-    .replace(/\s+/g, " ")
-    .trim();
+  let sanitized = escapeJSONString(value == null ? "" : String(value));
 
   if (sanitized.length > MAX_ICERIK_CHARS) {
     sanitized = sanitized.slice(0, MAX_ICERIK_CHARS);
