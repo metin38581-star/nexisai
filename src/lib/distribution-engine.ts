@@ -601,13 +601,22 @@ export async function distributeBaitsToNetwork(
     (bait) => normalizePlatform(bait.platform) === "BLOGGER",
   );
 
-  const devToDirectResults =
-    bloggerBaits.length > 0 && isDevToDirectConfigured()
-      ? await dispatchDevToDirectForArticles(
-          bloggerBaits.map((bait) => baitToWebhookArticle(bait)),
-          context,
-        )
-      : new Map<string, { ok: boolean; url?: string }>();
+  let devToDirectResults = new Map<string, { ok: boolean; url?: string }>();
+
+  if (bloggerBaits.length > 0 && isDevToDirectConfigured()) {
+    try {
+      devToDirectResults = await dispatchDevToDirectForArticles(
+        bloggerBaits.map((bait) => baitToWebhookArticle(bait)),
+        context,
+      );
+    } catch (devToBatchError) {
+      console.error(
+        "[DEVTO_CRITICAL_EXCEPTION]: Dağıtım motoru Dev.to hatasını yuttu ->",
+        devToBatchError,
+      );
+      devToDirectResults = new Map();
+    }
+  }
 
   if (isDevToDirectConfigured() && bloggerBaits.length === 0) {
     console.warn(

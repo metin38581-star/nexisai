@@ -49,20 +49,25 @@ function sanitizeDevToTitle(value: string): string {
 }
 
 function prepareDevToBodyMarkdown(rawContent: string, title: string): string {
-  const trimmed = String(rawContent || "").trim();
-  if (!trimmed) {
+  try {
+    const trimmed = String(rawContent || "").trim();
+    if (!trimmed) {
+      return DEVTO_DEFAULT_BODY;
+    }
+
+    if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+      const markdown = htmlToMarkdown(trimmed, title);
+      const withoutDuplicateHeading = markdown
+        .replace(/^#\s+.+\n\n?/m, "")
+        .trim();
+      return withoutDuplicateHeading || DEVTO_DEFAULT_BODY;
+    }
+
+    return trimmed;
+  } catch (error) {
+    console.error("[DEVTO_CRITICAL_EXCEPTION]: body_markdown hazırlanamadı:", error);
     return DEVTO_DEFAULT_BODY;
   }
-
-  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
-    const markdown = htmlToMarkdown(trimmed, title);
-    const withoutDuplicateHeading = markdown
-      .replace(/^#\s+.+\n\n?/m, "")
-      .trim();
-    return withoutDuplicateHeading || DEVTO_DEFAULT_BODY;
-  }
-
-  return trimmed;
 }
 
 function sanitizeDevToBody(rawContent: string, title: string): string {
@@ -77,24 +82,40 @@ function sanitizeDevToBody(rawContent: string, title: string): string {
 export function buildDevToArticlePayload(
   articleData: DevToDirectArticleData,
 ): DevToArticlePayload {
-  const title = sanitizeDevToTitle(articleData.baslik);
-  const body_markdown = sanitizeDevToBody(articleData.icerik, title);
-  const slug = String(articleData.slug || "").trim();
+  try {
+    const title = sanitizeDevToTitle(articleData.baslik);
+    const body_markdown = sanitizeDevToBody(articleData.icerik, title);
+    const slug = String(articleData.slug || "").trim();
 
-  const payload: DevToArticlePayload = {
-    article: {
-      title,
-      body_markdown,
-      published: true,
-      tags: [...DEVTO_TAGS],
-    },
-  };
+    const payload: DevToArticlePayload = {
+      article: {
+        title,
+        body_markdown,
+        published: true,
+        tags: [...DEVTO_TAGS],
+      },
+    };
 
-  if (slug) {
-    payload.article.canonical_url = buildHubArticleUrl(slug);
+    if (slug) {
+      try {
+        payload.article.canonical_url = buildHubArticleUrl(slug);
+      } catch (error) {
+        console.error("[DEVTO_CRITICAL_EXCEPTION]: canonical_url üretilemedi:", error);
+      }
+    }
+
+    return payload;
+  } catch (error) {
+    console.error("[DEVTO_CRITICAL_EXCEPTION]: payload oluşturulamadı:", error);
+    return {
+      article: {
+        title: DEVTO_DEFAULT_TITLE,
+        body_markdown: DEVTO_DEFAULT_BODY,
+        published: true,
+        tags: [...DEVTO_TAGS],
+      },
+    };
   }
-
-  return payload;
 }
 
 export interface DevToDirectArticleData {
@@ -118,123 +139,92 @@ export function isDevToDirectConfigured(): boolean {
   return Boolean(process.env.DEVTO_API_KEY?.trim());
 }
 
-/** Dev.to Forem API — Make.com olmadan doğrudan makale yayını. */
+/** Dev.to Forem API — Make.com olmadan doğrudan makale yayını. Asla throw etmez. */
 export async function publishToDevToDirect(
   articleData: DevToDirectArticleData,
 ): Promise<string | null> {
   const secureSlug = String(articleData.slug || "").trim();
   const secureCampaignId = String(articleData.campaignId || "").trim();
-  const payload = buildDevToArticlePayload(articleData);
-  const { title, body_markdown } = payload.article;
-
-  if (!process.env.DEVTO_API_KEY?.trim()) {
-    console.warn("[DEVTO_DIRECT_API]: DEVTO_API_KEY eksik, bu kanal atlanıyor.");
-    return null;
-  }
-
-  if (!title.trim() || !body_markdown.trim()) {
-    console.error("[DEVTO_DIRECT_ERROR]: title veya body_markdown boş — yayın iptal.", {
-      slug: secureSlug || undefined,
-      campaignId: secureCampaignId || undefined,
-      titleLength: title.length,
-      bodyLength: body_markdown.length,
-    });
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), DEVTO_API_TIMEOUT_MS);
 
   try {
-    console.log(
-      `[DEVTO_DIRECT_API]: Yayınlanıyor → "${title}" (${body_markdown.length} char)${secureSlug ? ` [${secureSlug}]` : ""}${secureCampaignId ? ` (campaign: ${secureCampaignId})` : ""}`,
-    );
-    console.log("[DEVTO_DIRECT_API]: Payload özeti", {
-      titleLength: title.length,
-      bodyLength: body_markdown.length,
-      tags: payload.article.tags,
-      hasCanonicalUrl: Boolean(payload.article.canonical_url),
-    });
-
-    const response = await fetch(DEVTO_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": process.env.DEVTO_API_KEY.trim(),
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      let parsedError: unknown = null;
-      try {
-        parsedError = errorText ? JSON.parse(errorText) : null;
-      } catch {
-        parsedError = errorText.slice(0, 500) || null;
-      }
-
-      console.error("[DEVTO_DIRECT_ERROR]:", {
-        status: response.status,
-        slug: secureSlug || undefined,
-        campaignId: secureCampaignId || undefined,
-        titleLength: title.length,
-        bodyLength: body_markdown.length,
-        titlePreview: title.slice(0, 80),
-        bodyPreview: body_markdown.slice(0, 120),
-        error: parsedError,
-      });
-
-      if (response.status === 422) {
-        console.error(
-          "[DEVTO_DIRECT_ERROR]: 422 Unprocessable Entity — title/body_markdown/tags doğrulaması başarısız.",
-          {
-            tags: payload.article.tags,
-            published: payload.article.published,
-          },
-        );
-      }
-
-      return null;
-    }
-
-    const resData = (await response.json()) as { url?: string };
-    const liveUrl =
-      typeof resData.url === "string" && resData.url.trim()
-        ? resData.url.trim()
-        : null;
-
-    if (!liveUrl) {
-      console.error("[DEVTO_DIRECT_ERROR]: Yanıtta url alanı yok.", {
-        slug: secureSlug || undefined,
-        campaignId: secureCampaignId || undefined,
-      });
-      return null;
-    }
-
-    console.log(
-      "[DEVTO_DIRECT_SUCCESS]: Makale başarıyla yayınlandı →",
-      liveUrl,
-    );
-    return liveUrl;
-  } catch (error) {
-    console.error("[DEVTO_DIRECT_EXCEPTION]:", {
+    console.log("[DEVTO_START]: Dev.to paylaşımı başlatılıyor...", {
       slug: secureSlug || undefined,
       campaignId: secureCampaignId || undefined,
-      sehir: articleData.sehir,
-      sektor: articleData.sektor,
-      markaAdi: articleData.markaAdi,
-      error,
     });
+
+    if (!process.env.DEVTO_API_KEY?.trim()) {
+      console.warn("[DEVTO_DIRECT_API]: DEVTO_API_KEY eksik, bu kanal atlanıyor.");
+      return null;
+    }
+
+    const payload = buildDevToArticlePayload(articleData);
+    const title = payload.article.title;
+    const body_markdown = payload.article.body_markdown;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEVTO_API_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(DEVTO_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": process.env.DEVTO_API_KEY.trim(),
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        console.error(
+          `[DEVTO_API_FAIL] Status: ${response.status}, Body: ${errText.slice(0, 500)}`,
+          {
+            slug: secureSlug || undefined,
+            campaignId: secureCampaignId || undefined,
+            titleLength: title.length,
+            bodyLength: body_markdown.length,
+          },
+        );
+        return null;
+      }
+
+      const resData = (await response.json().catch(() => null)) as {
+        url?: string;
+      } | null;
+      const liveUrl =
+        typeof resData?.url === "string" && resData.url.trim()
+          ? resData.url.trim()
+          : null;
+
+      if (!liveUrl) {
+        console.error("[DEVTO_API_FAIL]: Yanıtta url alanı yok.", {
+          slug: secureSlug || undefined,
+          campaignId: secureCampaignId || undefined,
+        });
+        return null;
+      }
+
+      console.log("[DEVTO_SUCCESS]:", liveUrl);
+      return liveUrl;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (devToErr) {
+    console.error(
+      "[DEVTO_CRITICAL_EXCEPTION]: Dev.to servis hatası yutuldu ->",
+      {
+        slug: secureSlug || undefined,
+        campaignId: secureCampaignId || undefined,
+        error: devToErr,
+      },
+    );
     return null;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
-/** Blogger slotları için Dev.to doğrudan yayın — başarısız olanlar Make.com'a bırakılır. */
+/** Blogger slotları için Dev.to doğrudan yayın — başarısız olanlar Make.com'a bırakılır. Asla throw etmez. */
 export async function dispatchDevToDirectForArticles(
   articles: WebhookArticleSource[],
   context: {
@@ -246,72 +236,112 @@ export async function dispatchDevToDirectForArticles(
 ): Promise<Map<string, DevToDirectPublishResult>> {
   const results = new Map<string, DevToDirectPublishResult>();
 
-  if (articles.length === 0) {
-    return results;
-  }
+  try {
+    if (articles.length === 0) {
+      return results;
+    }
 
-  if (!isDevToDirectConfigured()) {
-    console.warn(
-      "[DEVTO_DIRECT_API]: DEVTO_API_KEY yapılandırılmamış — doğrudan kanal atlanıyor.",
+    if (!isDevToDirectConfigured()) {
+      console.warn(
+        "[DEVTO_DIRECT_API]: DEVTO_API_KEY yapılandırılmamış — doğrudan kanal atlanıyor.",
+      );
+      return results;
+    }
+
+    console.log(
+      `[DEVTO_DIRECT_API]: ${articles.length} makale için toplu yayın başlatıldı (campaign: ${context.campaignId}).`,
+    );
+
+    const settled = await Promise.allSettled(
+      articles.map(async (article) => {
+        try {
+          const resolved = resolveWebhookArticleFields(article, {
+            defaultBaslik: context.markaAdi
+              ? `${context.markaAdi} SEO Optimizasyonu`
+              : undefined,
+          });
+          const key = article.id ?? resolved.slug;
+
+          if (!resolved.hasContent) {
+            console.error(
+              "[DEVTO_DIRECT_ABORT]: Makale içeriği boş olduğu için Dev.to yayını atlandı!",
+              {
+                id: article.id,
+                slug: article.slug,
+                baslik: resolved.baslik,
+              },
+            );
+            return {
+              key,
+              result: {
+                ok: false,
+                error: "icerik eksik — Dev.to atlandı",
+              } satisfies DevToDirectPublishResult,
+            };
+          }
+
+          const url = await publishToDevToDirect({
+            baslik: resolved.baslik,
+            icerik: resolved.icerik,
+            slug: resolved.slug,
+            campaignId: context.campaignId,
+            sehir: context.sehir,
+            sektor: context.sektor,
+            markaAdi: context.markaAdi,
+          });
+
+          return {
+            key,
+            result: {
+              ok: Boolean(url),
+              url: url ?? undefined,
+              status: url ? 201 : 0,
+              error: url ? undefined : "Dev.to yayını başarısız",
+            } satisfies DevToDirectPublishResult,
+          };
+        } catch (articleError) {
+          console.error(
+            "[DEVTO_CRITICAL_EXCEPTION]: Tek makale Dev.to hatası yutuldu ->",
+            articleError,
+          );
+          const key = article.id ?? article.slug ?? crypto.randomUUID();
+          return {
+            key,
+            result: {
+              ok: false,
+              error: "Dev.to makale hatası yutuldu",
+            } satisfies DevToDirectPublishResult,
+          };
+        }
+      }),
+    );
+
+    for (const entry of settled) {
+      if (entry.status === "fulfilled") {
+        results.set(entry.value.key, entry.value.result);
+        continue;
+      }
+
+      console.error(
+        "[DEVTO_CRITICAL_EXCEPTION]: Dev.to batch girişi reddedildi ->",
+        entry.reason,
+      );
+    }
+
+    const successCount = Array.from(results.values()).filter((entry) => entry.ok)
+      .length;
+    console.log(
+      `[DEVTO_DIRECT_API]: Toplu yayın tamamlandı — ${successCount}/${articles.length} başarılı.`,
+    );
+
+    return results;
+  } catch (batchError) {
+    console.error(
+      "[DEVTO_CRITICAL_EXCEPTION]: Dev.to toplu yayın hatası yutuldu ->",
+      batchError,
     );
     return results;
   }
-
-  console.log(
-    `[DEVTO_DIRECT_API]: ${articles.length} makale için toplu yayın başlatıldı (campaign: ${context.campaignId}).`,
-  );
-
-  await Promise.all(
-    articles.map(async (article) => {
-      const resolved = resolveWebhookArticleFields(article, {
-        defaultBaslik: context.markaAdi
-          ? `${context.markaAdi} SEO Optimizasyonu`
-          : undefined,
-      });
-      const key = article.id ?? resolved.slug;
-
-      if (!resolved.hasContent) {
-        console.error(
-          "[DEVTO_DIRECT_ABORT]: Makale içeriği boş olduğu için Dev.to yayını atlandı!",
-          {
-            id: article.id,
-            slug: article.slug,
-            baslik: resolved.baslik,
-          },
-        );
-        results.set(key, {
-          ok: false,
-          error: "icerik eksik — Dev.to atlandı",
-        });
-        return;
-      }
-
-      const url = await publishToDevToDirect({
-        baslik: resolved.baslik,
-        icerik: resolved.icerik,
-        slug: resolved.slug,
-        campaignId: context.campaignId,
-        sehir: context.sehir,
-        sektor: context.sektor,
-        markaAdi: context.markaAdi,
-      });
-
-      results.set(key, {
-        ok: Boolean(url),
-        url: url ?? undefined,
-        status: url ? 201 : 0,
-        error: url ? undefined : "Dev.to yayını başarısız",
-      });
-    }),
-  );
-
-  const successCount = Array.from(results.values()).filter((entry) => entry.ok)
-    .length;
-  console.log(
-    `[DEVTO_DIRECT_API]: Toplu yayın tamamlandı — ${successCount}/${articles.length} başarılı.`,
-  );
-
-  return results;
 }
 
 export interface MakeWebhookResponse {
