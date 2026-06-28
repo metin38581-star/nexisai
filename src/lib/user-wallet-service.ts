@@ -32,6 +32,59 @@ export interface UserWalletRecord {
   hasPaidTopUp: boolean;
 }
 
+const DEBIT_PROVIDER_CODES = new Set(["WALLET_DEBIT", "WALLET_DEDUCT"]);
+const SUCCESS_PAYMENT_STATUSES = new Set(["success", "succeeded", "paid"]);
+
+function isSuccessfulPayment(status: string): boolean {
+  return SUCCESS_PAYMENT_STATUSES.has(status);
+}
+
+function computeWalletBalanceFromPayments(
+  payments: Awaited<ReturnType<typeof listPaymentsByUserId>>,
+): number {
+  return payments.reduce((total, payment) => {
+    if (!isSuccessfulPayment(payment.status)) {
+      return total;
+    }
+
+    const code = payment.providerStatusCode ?? "";
+
+    if (DEBIT_PROVIDER_CODES.has(code)) {
+      return total - payment.amount;
+    }
+
+    if (
+      code === WELCOME_PROVIDER_CODE ||
+      code === WELCOME_RECONCILE_CODE ||
+      TOPUP_PROVIDER_CODES.has(code) ||
+      payment.provider === "iyzico"
+    ) {
+      return total + payment.amount;
+    }
+
+    return total;
+  }, 0);
+}
+
+async function syncWalletBalanceFromPayments(userId: string): Promise<number> {
+  const payments = await listPaymentsByUserId(userId);
+  const ledgerBalance = Math.max(0, computeWalletBalanceFromPayments(payments));
+
+  const wallet = await prisma.wallet.findUnique({ where: { id: userId } });
+  if (!wallet) {
+    return ledgerBalance;
+  }
+
+  if (Math.abs(wallet.balance - ledgerBalance) > 0.001) {
+    await prisma.wallet.update({
+      where: { id: userId },
+      data: { balance: ledgerBalance },
+    });
+  }
+
+  return ledgerBalance;
+}
+
 function sumWelcomePayments(
   payments: Awaited<ReturnType<typeof listPaymentsByUserId>>,
 ): number {
@@ -81,13 +134,7 @@ async function reconcileLegacyWelcomeBalance(userId: string): Promise<void> {
       return;
     }
 
-    if (grantedTotal > 0 && wallet.balance < grantedTotal) {
-      await tx.wallet.update({
-        where: { id: userId },
-        data: { balance: grantedTotal },
-      });
-    }
-
+    // Hoş geldin bakiyesi eksik tanımlandıysa (ör. eski 100 TL politikası) tamamlama.
     if (grantedTotal > 0 && grantedTotal < WELCOME_BALANCE_TL) {
       const deficit = WELCOME_BALANCE_TL - grantedTotal;
 
@@ -146,6 +193,7 @@ async function enrichWallet(
 ): Promise<UserWalletRecord> {
   try {
     await reconcileLegacyWelcomeBalance(userId);
+    const syncedBalance = await syncWalletBalanceFromPayments(userId);
 
     const refreshed =
       (await prisma.wallet.findUnique({ where: { id: userId } })) ?? wallet;
@@ -157,7 +205,7 @@ async function enrichWallet(
 
     return {
       id: refreshed.id,
-      balance: refreshed.balance,
+      balance: syncedBalance,
       updatedAt: refreshed.updatedAt,
       welcomeGranted,
       hasPaidTopUp,
