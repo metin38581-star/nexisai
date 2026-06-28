@@ -154,10 +154,11 @@ model CampaignRadarLog {
 
 model Bait {
   id               String   @id @default(uuid())
+  userId           String   @map("user_id")
   campaignId       String
   baslik           String
   icerik           String
-  slug             String   @unique
+  slug             String
   platform         String   @default("PBN")
   yayinlandi       Boolean  @default(false)
   status           String   @default("PENDING")
@@ -170,6 +171,10 @@ model Bait {
   createdAt        DateTime @default(now())
   campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   intent           CampaignIntent?
+
+  @@unique([campaignId, slug])
+  @@index([userId])
+  @@index([campaignId])
 }
 
 model CampaignIntent {

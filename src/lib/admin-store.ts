@@ -339,6 +339,7 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
         .from("Bait")
         .select("slug, external_live_url, wp_url, dev_to_url, platform")
         .eq("campaignId", campaignId)
+        .eq("user_id", campaign.userId as string)
         .order("createdAt", { ascending: true }),
       supabase
         .from("CampaignIntent")
@@ -931,6 +932,7 @@ async function getCampaignsForUserViaPrisma(
     where: { userId },
     include: {
       baits: {
+        where: { userId },
         orderBy: { createdAt: "asc" },
       },
       intents: {
@@ -995,6 +997,7 @@ async function getCampaignsForUserViaSupabase(
         .from("Bait")
         .select("*")
         .eq("campaignId", campaignId)
+        .eq("user_id", campaign.userId as string)
         .order("createdAt", { ascending: true }),
       supabase
         .from("CampaignIntent")
@@ -1394,9 +1397,14 @@ async function getCampaignWithRelationsByIdViaPrisma(
     return null;
   }
 
+  const scopedBaits = campaign.userId
+    ? campaign.baits.filter((bait) => bait.userId === campaign.userId)
+    : campaign.baits;
+
   return {
     ...campaign,
     userId: campaign.userId,
+    baits: scopedBaits,
     hubAnswers: campaign.hubAnswers.map((answer) => ({
       id: answer.id,
       username: answer.username,
@@ -1427,6 +1435,7 @@ async function getCampaignWithRelationsByIdViaSupabase(
         .from("Bait")
         .select("*")
         .eq("campaignId", campaignId)
+        .eq("user_id", campaign.userId as string)
         .order("createdAt", { ascending: true }),
       supabase
         .from("CampaignIntent")

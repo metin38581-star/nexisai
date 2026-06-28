@@ -32,6 +32,7 @@ async function completeCampaignWithBaitsInTransaction(
   tx: Prisma.TransactionClient,
   campaignId: string,
   input: Omit<CreateCampaignInput, "userId">,
+  ownerUserId: string,
 ): Promise<CreatedCampaignResult> {
   const existing = await tx.campaign.findUnique({
     where: { id: campaignId },
@@ -59,6 +60,7 @@ async function completeCampaignWithBaitsInTransaction(
       baits: {
         create: input.baits.map((bait) => ({
           ...bait,
+          userId: ownerUserId,
           ...buildPublishedBaitFields(bait.slug),
         })),
       },
@@ -66,7 +68,7 @@ async function completeCampaignWithBaitsInTransaction(
   });
 
   const baits = await tx.bait.findMany({
-    where: { campaignId },
+    where: { campaignId, userId: ownerUserId },
     select: { id: true, baslik: true, icerik: true, slug: true },
   });
 
@@ -190,6 +192,7 @@ async function runTransactionalCampaignBilling(input: {
       tx,
       input.campaignId,
       input.campaign,
+      input.billing.userId,
     );
 
     const walletResult = await debitWalletInTransaction(tx, {
@@ -216,6 +219,7 @@ async function runFallbackCampaignBilling(input: {
   const campaign = await completeCampaignWithBaits(
     input.campaignId,
     input.campaign,
+    input.billing.userId,
   );
 
   const walletResult = await debitWalletForCampaign(

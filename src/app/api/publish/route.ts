@@ -66,6 +66,7 @@ export async function POST(request: Request) {
         radarSikligiDakika: 1440,
         baits: {
           create: {
+            userId: activeUserId,
             baslik: title,
             icerik: content,
             slug,

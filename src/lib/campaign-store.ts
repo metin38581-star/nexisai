@@ -8,6 +8,7 @@ import { buildHubArticleUrl } from "@/lib/hub-url";
 
 type SupabaseBaitRow = {
   id: string;
+  user_id: string;
   campaignId: string;
   baslik: string;
   icerik: string;
@@ -47,6 +48,7 @@ function mapBait(row: SupabaseBaitRow): StoredBait {
   const status = normalizeBaitStatus(row.status);
   return {
     id: row.id,
+    userId: row.user_id,
     campaignId: row.campaignId,
     baslik: row.baslik,
     icerik: row.icerik,
@@ -130,6 +132,7 @@ async function listCampaignsByUserViaPrisma(
       wordpressUrl: campaign.wordpressUrl,
       baits: campaign.baits.map((bait) => ({
         ...bait,
+        userId: bait.userId,
         createdAt: bait.createdAt.toISOString(),
       })),
     })),
@@ -687,20 +690,34 @@ export async function userHasCampaignAccess(
   }
 }
 
-export async function getCampaignBaitCount(campaignId: string): Promise<number> {
+export async function getCampaignBaitCount(
+  campaignId: string,
+  userId?: string,
+): Promise<number> {
   if (hasDatabaseUrl()) {
     try {
-      return await prisma.bait.count({ where: { campaignId } });
+      return await prisma.bait.count({
+        where: {
+          campaignId,
+          ...(userId ? { userId } : {}),
+        },
+      });
     } catch (error) {
       console.error("[CAMPAIGN_BAITS]: Prisma sayım hatası:", error);
     }
   }
 
   const supabase = getSupabaseAdmin();
-  const { count, error } = await supabase
+  let query = supabase
     .from("Bait")
     .select("*", { count: "exact", head: true })
     .eq("campaignId", campaignId);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { count, error } = await query;
 
   if (error) {
     console.error("[CAMPAIGN_BAITS]: Supabase sayım hatası:", error);
@@ -833,6 +850,7 @@ export async function releaseCampaignProcessingLock(
 export async function completeCampaignWithBaits(
   campaignId: string,
   input: Omit<CreateCampaignInput, "userId">,
+  ownerUserId: string,
 ): Promise<CreatedCampaignResult> {
   if (hasDatabaseUrl()) {
     try {
@@ -852,6 +870,7 @@ export async function completeCampaignWithBaits(
           baits: {
             create: input.baits.map((bait) => ({
               ...bait,
+              userId: ownerUserId,
               ...buildPublishedBaitFields(bait.slug),
             })),
           },
@@ -859,7 +878,7 @@ export async function completeCampaignWithBaits(
       });
 
       const baits = await prisma.bait.findMany({
-        where: { campaignId },
+        where: { campaignId, userId: ownerUserId },
         select: { id: true, baslik: true, icerik: true, slug: true },
       });
 
@@ -895,6 +914,7 @@ export async function completeCampaignWithBaits(
 
   const baitRows = input.baits.map((bait) => ({
     id: crypto.randomUUID(),
+    user_id: ownerUserId,
     campaignId,
     baslik: bait.baslik,
     icerik: bait.icerik,
@@ -1059,6 +1079,7 @@ async function createCampaignViaPrisma(
       baits: {
         create: input.baits.map((bait) => ({
           ...bait,
+          userId: input.userId,
           ...buildPublishedBaitFields(bait.slug),
         })),
       },
@@ -1104,6 +1125,7 @@ async function createCampaignViaSupabase(
 
   const baitRows = input.baits.map((bait) => ({
     id: crypto.randomUUID(),
+    user_id: input.userId,
     campaignId,
     baslik: bait.baslik,
     icerik: bait.icerik,

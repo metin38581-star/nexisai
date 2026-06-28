@@ -123,6 +123,7 @@ export interface LlmInquiryResult {
 
 export interface StoredBait {
   id: string;
+  userId: string;
   campaignId: string;
   baslik: string;
   icerik: string;
