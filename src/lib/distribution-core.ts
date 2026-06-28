@@ -29,7 +29,8 @@ export interface GeoWebhookPayload {
   agresiflik: string;
 }
 
-export interface GeoDistributionArticle extends WebhookArticleSource {}
+/** Dağıtım hattındaki makale kaynağı (webhook article alanları). */
+export type GeoDistributionArticle = WebhookArticleSource;
 
 export interface GeoDistributionContext {
   campaignId: string;
