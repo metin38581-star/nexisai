@@ -127,7 +127,7 @@ export default function CampaignForm({
         <FormField label="İşletme Web Sitesi (Opsiyonel)">
           <input
             type="text"
-            placeholder="ornek.com — boş bırakılabilir"
+            placeholder="Örn: www.nexısai.com"
             value={form.businessWebsite ?? ""}
             onChange={(e) => updateField("businessWebsite", e.target.value)}
             className={inputClass}
