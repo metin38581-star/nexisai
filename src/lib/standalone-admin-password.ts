@@ -2,6 +2,8 @@ import "server-only";
 
 import { timingSafeEqual } from "node:crypto";
 
+import { isStandaloneAdminSecretConfigured } from "@/lib/standalone-admin-auth";
+
 function resolveConfiguredPassword(): string | null {
   const fromEnv = process.env.ADMIN_STANDALONE_PASSWORD?.trim();
   return fromEnv || null;
@@ -28,13 +30,7 @@ export function isStandaloneAdminPasswordConfigured(): boolean {
   return Boolean(resolveConfiguredPassword());
 }
 
-export function isStandaloneAdminSecretConfigured(): boolean {
-  if (process.env.ADMIN_STANDALONE_SECRET?.trim()) {
-    return true;
-  }
-
-  return process.env.NODE_ENV !== "production";
-}
+export { isStandaloneAdminSecretConfigured } from "@/lib/standalone-admin-auth";
 
 export function getStandaloneAdminAuthReadiness(): {
   passwordConfigured: boolean;

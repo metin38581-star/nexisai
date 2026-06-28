@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   STANDALONE_ADMIN_COOKIE,
   buildStandaloneAdminCookieOptions,
-  createStandaloneAdminSessionValue,
+  createSignedStandaloneAdminSession,
   hasValidStandaloneAdminSession,
 } from "@/lib/standalone-admin-auth";
 import {
@@ -12,6 +12,8 @@ import {
 } from "@/lib/standalone-admin-password";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { handleApiRouteError } from "@/lib/api-error";
+
+export const runtime = "nodejs";
 
 function resolveClientKey(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -81,10 +83,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const signedSession = createSignedStandaloneAdminSession();
+    if (!signedSession.ok) {
+      return NextResponse.json(
+        { success: false, error: signedSession.error },
+        { status: 503 },
+      );
+    }
+
     const response = NextResponse.json({ success: true, authenticated: true });
     response.cookies.set(
       STANDALONE_ADMIN_COOKIE,
-      createStandaloneAdminSessionValue(),
+      signedSession.sessionToken,
       buildStandaloneAdminCookieOptions(),
     );
 
