@@ -29,9 +29,9 @@ import {
 } from "@/lib/question-hub-store";
 import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
 import { buildCoreQuestionPairs } from "@/lib/core-questions";
-import { buildForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { buildIntentPostTitle } from "@/lib/geo-prompt";
+import { buildCampaignPublicationUrls } from "@/lib/publication-urls";
 import {
   appendCampaignTerminalLogs,
   completeCampaignProcessingState,
@@ -223,12 +223,6 @@ export async function processCampaignInBackground(
       ? buildQuestionHubSlug(hubEntries[0].question)
       : null;
 
-    if (primaryForumSlug) {
-      await updateCampaignLogPublicationUrls(campaignId, {
-        forumUrl: buildForumHubUrl(primaryForumSlug),
-      });
-    }
-
     const usedSlugs = new Set<string>();
     const baitRecords =
       questionPairsForBaits.length > 0
@@ -256,6 +250,14 @@ export async function processCampaignInBackground(
             }),
           );
 
+    const publicationUrls = buildCampaignPublicationUrls({
+      primarySlug: baitRecords[0]?.slug,
+      forumSlug: primaryForumSlug,
+      businessDomain,
+    });
+
+    await updateCampaignLogPublicationUrls(campaignId, publicationUrls);
+
     const billingResult = await finalizeCampaignCreationWithBilling({
       campaignId,
       campaign: {
@@ -281,7 +283,9 @@ export async function processCampaignInBackground(
         city: sehir,
         amountSpent: toplamMaliyet,
         description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
-        forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
+        forumUrl: publicationUrls.forumUrl,
+        blogUrl: publicationUrls.blogUrl,
+        primaryAuthorityUrl: publicationUrls.primaryAuthorityUrl,
         businessDomain: businessDomain ?? null,
       },
     });

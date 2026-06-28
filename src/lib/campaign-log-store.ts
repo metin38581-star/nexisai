@@ -30,6 +30,7 @@ async function ensureCampaignLogTable(): Promise<void> {
         "amount_deposited" DOUBLE PRECISION NOT NULL DEFAULT 0,
         "wordpress_url" TEXT,
         "forum_url" TEXT,
+        "blog_url" TEXT,
         "primary_authority_url" TEXT,
         "business_domain" TEXT,
         "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -39,6 +40,7 @@ async function ensureCampaignLogTable(): Promise<void> {
       CREATE INDEX IF NOT EXISTS "CampaignLog_user_id_idx" ON "CampaignLog"("user_id");
       CREATE INDEX IF NOT EXISTS "CampaignLog_city_idx" ON "CampaignLog"("city");
       CREATE INDEX IF NOT EXISTS "CampaignLog_sector_idx" ON "CampaignLog"("sector");
+      ALTER TABLE "CampaignLog" ADD COLUMN IF NOT EXISTS "blog_url" TEXT;
     `);
     campaignLogTableEnsured = true;
   } catch (error) {
@@ -62,6 +64,7 @@ export interface RecordCampaignLogInput {
   amountDeposited?: number;
   wordpressUrl?: string | null;
   forumUrl?: string | null;
+  blogUrl?: string | null;
   businessDomain?: string | null;
   primaryAuthorityUrl?: string | null;
 }
@@ -90,6 +93,7 @@ async function recordCampaignLogViaPrisma(
       amountDeposited,
       wordpressUrl: input.wordpressUrl ?? null,
       forumUrl: input.forumUrl ?? null,
+      blogUrl: input.blogUrl ?? null,
       businessDomain: authority.businessDomain,
       primaryAuthorityUrl:
         input.primaryAuthorityUrl ?? authority.primaryAuthorityUrl,
@@ -107,9 +111,11 @@ async function recordCampaignLogViaPrisma(
         ? { wordpressUrl: input.wordpressUrl }
         : {}),
       ...(input.forumUrl !== undefined ? { forumUrl: input.forumUrl } : {}),
+      ...(input.blogUrl !== undefined ? { blogUrl: input.blogUrl } : {}),
+      ...(input.primaryAuthorityUrl !== undefined
+        ? { primaryAuthorityUrl: input.primaryAuthorityUrl }
+        : {}),
       businessDomain: authority.businessDomain,
-      primaryAuthorityUrl:
-        input.primaryAuthorityUrl ?? authority.primaryAuthorityUrl,
     },
   });
 }
@@ -134,6 +140,7 @@ async function recordCampaignLogViaSupabase(
     amount_deposited: amountDeposited,
     wordpress_url: input.wordpressUrl ?? null,
     forum_url: input.forumUrl ?? null,
+    blog_url: input.blogUrl ?? null,
     primary_authority_url:
       input.primaryAuthorityUrl ??
       resolvePrimaryAuthority(input.businessDomain).primaryAuthorityUrl,
@@ -186,6 +193,8 @@ async function listCampaignLogsViaPrisma(): Promise<AdminCampaignOverviewRow[]> 
     amountSpent: log.amountSpent,
     wordpressUrl: log.wordpressUrl,
     forumUrl: log.forumUrl,
+    blogUrl: log.blogUrl,
+    primaryAuthorityUrl: log.primaryAuthorityUrl,
     createdAt: log.createdAt.toISOString(),
   }));
 }
@@ -215,6 +224,8 @@ async function listCampaignLogsViaSupabase(): Promise<AdminCampaignOverviewRow[]
     amountSpent: Number(log.amount_spent),
     wordpressUrl: (log.wordpress_url as string | null) ?? null,
     forumUrl: (log.forum_url as string | null) ?? null,
+    blogUrl: (log.blog_url as string | null) ?? null,
+    primaryAuthorityUrl: (log.primary_authority_url as string | null) ?? null,
     createdAt: log.created_at as string,
   }));
 }

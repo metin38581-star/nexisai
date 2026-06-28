@@ -1,0 +1,1 @@
+ALTER TABLE "CampaignLog" ADD COLUMN IF NOT EXISTS "blog_url" TEXT;

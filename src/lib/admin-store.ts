@@ -14,6 +14,12 @@ import { SECTOR_OPTIONS } from "@/lib/constants";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { buildForumHubUrl, normalizeForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
+import {
+  buildCentralBlogPostUrl,
+  normalizeCentralBlogUrl,
+  normalizePublicationUrls,
+} from "@/lib/publication-urls";
+import { resolvePrimaryAuthority } from "@/lib/business-domain";
 import { listCampaignOperationalLogs } from "@/lib/campaign-log-store";
 import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -252,6 +258,7 @@ type CampaignOverviewSource = {
   sehir: string;
   sektor: string;
   createdAt: Date;
+  businessDomain: string | null;
   wordpressUrl: string | null;
   externalLiveUrl: string | null;
   baits: Array<{
@@ -275,6 +282,7 @@ async function listAllCampaignsOverviewViaPrisma(): Promise<
       sehir: true,
       sektor: true,
       createdAt: true,
+      businessDomain: true,
       wordpressUrl: true,
       externalLiveUrl: true,
       baits: {
@@ -333,6 +341,7 @@ async function listAllCampaignsOverviewViaSupabase(): Promise<
       sehir: campaign.sehir as string,
       sektor: campaign.sektor as string,
       createdAt: new Date(campaign.createdAt as string),
+      businessDomain: (campaign.business_domain as string | null) ?? null,
       wordpressUrl: (campaign.wordpress_url as string | null) ?? null,
       externalLiveUrl: (campaign.external_live_url as string | null) ?? null,
       baits: (baits ?? []).map((bait) => ({
@@ -415,6 +424,19 @@ function resolveCampaignForumUrl(
 
   const slug = buildQuestionHubSlug(firstQuestion);
   return slug ? buildForumHubUrl(slug) : null;
+}
+
+function resolveCampaignBlogUrl(
+  campaign: CampaignOverviewSource,
+): string | null {
+  const firstBait = campaign.baits[0];
+  return firstBait?.slug ? buildCentralBlogPostUrl(firstBait.slug) : null;
+}
+
+function resolveCampaignPrimaryAuthorityUrl(
+  campaign: CampaignOverviewSource,
+): string | null {
+  return resolvePrimaryAuthority(campaign.businessDomain).primaryAuthorityUrl;
 }
 
 async function resolveForumUrlsByCampaignIds(
@@ -529,11 +551,18 @@ function enrichOverviewRows(
         ? (creditDeposits.get(userId) ?? row.totalDeposited)
         : row.totalDeposited;
 
+    const publication = normalizePublicationUrls({
+      wordpressUrl: row.wordpressUrl,
+      forumUrl,
+      blogUrl: row.blogUrl,
+      primaryAuthorityUrl: row.primaryAuthorityUrl,
+    });
+
     return {
       ...row,
       walletBalance: liveWalletBalance,
       totalDeposited,
-      forumUrl,
+      ...publication,
     };
   });
 }
@@ -581,6 +610,12 @@ function buildOverviewStats(
       totalLinksPublished += 1;
     }
     if (row.forumUrl) {
+      totalLinksPublished += 1;
+    }
+    if (row.blogUrl) {
+      totalLinksPublished += 1;
+    }
+    if (row.primaryAuthorityUrl) {
       totalLinksPublished += 1;
     }
   }
@@ -650,6 +685,12 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
           forumUrlByCampaignId.get(campaign.id) ??
           resolveCampaignForumUrl(campaign),
       ),
+      blogUrl: normalizeCentralBlogUrl(
+        log?.blogUrl ?? resolveCampaignBlogUrl(campaign),
+      ),
+      primaryAuthorityUrl:
+        log?.primaryAuthorityUrl ??
+        resolveCampaignPrimaryAuthorityUrl(campaign),
       createdAt: log?.createdAt ?? campaign.createdAt.toISOString(),
     });
   }

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ExternalLink,
   Link2,
   Loader2,
   Search,
@@ -17,8 +16,8 @@ import type {
   AdminOverviewStats,
 } from "@/types/admin";
 import BackgroundGlow from "@/components/layout/BackgroundGlow";
+import ChannelDistributionMatrix from "@/components/admin/ChannelDistributionMatrix";
 import { ADMIN_BUSINESS_PATH, ADMIN_LOGIN_PATH } from "@/lib/admin-routes";
-import { normalizeForumHubUrl } from "@/lib/forum-hub-url";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("tr-TR", {
@@ -38,28 +37,6 @@ function formatTry(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function LinkCell({ url, label }: { url: string | null; label: string }) {
-  const resolvedUrl =
-    label === "Forum Hub" ? normalizeForumHubUrl(url) : url?.trim() || null;
-
-  if (!resolvedUrl) {
-    return <span className="text-zinc-600">—</span>;
-  }
-
-  return (
-    <a
-      href={resolvedUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex max-w-[220px] items-center gap-1.5 truncate text-xs text-cyan-300 transition hover:text-cyan-200"
-      title={resolvedUrl}
-    >
-      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate">{label}</span>
-    </a>
-  );
 }
 
 function KpiCard({
@@ -327,10 +304,7 @@ export default function SuperAdminDashboard() {
                     </th>
                     <th className="px-4 py-3 font-semibold">Yüklenen Bakiye</th>
                     <th className="px-4 py-3 font-semibold">
-                      WordPress Blog Linki
-                    </th>
-                    <th className="px-4 py-3 font-semibold">
-                      Forum (Soru-Cevap) Linki
+                      Kanal Dağıtım Matrisi
                     </th>
                     <th className="px-4 py-3 font-semibold">Kampanya Tarihi</th>
                   </tr>
@@ -339,7 +313,7 @@ export default function SuperAdminDashboard() {
                   {filteredRows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={5}
                         className="px-4 py-10 text-center text-zinc-500"
                       >
                         Filtrelere uygun kampanya kaydı bulunamadı.
@@ -370,10 +344,7 @@ export default function SuperAdminDashboard() {
                           {formatTry(row.totalDeposited)}
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <LinkCell url={row.wordpressUrl} label="WordPress" />
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <LinkCell url={row.forumUrl} label="Forum Hub" />
+                          <ChannelDistributionMatrix row={row} />
                         </td>
                         <td className="px-4 py-3 align-top whitespace-nowrap text-zinc-400">
                           {formatDate(row.createdAt)}

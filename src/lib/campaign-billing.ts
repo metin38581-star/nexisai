@@ -141,6 +141,7 @@ export interface CampaignBillingLogInput {
   description: string;
   wordpressUrl?: string | null;
   forumUrl?: string | null;
+  blogUrl?: string | null;
   businessDomain?: string | null;
   primaryAuthorityUrl?: string | null;
 }
@@ -169,6 +170,7 @@ async function writeCampaignBillingLog(
     amountDeposited,
     wordpressUrl: billing.wordpressUrl ?? null,
     forumUrl: billing.forumUrl ?? null,
+    blogUrl: billing.blogUrl ?? null,
     businessDomain: billing.businessDomain ?? null,
     primaryAuthorityUrl:
       billing.primaryAuthorityUrl ??
@@ -289,9 +291,19 @@ export async function finalizeExistingCampaignBilling(
 
 export async function updateCampaignLogPublicationUrls(
   campaignId: string,
-  urls: { wordpressUrl?: string | null; forumUrl?: string | null },
+  urls: {
+    wordpressUrl?: string | null;
+    forumUrl?: string | null;
+    blogUrl?: string | null;
+    primaryAuthorityUrl?: string | null;
+  },
 ): Promise<void> {
-  const data: { wordpressUrl?: string | null; forumUrl?: string | null } = {};
+  const data: {
+    wordpressUrl?: string | null;
+    forumUrl?: string | null;
+    blogUrl?: string | null;
+    primaryAuthorityUrl?: string | null;
+  } = {};
 
   if ("wordpressUrl" in urls) {
     data.wordpressUrl = urls.wordpressUrl ?? null;
@@ -299,6 +311,14 @@ export async function updateCampaignLogPublicationUrls(
 
   if ("forumUrl" in urls) {
     data.forumUrl = urls.forumUrl ?? null;
+  }
+
+  if ("blogUrl" in urls) {
+    data.blogUrl = urls.blogUrl ?? null;
+  }
+
+  if ("primaryAuthorityUrl" in urls) {
+    data.primaryAuthorityUrl = urls.primaryAuthorityUrl ?? null;
   }
 
   if (Object.keys(data).length === 0) {

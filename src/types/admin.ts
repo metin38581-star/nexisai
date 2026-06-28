@@ -81,6 +81,8 @@ export interface AdminCampaignOverviewRow {
   amountSpent: number;
   wordpressUrl: string | null;
   forumUrl: string | null;
+  blogUrl: string | null;
+  primaryAuthorityUrl: string | null;
   createdAt: string;
 }
 

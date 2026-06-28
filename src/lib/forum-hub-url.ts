@@ -1,7 +1,7 @@
 import { resolveSiteOrigin } from "@/lib/site-origin";
 
 export function buildForumHubPath(slug: string): string {
-  return `/forum/${encodeURIComponent(slug)}`;
+  return `/forum/topic/${encodeURIComponent(slug)}`;
 }
 
 export function buildForumHubUrl(slug: string): string {
@@ -19,8 +19,13 @@ export function normalizeForumHubUrl(value: string | null | undefined): string |
     return trimmed;
   }
 
-  if (trimmed.startsWith("/forum/")) {
+  if (trimmed.startsWith("/forum/topic/")) {
     return `${resolveSiteOrigin()}${trimmed}`;
+  }
+
+  if (trimmed.startsWith("/forum/")) {
+    const legacySlug = trimmed.replace(/^\/forum\//, "").replace(/^topic\//, "");
+    return legacySlug ? buildForumHubUrl(legacySlug) : null;
   }
 
   const slug = trimmed.replace(/^\/+/, "");

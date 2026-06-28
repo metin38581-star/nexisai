@@ -118,6 +118,7 @@ model CampaignLog {
   amountDeposited Float    @default(0) @map("amount_deposited")
   wordpressUrl    String?  @map("wordpress_url")
   forumUrl            String?  @map("forum_url")
+  blogUrl             String?  @map("blog_url")
   primaryAuthorityUrl String?  @map("primary_authority_url")
   businessDomain      String?  @map("business_domain")
   createdAt           DateTime @default(now()) @map("created_at")
