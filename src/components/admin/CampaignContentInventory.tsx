@@ -1,7 +1,8 @@
 "use client";
 
-import { ExternalLink, FileText, MessageSquare, MessagesSquare } from "lucide-react";
+import { FileText, MessageSquare, MessagesSquare } from "lucide-react";
 
+import AdminLiveLink from "@/components/admin/AdminLiveLink";
 import type {
   AdminCampaignContentRow,
   AdminCampaignPublicationSummary,
@@ -68,15 +69,14 @@ function CampaignSummaryLink({
   }
 
   return (
-    <a
+    <AdminLiveLink
       href={url}
-      target="_blank"
-      rel="noopener noreferrer"
       className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-200 transition hover:bg-violet-500/20"
+      title={url}
+      showIcon
     >
       {label}
-      <ExternalLink className="h-3 w-3" />
-    </a>
+    </AdminLiveLink>
   );
 }
 
@@ -92,15 +92,14 @@ function ContentLinkChip({
   }
 
   return (
-    <a
+    <AdminLiveLink
       href={url}
-      target="_blank"
-      rel="noopener noreferrer"
       className="inline-flex items-center gap-1 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-200 transition hover:bg-indigo-500/20"
+      title={url}
+      showIcon
     >
       {label}
-      <ExternalLink className="h-2.5 w-2.5" />
-    </a>
+    </AdminLiveLink>
   );
 }
 
@@ -172,9 +171,7 @@ export default function CampaignContentInventory({
             <tr>
               <th className="px-4 py-2.5 sm:px-5">Tür</th>
               <th className="px-4 py-2.5 sm:px-5">Başlık / Soru</th>
-              <th className="hidden px-4 py-2.5 md:table-cell sm:px-5">
-                Özet
-              </th>
+              <th className="px-4 py-2.5 sm:px-5">İçerik Önizleme</th>
               <th className="px-4 py-2.5 sm:px-5">Canlı Linkler</th>
               <th className="hidden px-4 py-2.5 lg:table-cell sm:px-5">
                 Tarih
@@ -201,7 +198,7 @@ export default function CampaignContentInventory({
                   <td className="max-w-[240px] px-4 py-3 align-top font-medium text-zinc-100 sm:max-w-xs sm:px-5">
                     {row.title}
                   </td>
-                  <td className="hidden max-w-sm px-4 py-3 align-top text-xs leading-relaxed text-zinc-500 md:table-cell sm:px-5">
+                  <td className="max-w-sm px-4 py-3 align-top text-xs leading-relaxed text-zinc-400 sm:px-5">
                     {row.excerpt || "—"}
                   </td>
                   <td className="px-4 py-3 align-top sm:px-5">

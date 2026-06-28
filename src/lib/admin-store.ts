@@ -22,6 +22,12 @@ import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 import { buildBlogPostUrl, normalizeBlogPostUrl } from "@/lib/blog-url";
 import { normalizePublicationUrls } from "@/lib/publication-urls";
 import { resolvePrimaryAuthority } from "@/lib/business-domain";
+import {
+  rewriteAdminContentRows,
+  rewriteAdminLinkSet,
+  rewriteAdminPublicationSummary,
+  rewriteAdminPublicationUrl,
+} from "@/lib/admin-link-url";
 import { listCampaignOperationalLogs } from "@/lib/campaign-log-store";
 import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -657,7 +663,75 @@ function buildOverviewStats(
   };
 }
 
-export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload> {
+function applySiteOriginToOverviewRow(
+  row: AdminCampaignOverviewRow,
+  siteOrigin: string,
+): AdminCampaignOverviewRow {
+  return {
+    ...row,
+    hubUrl: rewriteAdminPublicationUrl(row.hubUrl, siteOrigin),
+    wordpressUrl: rewriteAdminPublicationUrl(row.wordpressUrl, siteOrigin),
+    forumUrl: rewriteAdminPublicationUrl(row.forumUrl, siteOrigin),
+    blogUrl: rewriteAdminPublicationUrl(row.blogUrl, siteOrigin),
+    primaryAuthorityUrl: rewriteAdminPublicationUrl(
+      row.primaryAuthorityUrl,
+      siteOrigin,
+    ),
+  };
+}
+
+function applySiteOriginToCampaignHistory(
+  campaign: AdminCampaignHistory,
+  siteOrigin: string,
+): AdminCampaignHistory {
+  return {
+    ...campaign,
+    publicationSummary: rewriteAdminPublicationSummary(
+      campaign.publicationSummary,
+      siteOrigin,
+    ),
+    contentInventory: rewriteAdminContentRows(
+      campaign.contentInventory,
+      siteOrigin,
+    ),
+    intentContentPairs: campaign.intentContentPairs.map((pair) => ({
+      ...pair,
+      bait: pair.bait
+        ? {
+            ...pair.bait,
+            hubUrl:
+              rewriteAdminPublicationUrl(pair.bait.hubUrl, siteOrigin) ??
+              pair.bait.hubUrl,
+            wpUrl: rewriteAdminPublicationUrl(pair.bait.wpUrl, siteOrigin),
+            blogUrl: rewriteAdminPublicationUrl(pair.bait.blogUrl, siteOrigin),
+            forumUrl: rewriteAdminPublicationUrl(pair.bait.forumUrl, siteOrigin),
+            links: rewriteAdminLinkSet(pair.bait.links, siteOrigin),
+          }
+        : null,
+    })),
+  };
+}
+
+function applySiteOriginToCampaignDetail(
+  campaign: AdminCampaignDetail,
+  siteOrigin: string,
+): AdminCampaignDetail {
+  return {
+    ...campaign,
+    publicationSummary: rewriteAdminPublicationSummary(
+      campaign.publicationSummary,
+      siteOrigin,
+    ),
+    contentInventory: rewriteAdminContentRows(
+      campaign.contentInventory,
+      siteOrigin,
+    ),
+  };
+}
+
+export async function listAdminCampaignOverview(
+  siteOrigin?: string,
+): Promise<AdminOverviewPayload> {
   const [authUsers, operationalLogs, campaigns, walletBalances, creditDeposits] =
     await Promise.all([
       listAuthUsers(),
@@ -740,9 +814,13 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
     creditDeposits,
   );
 
+  const normalizedRows = siteOrigin
+    ? rows.map((row) => applySiteOriginToOverviewRow(row, siteOrigin))
+    : rows;
+
   return {
-    rows,
-    stats: buildOverviewStats(authUsers.length, walletBalances, rows),
+    rows: normalizedRows,
+    stats: buildOverviewStats(authUsers.length, walletBalances, normalizedRows),
   };
 }
 
@@ -1457,6 +1535,7 @@ async function resolveUserEmail(userId: string | null | undefined): Promise<stri
 
 export async function getAdminCampaignDetail(
   campaignId: string,
+  siteOrigin?: string,
 ): Promise<AdminCampaignDetail | null> {
   const campaign = await getCampaignWithRelationsById(campaignId);
   if (!campaign) {
@@ -1466,7 +1545,7 @@ export async function getAdminCampaignDetail(
   const publicationSummary = buildCampaignPublicationSummary(campaign);
   const userEmail = await resolveUserEmail(campaign.userId);
 
-  return {
+  const detail: AdminCampaignDetail = {
     id: campaign.id,
     markaAdi: campaign.markaAdi,
     sehir: campaign.sehir,
@@ -1477,10 +1556,13 @@ export async function getAdminCampaignDetail(
     contentInventory: buildCampaignContentInventory(campaign),
     publicationSummary,
   };
+
+  return siteOrigin ? applySiteOriginToCampaignDetail(detail, siteOrigin) : detail;
 }
 
 export async function getAdminBusinessDetail(
   userId: string,
+  siteOrigin?: string,
 ): Promise<AdminBusinessDetail | null> {
   const supabase = getSupabaseAdmin();
   const { data: authData, error: authError } =
@@ -1525,6 +1607,8 @@ export async function getAdminBusinessDetail(
     return null;
   }
 
+  const mappedCampaigns = campaigns.map(mapCampaignHistory);
+
   return {
     userId,
     registeredAt:
@@ -1537,7 +1621,11 @@ export async function getAdminBusinessDetail(
     sectorLabel: sector === "—" ? "—" : resolveSectorLabel(sector),
     totalPaymentAmount: paymentTotal,
     currency: payments[0]?.currency ?? "TRY",
-    campaigns: campaigns.map(mapCampaignHistory),
+    campaigns: siteOrigin
+      ? mappedCampaigns.map((campaign) =>
+          applySiteOriginToCampaignHistory(campaign, siteOrigin),
+        )
+      : mappedCampaigns,
     payments: payments.map(mapPaymentRecord),
   };
 }

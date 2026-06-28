@@ -1,7 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-
+import AdminLiveLink from "@/components/admin/AdminLiveLink";
 import type { AdminCampaignOverviewRow } from "@/types/admin";
 
 function ChannelLinkBadge({
@@ -25,16 +24,14 @@ function ChannelLinkBadge({
   }
 
   return (
-    <a
+    <AdminLiveLink
       href={url}
-      target="_blank"
-      rel="noopener noreferrer"
       className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:border-cyan-400/50 hover:bg-cyan-500/15"
       title={`${title}: ${url}`}
+      showIcon
     >
-      <ExternalLink className="h-3 w-3 shrink-0" />
       {label}
-    </a>
+    </AdminLiveLink>
   );
 }
 

@@ -96,7 +96,11 @@ export default function CampaignDetailModal({
         onClick={onClose}
       />
 
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-violet-500/20 bg-zinc-950 shadow-2xl sm:rounded-2xl">
+      <div
+        className="relative z-10 flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-violet-500/20 bg-zinc-950 shadow-2xl sm:rounded-2xl"
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-white/5 px-5 py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-400">

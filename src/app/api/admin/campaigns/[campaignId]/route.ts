@@ -3,9 +3,10 @@ import { NextResponse } from "next/server";
 import { assertSuperAdminAccess } from "@/lib/admin-auth";
 import { getAdminCampaignDetail } from "@/lib/admin-store";
 import { handleApiRouteError } from "@/lib/api-error";
+import { resolveSiteOriginFromRequest } from "@/lib/site-origin";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ campaignId: string }> },
 ) {
   try {
@@ -15,7 +16,8 @@ export async function GET(
     }
 
     const { campaignId } = await context.params;
-    const campaign = await getAdminCampaignDetail(campaignId);
+    const siteOrigin = resolveSiteOriginFromRequest(request);
+    const campaign = await getAdminCampaignDetail(campaignId, siteOrigin);
 
     if (!campaign) {
       return NextResponse.json(

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { assertAdminAccess } from "@/lib/admin-auth";
 import { getAdminBusinessDetail } from "@/lib/admin-store";
 import { handleApiRouteError } from "@/lib/api-error";
+import { resolveSiteOriginFromRequest } from "@/lib/site-origin";
 
 export async function GET(
   request: Request,
@@ -15,7 +16,8 @@ export async function GET(
     }
 
     const { userId } = await context.params;
-    const detail = await getAdminBusinessDetail(userId);
+    const siteOrigin = resolveSiteOriginFromRequest(request);
+    const detail = await getAdminBusinessDetail(userId, siteOrigin);
 
     if (!detail) {
       return NextResponse.json(
