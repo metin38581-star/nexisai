@@ -164,6 +164,89 @@ function applyCampaignSuccess(
   void handlers.fetchCampaigns({ silent: true });
 }
 
+async function pollCampaignProcessingStatus(
+  token: string,
+  payload: CampaignSessionPayload,
+  campaignId: string,
+  handlers: {
+    setActiveCampaignId: (id: string) => void;
+    setLlmResult: (value: LlmInquiryResult | null) => void;
+    setTerminalLogs: (logs: TerminalLogEntry[]) => void;
+    setPendingDistribution: (value: {
+      count: number;
+      sehir: string;
+      sektor: string;
+    } | null) => void;
+    onWalletRefresh?: () => void;
+    runRadarScan: () => Promise<void>;
+    fetchCampaigns: (options?: { silent?: boolean }) => Promise<void>;
+    setIsActive: (value: boolean) => void;
+  },
+): Promise<void> {
+  let lastLogCount = 0;
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 1500);
+    });
+
+    try {
+      const response = await fetch(
+        `/api/campaign/${campaignId}/status`,
+        buildAuthFetchInit(token),
+      );
+      if (!response.ok) {
+        continue;
+      }
+
+      const state = (await response.json()) as {
+        status?: string;
+        terminalLogs?: TerminalLogEntry[];
+        result?: CampaignResponse | null;
+      };
+
+      const logs = state.terminalLogs ?? [];
+      if (logs.length > lastLogCount) {
+        handlers.setTerminalLogs(
+          payload.withTahsilat
+            ? [buildTahsilatLog(), ...logs]
+            : logs,
+        );
+        lastLogCount = logs.length;
+      }
+
+      if (state.status === "complete" && state.result) {
+        applyCampaignSuccess(
+          payload,
+          {
+            ...state.result,
+            success: true,
+            campaignId,
+            terminalLogs: logs,
+            metrics: state.result.metrics ?? {
+              visibilityRate: 0,
+              estimatedTraffic: 0,
+              spentBudget: 0,
+              totalBudget: 0,
+            },
+          },
+          handlers,
+        );
+        return;
+      }
+
+      if (state.status === "failed") {
+        handlers.setTerminalLogs(logs);
+        handlers.setIsActive(false);
+        return;
+      }
+    } catch {
+      // Sonraki denemeye geç.
+    }
+  }
+}
+
+/** @deprecated Eski kampanya listesi polling — yedek */
 async function pollCampaignCompletion(
   token: string,
   payload: CampaignSessionPayload,
@@ -677,12 +760,17 @@ function AnalysisDashboardContent({
 
             applyCampaignSuccess(payload, result, successHandlers);
 
-            if (result.inProgress && result.campaignId) {
-              void pollCampaignCompletion(
+            if (
+              result.campaignId &&
+              (result.inProgress ||
+                result.status === "started" ||
+                result.status === "processing")
+            ) {
+              void pollCampaignProcessingStatus(
                 token,
                 payload,
                 result.campaignId,
-                successHandlers,
+                { ...successHandlers, setIsActive },
               );
             }
             return;

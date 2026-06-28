@@ -72,6 +72,8 @@ export interface TerminalLogEntry {
 
 export interface CampaignResponse {
   success: boolean;
+  /** Asenkron kampanya durumu */
+  status?: "started" | "processing" | "complete" | "failed";
   campaignId?: string;
   requiresPayment?: boolean;
   amountDue?: number;

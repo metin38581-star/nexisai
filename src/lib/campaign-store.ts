@@ -172,7 +172,7 @@ const DUPLICATE_CAMPAIGN_WINDOW_MS = 60_000;
 const CONCURRENT_CAMPAIGN_WINDOW_MS = 5_000;
 const INCOMPLETE_SHELL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CAMPAIGN_PROCESSING_MARKER = "__NEXIS_PROCESSING__";
-const CAMPAIGN_PROCESSING_STALE_MS = 30 * 1000;
+const CAMPAIGN_PROCESSING_STALE_MS = 15 * 60 * 1000;
 
 function normalizeCampaignText(value: string): string {
   return value.trim().toLocaleLowerCase("tr-TR");
@@ -713,6 +713,27 @@ export async function tryAcquireCampaignExecution(
   }
 
   return "acquired";
+}
+
+export async function releaseCampaignProcessingLock(
+  campaignId: string,
+  feedback = "Yapay zeka taraması bekleniyor...",
+): Promise<void> {
+  if (!hasDatabaseUrl()) {
+    return;
+  }
+
+  try {
+    await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        llmFeedback: { startsWith: CAMPAIGN_PROCESSING_MARKER },
+      },
+      data: { llmFeedback: feedback },
+    });
+  } catch (error) {
+    console.error("[CAMPAIGN_LOCK]: İşlem kilidi serbest bırakılamadı:", error);
+  }
 }
 
 export async function completeCampaignWithBaits(

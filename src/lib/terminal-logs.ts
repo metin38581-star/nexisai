@@ -1,5 +1,6 @@
 import type {
   LlmInquiryResult,
+  TerminalLogCategory,
   TerminalLogEntry,
 } from "@/types/campaign";
 import type { NormalizedCampaignApiRequest } from "@/lib/campaign-api-normalize";
@@ -15,6 +16,47 @@ function formatTimestamp(offsetMs: number): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+export function formatLogTimestamp(date = new Date()): string {
+  return date.toLocaleTimeString("tr-TR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+export function buildStartupTerminalLogs(
+  markaAdi: string,
+  sehir: string,
+): TerminalLogEntry[] {
+  const ts = formatLogTimestamp();
+  return [
+    {
+      id: `start-${Date.now()}`,
+      timestamp: ts,
+      category: "SİSTEM",
+      message: `✓ [OTURUM]: ${markaAdi} (${sehir}) GEO operasyonu başlatıldı — arka plan motoru devrede.`,
+    },
+    {
+      id: `start-analyze-${Date.now() + 1}`,
+      timestamp: ts,
+      category: "ANALİZ",
+      message: `[ANALİZ] Yapay zeka görünürlük taraması ve yemleme ağı paralel olarak tetikleniyor...`,
+    },
+  ];
+}
+
+export function buildProgressTerminalLog(
+  category: TerminalLogCategory,
+  message: string,
+): TerminalLogEntry {
+  return {
+    id: `progress-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: formatLogTimestamp(),
+    category,
+    message,
+  };
 }
 
 function getSegmentCount(

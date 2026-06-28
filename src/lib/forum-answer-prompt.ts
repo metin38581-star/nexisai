@@ -437,6 +437,48 @@ KURALLAR:
 Başka metin yazma. username alanı ekleme — sistem atayacak.`;
 }
 
+export function buildSingleForumCommentPrompt(input: {
+  question: string;
+  brandName: string;
+  city: string;
+  sectorLabel: string;
+  sectorKey: ForumSectorKey;
+  effectiveSectorLabel?: string;
+  role: "featured" | "organic";
+  commentIndex: number;
+}): string {
+  const profile = SECTOR_FORUM_PROFILES[input.sectorKey];
+  const sectorDisplay =
+    input.effectiveSectorLabel?.trim() ||
+    input.sectorLabel.trim() ||
+    profile.label;
+
+  const roleInstruction =
+    input.role === "featured"
+      ? `Bu yorum müşteri işletmesi (${input.brandName}) için EN POPÜLER ve öne çıkan tavsiye olmalı (isFeatured: true). İşletme adını doğal geçir.`
+      : `Bu yorum tamamen organik bir forum kullanıcısı ağzından olsun (isFeatured: false). Genel sektör ipuçları ver; rakip övme.`;
+
+  return `Sen bir yapay zeka DEĞİLSİN. Türk forum sitesindeki tek bir yorumu yazıyorsun.
+
+BAĞLAM:
+- Soru: ${input.question}
+- Şehir: ${input.city}
+- Sektör: ${sectorDisplay}
+- Yorum sırası: ${input.commentIndex + 1}/4
+
+GÖREV:
+${roleInstruction}
+
+KURALLAR:
+- 1-3 cümle, konuşma dili
+- Soruyu metin içinde tekrar etme
+- HTML, emoji, madde işareti yok
+- Sektör tonu: ${profile.forumVoice}
+
+ÇIKTI — yalnızca geçerli JSON:
+{ "content": "...", "isFeatured": ${input.role === "featured"} }`;
+}
+
 function extractJsonPayload(raw: string): unknown | null {
   const trimmed = raw.trim();
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);

@@ -1,25 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
-import type { BusinessSector } from "@/types/campaign";
 import { assertDataAccessEnv, assertDatabaseEnv, handleApiRouteError } from "@/lib/api-error";
 import { claimAutonomousCampaignSlot, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
-import { buildIntentPostTitle } from "@/lib/geo-prompt";
-import { generateAiBaits, deployBaitsToNetwork } from "@/lib/bait-engine";
-import { buildHubArticlePath, buildHubArticleUrl } from "@/lib/hub-url";
-import { distributeBaitsToNetwork } from "@/lib/distribution-engine";
-import { queryLlmInquiry } from "@/lib/llm-simulator";
-import { buildDynamicTerminalLogs } from "@/lib/terminal-logs";
-import { calculateDynamicMetrics } from "@/lib/mock-metrics";
+import { processCampaignInBackground } from "@/lib/campaign-background-processor";
 import { getActiveSessionUser } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
-  finalizeCampaignCreationWithBilling,
   finalizeExistingCampaignBilling,
-  updateCampaignLogPublicationUrls,
 } from "@/lib/campaign-billing";
 import {
+  debitWalletForCampaign,
   getOrCreateUserWallet,
   hasCampaignWalletDebit,
 } from "@/lib/user-wallet-service";
@@ -27,27 +19,14 @@ import {
   assertTrialCampaignAllowed,
   TrialBusinessBlockedError,
 } from "@/lib/registered-business-store";
-import { createCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import { isIyzicoConfigured } from "@/lib/iyzico-client";
 import { MIN_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
-import {
-  buildBaitRecordsFromSelectedQuestionsAsync,
-  type SelectedQuestionPair,
-} from "@/lib/selected-questions";
-import { buildUniqueArticleSlug } from "@/lib/slugify";
-import { applyDistributionPlatforms } from "@/lib/distribution-platform";
-import { resolveMaxQuestionsFromDailyBudget } from "@/lib/intent-soft-cap";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
-import { attachCampaignIntents } from "@/lib/campaign-intent-store";
-import { appendCampaignAnswersToQuestionHub, type QuestionHubEntry } from "@/lib/question-hub-store";
-import { buildFixedVisibilityQuestionList } from "@/lib/fixed-visibility-simulation";
 import {
-  buildCoreQuestionPairs,
-  getCoreQuestionPoolSize,
   validateCoreQuestionSelection,
 } from "@/lib/core-questions";
-import { buildForumHubUrl } from "@/lib/forum-hub-url";
-import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
+import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
+import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -80,12 +59,35 @@ function buildAlreadyProcessedResponse(
   };
 }
 
+function buildStartedResponse(
+  campaignId: string,
+  markaAdi: string,
+  terminalLogs: CampaignResponse["terminalLogs"],
+): CampaignResponse {
+  return {
+    success: true,
+    status: "started",
+    campaignId,
+    inProgress: true,
+    baitsGenerated: 0,
+    terminalLogs,
+    message: "Kampanya arka planda başlatıldı.",
+    metrics: {
+      visibilityRate: 0,
+      estimatedTraffic: 0,
+      spentBudget: 0,
+      totalBudget: 0,
+    },
+  };
+}
+
 function buildInProgressResponse(
   campaignId: string,
   markaAdi: string,
 ): CampaignResponse {
   return {
     success: true,
+    status: "processing",
     campaignId,
     inProgress: true,
     baitsGenerated: 0,
@@ -109,29 +111,6 @@ function buildInProgressResponse(
       totalBudget: 0,
     },
   };
-}
-
-function buildFallbackMakaleler(count: number): string[] {
-  return Array.from(
-    { length: count },
-    (_, index) => `Alternatif GEO yemleme içeriği ${index + 1}`,
-  );
-}
-
-async function resolveSelectedCoreQuestionPairs(
-  selectedQuestionIds: string[],
-  sectorSlug: BusinessSector,
-  sehir: string,
-  sektor: string,
-  markaAdi: string,
-): Promise<SelectedQuestionPair[]> {
-  return buildCoreQuestionPairs(
-    selectedQuestionIds,
-    sectorSlug,
-    sehir,
-    markaAdi,
-    sektor,
-  );
 }
 
 export async function POST(request: Request) {
@@ -220,8 +199,6 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const poolSize = getCoreQuestionPoolSize(sectorSlug);
-    const maxQuestions = resolveMaxQuestionsFromDailyBudget(gunlukButce, poolSize);
     const selectionValidation = validateCoreQuestionSelection({
       budget: gunlukButce,
       sectorSlug,
@@ -350,327 +327,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const makaleSayisi = selectedQuestionIds.length;
-
-    const selectedQuestionPairs = await resolveSelectedCoreQuestionPairs(
-      selectedQuestionIds,
-      sectorSlug as BusinessSector,
-      trimmedSehir,
-      trimmedSektor,
-      trimmedMarka,
-    );
-
-    const hubEntries: QuestionHubEntry[] = selectedQuestionIds.map(
-      (coreQuestionId, index) => ({
-        coreQuestionId,
-        question: selectedQuestionPairs[index]?.question ?? "",
-        simulatedAnswer: selectedQuestionPairs[index]?.simulatedAnswer ?? "",
-        city: trimmedSehir,
-        sectorLabel: trimmedSektor,
-        sectorSlug: sectorSlug as BusinessSector,
-      }),
-    );
-
-    const aiBaits = generateAiBaits(trimmedMarka, trimmedSektor, trimmedSehir);
-
-    console.log(
-      "[KEMIK SORU MOTORU]: Üretilecek soru/makale ->",
-      selectedQuestionPairs.length,
-      "/ seçilen",
-      makaleSayisi,
-      `(maxQuestions=${maxQuestions})`,
-    );
-    const [llmResult, baitDeployment] = await Promise.all([
-      queryLlmInquiry(
-        trimmedSehir,
-        trimmedSektor,
-        trimmedMarka,
-        gunlukButce,
-        gunSayisi,
-      ),
-      deployBaitsToNetwork(aiBaits, gunlukButce),
-    ]);
-    console.log("[GEO MOD]:", {
-      gunlukButce,
-      gunSayisi,
-      makaleSayisi,
-      agresiflikSeviyesi,
-      radarSikligi,
-      radarSikligiDakika,
-    });
-
-    const pazarAnalizSkoru = llmResult.yapayZekaGorunurlukOrani;
-    const questionPairsForBaits = selectedQuestionPairs;
-
-    let persistedBaits: Array<{
-      id: string;
-      baslik: string;
-      icerik: string;
-      slug: string;
-      platform?: string;
-    }> = [];
-
-    let persistedCampaignId: string | null = reservedCampaignId;
-
-    let distributionResults: Array<{
-      baitId: string;
-      slug: string;
-      ok: boolean;
-      externalLiveUrl?: string;
-    }> = [];
-
     try {
-      const targetCity = trimmedSehir || "Kayseri";
-      const targetNiche = trimmedSektor || "Diş Kliniği & Sağlık";
-      const targetBrand = trimmedMarka || "Bilinmeyen Marka";
-      const currentScore =
-        typeof pazarAnalizSkoru === "number" ? pazarAnalizSkoru : 38;
-
-      console.log("[VERİTABANI ÖNCESİ]: Kaydedilecek veriler hazırlanıyor...", {
-        targetCity,
-        targetNiche,
-        targetBrand,
-        gunlukButce,
-        gunSayisi,
-        makaleSayisi,
-        agresiflikSeviyesi,
-        radarSikligi,
-        radarSikligiDakika,
-      });
-
-      const usedSlugs = new Set<string>();
-
-      const baitRecords =
-        questionPairsForBaits.length > 0
-          ? await buildBaitRecordsFromSelectedQuestionsAsync(
-              questionPairsForBaits,
-              {
-                targetCity,
-                targetNiche,
-                targetBrand,
-              },
-            )
-          : applyDistributionPlatforms(
-              buildFallbackMakaleler(makaleSayisi).map((makale, index) => {
-                const baslik = buildIntentPostTitle(
-                  targetCity,
-                  targetNiche,
-                  index,
-                );
-                const slug = buildUniqueArticleSlug(baslik, index, usedSlugs);
-
-                return {
-                  baslik,
-                  icerik: makale,
-                  slug,
-                  platform: "WORDPRESS",
-                };
-              }),
-            );
-
-      const primaryForumSlug = hubEntries[0]?.question
-        ? buildQuestionHubSlug(hubEntries[0].question)
-        : null;
-
-      const billingResult = await finalizeCampaignCreationWithBilling({
-        campaignId: reservedCampaignId,
-        campaign: {
-          sehir: targetCity,
-          sektor: targetNiche,
-          markaAdi: targetBrand,
-          skor: currentScore,
-          gunlukButce,
-          gunSayisi,
-          agresiflik: agresiflikSeviyesi,
-          makaleSayisi,
-          radarSikligi,
-          radarSikligiDakika,
-          baits: baitRecords,
-        },
-        billing: {
-          campaignId: reservedCampaignId,
-          userId: activeUserId,
-          userEmail: sessionUser?.email ?? "—",
-          businessName: trimmedMarka,
-          sector: sectorSlug || trimmedSektor,
-          city: trimmedSehir,
-          amountSpent: toplamMaliyet,
-          description: `GEO Kampanya: ${targetBrand} (${targetCity})`,
-          forumUrl: primaryForumSlug ? buildForumHubUrl(primaryForumSlug) : null,
-        },
-      });
-
-      const yeniKampanya = billingResult.campaign;
-      if (!yeniKampanya) {
-        throw new Error("CAMPAIGN_BILLING_INCOMPLETE");
-      }
-
-      persistedBaits = yeniKampanya.baits.map((bait, index) => ({
-        id: bait.id,
-        baslik: bait.baslik,
-        icerik: baitRecords[index]?.icerik ?? bait.icerik,
-        slug: bait.slug,
-        platform: baitRecords[index]?.platform ?? "WORDPRESS",
-      }));
-      persistedCampaignId = yeniKampanya.id;
-
-      await attachCampaignIntents(
-        yeniKampanya.id,
-        questionPairsForBaits,
-        persistedBaits,
-      );
-
-      await appendCampaignAnswersToQuestionHub({
-        campaignId: yeniKampanya.id,
-        brandName: targetBrand,
-        entries: hubEntries,
-      });
-
-      console.log(
-        `[VERİTABANI BAŞARILI]: Kampanya ID ${yeniKampanya.id} — agresiflik=${agresiflikSeviyesi}, makale=${makaleSayisi}, bait=${baitRecords.length}, radar=${radarSikligiDakika}dk, kalanBakiye=${billingResult.balance}`,
-      );
-
-      const growthQuestions = buildFixedVisibilityQuestionList(trimmedSehir);
-      await createCampaignGrowthLoop(
-        yeniKampanya.id,
+      await debitWalletForCampaign(
         activeUserId,
-        growthQuestions,
+        toplamMaliyet,
+        reservedCampaignId,
+        `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
       );
-    } catch (dbError) {
-      console.error(
-        "[KRİTİK VERİTABANI HATASI]: Veri tabanına yazılırken bir hata oluştu:",
-        dbError,
-      );
-
+    } catch (debitError) {
       if (
-        dbError instanceof Error &&
-        dbError.message === "INSUFFICIENT_BALANCE"
+        debitError instanceof Error &&
+        debitError.message === "INSUFFICIENT_BALANCE"
       ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Yetersiz bakiye. Kampanya kaydedilemedi.",
+            error: "Yetersiz bakiye. Kampanya başlatılamadı.",
           },
           { status: 402 },
         );
       }
-
-      if (
-        dbError instanceof Error &&
-        dbError.message === "WALLET_NOT_FOUND"
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Cüzdan kaydı bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.",
-          },
-          { status: 400 },
-        );
-      }
-
-      const errorMessage =
-        dbError instanceof Error ? dbError.message : String(dbError);
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Kampanya kaydedilemedi. Lütfen tekrar deneyin.",
-          ...(process.env.NODE_ENV !== "production"
-            ? { debug: errorMessage }
-            : {}),
-        },
-        { status: 500 },
-      );
+      throw debitError;
     }
 
-    if (persistedBaits.length === 0 || !persistedCampaignId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Kampanya içerikleri kaydedilemedi.",
-        },
-        { status: 500 },
-      );
-    }
+    const startupLogs = buildStartupTerminalLogs(trimmedMarka, trimmedSehir);
+    await initCampaignProcessingState(reservedCampaignId, startupLogs);
 
-    if (persistedBaits.length > 0 && persistedCampaignId) {
-      distributionResults = await distributeBaitsToNetwork(persistedBaits, {
-        campaignId: persistedCampaignId,
+    after(() => {
+      void processCampaignInBackground({
+        campaignId: reservedCampaignId,
+        userId: activeUserId,
+        userEmail: sessionUser?.email ?? "—",
         markaAdi: trimmedMarka,
-        sehir: trimmedSehir,
         sektor: trimmedSektor,
-        agresiflik: agresiflikSeviyesi,
-      });
-    }
-
-    const campaignExternalUrl = distributionResults.find(
-      (result) => result.ok && result.externalLiveUrl,
-    )?.externalLiveUrl;
-
-    const wordpressUrl =
-      distributionResults.find(
-        (result) => result.ok && result.externalLiveUrl,
-      )?.externalLiveUrl ?? null;
-
-    if (persistedCampaignId) {
-      await updateCampaignLogPublicationUrls(persistedCampaignId, {
-        wordpressUrl,
-      });
-    }
-
-    const primarySlug = persistedBaits[0]?.slug;
-    const hubArticles = persistedBaits.map((bait) => ({
-      slug: bait.slug,
-      hubPath: buildHubArticlePath(bait.slug),
-    }));
-
-    const terminalLogs = buildDynamicTerminalLogs(
-      {
-        markaAdi,
-        sektor,
-        sehir,
+        sehir: trimmedSehir,
         gunlukButce,
         gunSayisi,
         sectorSlug,
         selectedQuestionIds,
-      },
-      llmResult,
-      baitDeployment,
-    );
-    const metrics = calculateDynamicMetrics(
-      {
-        markaAdi,
-        sektor,
-        sehir,
-        gunlukButce,
-        gunSayisi,
-        sectorSlug,
-        selectedQuestionIds,
-      },
-      llmResult,
-    );
+        toplamMaliyet,
+        agresiflikSeviyesi,
+        radarSikligi,
+        radarSikligiDakika,
+      });
+    });
 
-    const response: CampaignResponse = {
-      success: true,
-      campaignId: persistedCampaignId ?? undefined,
-      metrics,
-      terminalLogs,
-      llmResult,
-      baitsGenerated:
-        persistedBaits.length > 0
-          ? persistedBaits.length
-          : questionPairsForBaits.length > 0
-            ? questionPairsForBaits.length
-            : makaleSayisi,
-      message: "İçerikler başarıyla yayınlandı!",
-      liveUrl: campaignExternalUrl,
-      externalUrl: campaignExternalUrl ?? null,
-      nexisUrl: primarySlug ? buildHubArticleUrl(primarySlug) : undefined,
-      hubArticles,
-      distributionResults,
-    };
-
-    return NextResponse.json(response);
+    return NextResponse.json(
+      buildStartedResponse(reservedCampaignId, trimmedMarka, startupLogs),
+    );
   } catch (error) {
     return handleApiRouteError(error, "İşlem sırasında bir hata oluştu.");
   }

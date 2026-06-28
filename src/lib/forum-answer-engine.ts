@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import {
   buildForumAnswerContent,
   buildForumThreadFallback,
-  buildForumThreadPrompt,
+  buildSingleForumCommentPrompt,
   parseForumThreadComments,
   resolveEffectiveSectorLabel,
   resolveForumSectorKey,
@@ -17,6 +17,12 @@ import type { BusinessSector } from "@/types/campaign";
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
 const GOOGLE_GENAI_API_VERSION = "v1";
 const FORUM_THREAD_TIMEOUT_MS = 30_000;
+const FORUM_COMMENT_ROLES = [
+  "featured",
+  "organic",
+  "organic",
+  "organic",
+] as const;
 
 export interface ForumAnswerInput {
   question: string;
@@ -82,17 +88,18 @@ function assignUsernamesToThread(
   }));
 }
 
-async function generateForumThreadViaLlm(
+async function generateSingleForumCommentViaLlm(
   input: ForumAnswerInput,
   sectorKey: ReturnType<typeof resolveForumSectorKey>,
-): Promise<ForumThreadCommentDraft[] | null> {
+  role: (typeof FORUM_COMMENT_ROLES)[number],
+  commentIndex: number,
+): Promise<ForumThreadCommentDraft | null> {
   const apiKey = resolveApiKey();
   if (!apiKey) {
     return null;
   }
 
   const effectiveSectorLabel = resolveEntrySectorLabel(input);
-
   const ai = new GoogleGenAI({
     apiKey,
     apiVersion: GOOGLE_GENAI_API_VERSION,
@@ -101,16 +108,18 @@ async function generateForumThreadViaLlm(
   const response = await withTimeout(
     ai.models.generateContent({
       model: resolveGoogleGenAiModel(),
-      contents: buildForumThreadPrompt({
+      contents: buildSingleForumCommentPrompt({
         question: input.question,
         brandName: input.brandName,
         city: input.city,
         sectorLabel: input.sectorLabel,
         sectorKey,
         effectiveSectorLabel,
+        role,
+        commentIndex,
       }),
       config: {
-        maxOutputTokens: 1024,
+        maxOutputTokens: 384,
         temperature: 0.88,
         responseMimeType: "application/json",
       },
@@ -124,15 +133,52 @@ async function generateForumThreadViaLlm(
   }
 
   const parsed = parseForumThreadComments(text, sectorKey);
-  if (parsed.length >= 3) {
-    return parsed;
+  const comment = parsed[0];
+  if (!comment?.content) {
+    return null;
   }
 
-  console.warn(
-    "[FORUM_ANSWER]: LLM JSON parse yetersiz, ham yanit:",
-    text.slice(0, 240),
-  );
+  return {
+    content: comment.content,
+    isFeatured: role === "featured",
+  };
+}
+
+async function generateForumThreadCommentsParallel(
+  input: ForumAnswerInput,
+  sectorKey: ReturnType<typeof resolveForumSectorKey>,
+): Promise<ForumThreadCommentDraft[] | null> {
+  try {
+    const comments = await Promise.all(
+      FORUM_COMMENT_ROLES.map((role, index) =>
+        generateSingleForumCommentViaLlm(input, sectorKey, role, index),
+      ),
+    );
+
+    const valid = comments.filter(
+      (comment): comment is ForumThreadCommentDraft =>
+        Boolean(comment?.content?.trim()),
+    );
+
+    if (valid.length >= 3) {
+      const hasFeatured = valid.some((comment) => comment.isFeatured);
+      if (!hasFeatured && valid[0]) {
+        valid[0] = { ...valid[0], isFeatured: true };
+      }
+      return valid.slice(0, 4);
+    }
+  } catch (error) {
+    console.warn("[FORUM_ANSWER]: Paralel LLM yorum üretimi başarısız:", error);
+  }
+
   return null;
+}
+
+async function generateForumThreadViaLlm(
+  input: ForumAnswerInput,
+  sectorKey: ReturnType<typeof resolveForumSectorKey>,
+): Promise<ForumThreadCommentDraft[] | null> {
+  return generateForumThreadCommentsParallel(input, sectorKey);
 }
 
 export async function generateForumThreadForEntry(

@@ -437,47 +437,49 @@ export async function appendCampaignAnswersToQuestionHub(input: {
     return;
   }
 
-  for (const entry of input.entries) {
-    const slug = buildQuestionHubSlug(entry.question);
-    if (!slug) {
-      continue;
-    }
-
-    const seedKey = `${input.campaignId}-${entry.coreQuestionId}`;
-
-    try {
-      const thread = await resolveForumThreadForEntry({
-        question: entry.question,
-        brandName: input.brandName,
-        city: entry.city,
-        sectorLabel: entry.sectorLabel,
-        sectorSlug: entry.sectorSlug,
-        simulatedAnswer: entry.simulatedAnswer,
-        seedKey,
-      });
-
-      const questionHubId = await resolveQuestionHubId(
-        slug,
-        entry.question,
-        entry.coreQuestionId,
-      );
-
-      if (!questionHubId) {
-        continue;
+  await Promise.all(
+    input.entries.map(async (entry) => {
+      const slug = buildQuestionHubSlug(entry.question);
+      if (!slug) {
+        return;
       }
 
-      await persistHubAnswers({
-        questionId: questionHubId,
-        campaignId: input.campaignId,
-        comments: thread,
-      });
-    } catch (error) {
-      console.error(
-        `[QUESTION_HUB]: Hub kaydi atlandi (campaign=${input.campaignId}, slug=${slug}):`,
-        error,
-      );
-    }
-  }
+      const seedKey = `${input.campaignId}-${entry.coreQuestionId}`;
+
+      try {
+        const thread = await resolveForumThreadForEntry({
+          question: entry.question,
+          brandName: input.brandName,
+          city: entry.city,
+          sectorLabel: entry.sectorLabel,
+          sectorSlug: entry.sectorSlug,
+          simulatedAnswer: entry.simulatedAnswer,
+          seedKey,
+        });
+
+        const questionHubId = await resolveQuestionHubId(
+          slug,
+          entry.question,
+          entry.coreQuestionId,
+        );
+
+        if (!questionHubId) {
+          return;
+        }
+
+        await persistHubAnswers({
+          questionId: questionHubId,
+          campaignId: input.campaignId,
+          comments: thread,
+        });
+      } catch (error) {
+        console.error(
+          `[QUESTION_HUB]: Hub kaydi atlandi (campaign=${input.campaignId}, slug=${slug}):`,
+          error,
+        );
+      }
+    }),
+  );
 }
 
 export async function fetchQuestionHubBySlug(
