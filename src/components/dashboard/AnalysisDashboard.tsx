@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CampaignFormData, CampaignResponse, LlmInquiryResult, StoredCampaign, TerminalLogEntry } from "@/types/campaign";
 import {
@@ -364,6 +364,7 @@ function AnalysisDashboardContent({
   const {
     startDistribution,
     resetDistribution,
+    status: distributionStatus,
   } = useDistribution();
   const { accessToken, isAuthReady, isLoggedIn, userEmail } = useAuth();
 
@@ -785,11 +786,28 @@ function AnalysisDashboardContent({
   }, []);
 
   const activeMeta = session ? getCampaignMeta(session.gunlukButce) : null;
-  const displayPhase: CampaignOperationPhase = isLoading
-    ? operationPhase === "idle"
-      ? "launching"
-      : operationPhase
-    : operationPhase;
+
+  const displayPhase: CampaignOperationPhase = useMemo(() => {
+    if (operationPhase === "failed") {
+      return "failed";
+    }
+
+    if (distributionStatus === "running" || distributionRunningRef.current) {
+      if (operationPhase === "active") {
+        return "distributing";
+      }
+      if (operationPhase === "idle") {
+        return "launching";
+      }
+      return operationPhase;
+    }
+
+    if (isLoading) {
+      return operationPhase === "idle" ? "launching" : operationPhase;
+    }
+
+    return operationPhase;
+  }, [operationPhase, isLoading, distributionStatus]);
 
   if (!sessionReady) {
     return (
@@ -872,6 +890,7 @@ function AnalysisDashboardContent({
             markaAdi={session.markaAdi}
             sehir={session.sehir}
             phase={displayPhase}
+            distributionStatus={distributionStatus}
             authorityScore={authorityScore}
             channelCount={channelCount}
             errorMessage={operationError}

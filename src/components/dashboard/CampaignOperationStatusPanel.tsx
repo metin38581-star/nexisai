@@ -16,10 +16,13 @@ export type CampaignOperationPhase =
   | "active"
   | "failed";
 
+export type DistributionUiStatus = "idle" | "running" | "completed";
+
 interface CampaignOperationStatusPanelProps {
   markaAdi: string;
   sehir: string;
   phase: CampaignOperationPhase;
+  distributionStatus?: DistributionUiStatus;
   authorityScore: number | null;
   channelCount: number;
   errorMessage?: string | null;
@@ -32,69 +35,71 @@ const DISTRIBUTION_CHANNELS = [
   { id: "blog", label: "Yerel Blog", emoji: "📰" },
 ] as const;
 
-function resolveOperationLabel(phase: CampaignOperationPhase): {
+function isOperationInProgress(
+  phase: CampaignOperationPhase,
+  distributionStatus: DistributionUiStatus,
+): boolean {
+  if (phase === "failed" || phase === "active") {
+    return distributionStatus === "running";
+  }
+
+  return phase !== "idle";
+}
+
+function resolveOperationLabel(
+  phase: CampaignOperationPhase,
+  distributionStatus: DistributionUiStatus,
+): {
   title: string;
   tone: "emerald" | "violet" | "amber" | "rose";
   pulse: boolean;
 } {
-  switch (phase) {
-    case "launching":
-      return {
-        title: "Operasyon Başlatılıyor",
-        tone: "amber",
-        pulse: true,
-      };
-    case "processing":
-      return {
-        title: "GEO Analizi ve İçerik Hazırlığı Devam Ediyor",
-        tone: "violet",
-        pulse: true,
-      };
-    case "distributing":
-      return {
-        title: "Dijital Otorite Ağlarına Dağıtım Yapılıyor",
-        tone: "violet",
-        pulse: true,
-      };
-    case "active":
-      return {
-        title: "Aktif — Optimizasyon Döngüsü Başlatıldı",
-        tone: "emerald",
-        pulse: true,
-      };
-    case "failed":
-      return {
-        title: "Operasyon Tamamlanamadı",
-        tone: "rose",
-        pulse: false,
-      };
-    default:
-      return {
-        title: "Operasyon Bekleniyor",
-        tone: "violet",
-        pulse: false,
-      };
+  if (phase === "failed") {
+    return {
+      title: "Operasyon Tamamlanamadı",
+      tone: "rose",
+      pulse: false,
+    };
   }
+
+  if (
+    phase === "active" &&
+    distributionStatus !== "running"
+  ) {
+    return {
+      title: "Başlatıldı — Optimizasyon Döngüsü Aktif",
+      tone: "emerald",
+      pulse: false,
+    };
+  }
+
+  if (isOperationInProgress(phase, distributionStatus)) {
+    return {
+      title: "Hazırlanıyor — Yapay Zeka Dağıtımı Sürüyor...",
+      tone: "amber",
+      pulse: true,
+    };
+  }
+
+  return {
+    title: "Operasyon Bekleniyor",
+    tone: "violet",
+    pulse: false,
+  };
 }
 
 const toneStyles = {
-  emerald: {
-    border: "border-emerald-500/30",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-300",
-    dot: "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]",
-  },
-  violet: {
-    border: "border-violet-500/30",
-    bg: "bg-violet-500/10",
-    text: "text-violet-300",
-    dot: "bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.8)]",
-  },
   amber: {
     border: "border-amber-500/30",
     bg: "bg-amber-500/10",
     text: "text-amber-300",
-    dot: "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]",
+    dot: "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.85)]",
+  },
+  emerald: {
+    border: "border-emerald-500/30",
+    bg: "bg-emerald-500/10",
+    text: "text-emerald-300",
+    dot: "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.85)]",
   },
   rose: {
     border: "border-rose-500/30",
@@ -102,18 +107,28 @@ const toneStyles = {
     text: "text-rose-300",
     dot: "bg-rose-400",
   },
+  violet: {
+    border: "border-violet-500/30",
+    bg: "bg-violet-500/10",
+    text: "text-violet-300",
+    dot: "bg-violet-400",
+  },
 } as const;
 
 export default function CampaignOperationStatusPanel({
   markaAdi,
   sehir,
   phase,
+  distributionStatus = "idle",
   authorityScore,
   channelCount,
   errorMessage,
 }: CampaignOperationStatusPanelProps) {
-  const operation = resolveOperationLabel(phase);
+  const operation = resolveOperationLabel(phase, distributionStatus);
   const tone = toneStyles[operation.tone];
+  const inProgress = isOperationInProgress(phase, distributionStatus);
+  const isCompleted =
+    phase === "active" && distributionStatus !== "running";
   const displayScore =
     authorityScore !== null ? Math.round(authorityScore) : null;
 
@@ -212,12 +227,21 @@ export default function CampaignOperationStatusPanel({
         </StatusCard>
       </div>
 
-      {phase !== "idle" && phase !== "failed" ? (
+      {inProgress ? (
         <div className="relative border-t border-white/5 px-5 py-3 sm:px-6">
           <p className="flex items-center gap-2 text-xs text-zinc-500">
-            <Radio className="h-3.5 w-3.5 text-violet-400" />
-            Arka plan optimizasyonu sessizce devam ediyor; panel otomatik
+            <Radio className="h-3.5 w-3.5 text-amber-400" />
+            Yapay zeka dağıtımı arka planda devam ediyor; durum otomatik
             güncellenir.
+          </p>
+        </div>
+      ) : null}
+
+      {isCompleted ? (
+        <div className="relative border-t border-white/5 px-5 py-3 sm:px-6">
+          <p className="flex items-center gap-2 text-xs text-emerald-400/90">
+            <Radio className="h-3.5 w-3.5" />
+            Optimizasyon döngüsü aktif — tüm dağıtım kanalları devrede.
           </p>
         </div>
       ) : null}
@@ -256,10 +280,15 @@ function StatusCard({
         </div>
         {pulse ? (
           <span
-            className={`h-2 w-2 rounded-full ${tone.dot} animate-pulse`}
+            className={`h-2.5 w-2.5 rounded-full transition-colors duration-500 ${tone.dot} animate-pulse`}
             aria-hidden
           />
-        ) : null}
+        ) : (
+          <span
+            className={`h-2.5 w-2.5 rounded-full transition-colors duration-500 ${tone.dot}`}
+            aria-hidden
+          />
+        )}
       </div>
       {children}
     </div>
