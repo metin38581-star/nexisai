@@ -103,8 +103,10 @@ async function recordCampaignLogViaPrisma(
       walletBalance: input.walletBalance,
       amountSpent: input.amountSpent,
       amountDeposited,
-      wordpressUrl: input.wordpressUrl ?? null,
-      forumUrl: input.forumUrl ?? null,
+      ...(input.wordpressUrl !== undefined
+        ? { wordpressUrl: input.wordpressUrl }
+        : {}),
+      ...(input.forumUrl !== undefined ? { forumUrl: input.forumUrl } : {}),
       businessDomain: authority.businessDomain,
       primaryAuthorityUrl:
         input.primaryAuthorityUrl ?? authority.primaryAuthorityUrl,

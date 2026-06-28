@@ -401,7 +401,7 @@ function resolveCampaignWordpressUrl(
     campaign.wordpressUrl ??
     campaign.externalLiveUrl ??
     firstBait?.externalLiveUrl ??
-    null
+    (firstBait?.slug ? buildHubArticleUrl(firstBait.slug) : null)
   );
 }
 

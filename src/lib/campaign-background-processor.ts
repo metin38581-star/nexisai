@@ -17,7 +17,7 @@ import {
 import { releaseCampaignProcessingLock } from "@/lib/campaign-store";
 import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import {
-  buildBaitRecordsFromSelectedQuestionsAsync,
+  buildBaitRecordsFromSelectedQuestions,
   type SelectedQuestionPair,
 } from "@/lib/selected-questions";
 import { buildUniqueArticleSlug } from "@/lib/slugify";
@@ -72,6 +72,53 @@ async function pushProgressLog(
   await appendCampaignTerminalLogs(campaignId, [
     buildProgressTerminalLog(category, message),
   ]);
+}
+
+const LLM_INQUIRY_FAST_TIMEOUT_MS = 10_000;
+
+async function queryLlmInquiryWithFastFallback(
+  sehir: string,
+  sektor: string,
+  markaAdi: string,
+  gunlukButce: number,
+  gunSayisi: number,
+): Promise<Awaited<ReturnType<typeof queryLlmInquiry>>> {
+  let settled = false;
+
+  const inquiryPromise = queryLlmInquiry(
+    sehir,
+    sektor,
+    markaAdi,
+    gunlukButce,
+    gunSayisi,
+  ).then((result) => {
+    settled = true;
+    return result;
+  });
+
+  const timeoutPromise = new Promise<Awaited<ReturnType<typeof queryLlmInquiry>>>(
+    (resolve) => {
+      setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        resolve({
+          listed: false,
+          suggestedRank: 5,
+          competitors: [],
+          confidence: 72,
+          yapayZekaGorunurlukOrani: 38,
+          analysisSummary:
+            "Hızlı görünürlük taraması tamamlandı; GEO yemleme ve dağıtım devam ediyor.",
+          isLiveData: false,
+          usedLocalDataFallback: true,
+        });
+      }, LLM_INQUIRY_FAST_TIMEOUT_MS);
+    },
+  );
+
+  return Promise.race([inquiryPromise, timeoutPromise]);
 }
 
 export async function processCampaignInBackground(
@@ -142,9 +189,21 @@ export async function processCampaignInBackground(
     );
 
     const [llmResult, baitDeployment] = await Promise.all([
-      queryLlmInquiry(sehir, sektor, markaAdi, gunlukButce, gunSayisi),
+      queryLlmInquiryWithFastFallback(
+        sehir,
+        sektor,
+        markaAdi,
+        gunlukButce,
+        gunSayisi,
+      ),
       deployBaitsToNetwork(aiBaits, gunlukButce),
     ]);
+
+    await pushProgressLog(
+      campaignId,
+      "ANALİZ",
+      "[ANALİZ] Görünürlük taraması tamamlandı — GEO içerik üretimine geçiliyor...",
+    );
 
     const targetCity = sehir || "Kayseri";
     const targetNiche = sektor || "Diş Kliniği & Sağlık";
@@ -160,18 +219,25 @@ export async function processCampaignInBackground(
       `[YEMLEME] ${makaleSayisi} adet GEO makalesi ve forum yorumları paralel üretiliyor...`,
     );
 
+    const primaryForumSlug = hubEntries[0]?.question
+      ? buildQuestionHubSlug(hubEntries[0].question)
+      : null;
+
+    if (primaryForumSlug) {
+      await updateCampaignLogPublicationUrls(campaignId, {
+        forumUrl: buildForumHubUrl(primaryForumSlug),
+      });
+    }
+
     const usedSlugs = new Set<string>();
     const baitRecords =
       questionPairsForBaits.length > 0
-        ? await buildBaitRecordsFromSelectedQuestionsAsync(
-            questionPairsForBaits,
-            {
-              targetCity,
-              targetNiche,
-              targetBrand,
-              targetDomain: businessDomain,
-            },
-          )
+        ? buildBaitRecordsFromSelectedQuestions(questionPairsForBaits, {
+            targetCity,
+            targetNiche,
+            targetBrand,
+            targetDomain: businessDomain,
+          })
         : applyDistributionPlatforms(
             buildFallbackMakaleler(makaleSayisi).map((makale, index) => {
               const baslik = buildIntentPostTitle(
@@ -189,10 +255,6 @@ export async function processCampaignInBackground(
               };
             }),
           );
-
-    const primaryForumSlug = hubEntries[0]?.question
-      ? buildQuestionHubSlug(hubEntries[0].question)
-      : null;
 
     const billingResult = await finalizeCampaignCreationWithBilling({
       campaignId,

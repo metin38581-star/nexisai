@@ -1,10 +1,10 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 
 import type { CampaignApiRequest, CampaignResponse } from "@/types/campaign";
 import { assertDataAccessEnv, assertDatabaseEnv, handleApiRouteError } from "@/lib/api-error";
 import { claimAutonomousCampaignSlot, getCampaignBaitCount, tryAcquireCampaignExecution } from "@/lib/campaign-store";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
-import { processCampaignInBackground } from "@/lib/campaign-background-processor";
+import { dispatchCampaignBackgroundJob } from "@/lib/campaign-process-dispatch";
 import { getActiveSessionUser } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
@@ -31,6 +31,8 @@ import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
 import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
+import { buildForumHubUrl } from "@/lib/forum-hub-url";
+import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
 
 function buildAlreadyProcessedResponse(
   campaignId: string,
@@ -360,6 +362,25 @@ export async function POST(request: Request) {
 
     const amountDeposited = await sumUserPaidTopUpsByUserId(activeUserId);
 
+    let earlyForumUrl: string | null = null;
+    if (sectorSlug && selectedQuestionIds.length > 0) {
+      const pairs = buildCoreQuestionPairs(
+        selectedQuestionIds,
+        sectorSlug,
+        trimmedSehir,
+        trimmedMarka,
+        trimmedSektor,
+        businessDomain,
+      );
+      const firstQuestion = pairs[0]?.question?.trim();
+      if (firstQuestion) {
+        const slug = buildQuestionHubSlug(firstQuestion);
+        if (slug) {
+          earlyForumUrl = buildForumHubUrl(slug);
+        }
+      }
+    }
+
     void recordCampaignOperationalLog({
       campaignId: reservedCampaignId,
       userId: activeUserId,
@@ -371,6 +392,7 @@ export async function POST(request: Request) {
       amountSpent: toplamMaliyet,
       amountDeposited,
       businessDomain: businessDomain ?? null,
+      forumUrl: earlyForumUrl,
     });
 
     const startupLogs = buildStartupTerminalLogs(trimmedMarka, trimmedSehir);
@@ -400,24 +422,22 @@ export async function POST(request: Request) {
       }
     }
 
-    after(() => {
-      void processCampaignInBackground({
-        campaignId: reservedCampaignId,
-        userId: activeUserId,
-        userEmail: sessionUser?.email ?? "—",
-        markaAdi: trimmedMarka,
-        sektor: trimmedSektor,
-        sehir: trimmedSehir,
-        gunlukButce,
-        gunSayisi,
-        sectorSlug,
-        selectedQuestionIds,
-        toplamMaliyet,
-        agresiflikSeviyesi,
-        radarSikligi,
-        radarSikligiDakika,
-        businessDomain,
-      });
+    dispatchCampaignBackgroundJob({
+      campaignId: reservedCampaignId,
+      userId: activeUserId,
+      userEmail: sessionUser?.email ?? "—",
+      markaAdi: trimmedMarka,
+      sektor: trimmedSektor,
+      sehir: trimmedSehir,
+      gunlukButce,
+      gunSayisi,
+      sectorSlug,
+      selectedQuestionIds,
+      toplamMaliyet,
+      agresiflikSeviyesi,
+      radarSikligi,
+      radarSikligiDakika,
+      businessDomain,
     });
 
     return NextResponse.json(
