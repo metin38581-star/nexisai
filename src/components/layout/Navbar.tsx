@@ -110,7 +110,10 @@ export default function Navbar({ compactLogo = false }: NavbarProps) {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(payload) => login(payload)}
+        onSuccess={(payload) => {
+          login(payload);
+          setIsAuthModalOpen(false);
+        }}
         authMode={authMode}
         onAuthModeChange={setAuthMode}
       />

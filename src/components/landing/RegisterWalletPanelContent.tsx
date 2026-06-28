@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import {
   formatWelcomeBalanceMessage,
 } from "@/lib/wallet-constants";
 import { useAuth } from "@/context/AuthContext";
+import { navigateAfterAuthSuccess } from "@/lib/auth-client-flow";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import {
   isSupabaseConfigured,
@@ -25,14 +26,17 @@ interface RegisterWalletPanelContentProps {
   mode: "register" | "wallet";
   onClose: () => void;
   onWalletSuccess?: () => void;
+  onRegisterSuccess?: () => void;
 }
 
 export default function RegisterWalletPanelContent({
   mode,
   onClose,
   onWalletSuccess,
+  onRegisterSuccess,
 }: RegisterWalletPanelContentProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { login, accessToken } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -130,8 +134,10 @@ export default function RegisterWalletPanelContent({
       } else {
         toast.success("Hesabınız oluşturuldu! Hoş geldiniz. 🎁");
       }
+
       onClose();
-      router.push("/dashboard");
+      onRegisterSuccess?.();
+      navigateAfterAuthSuccess(router, pathname);
     } catch {
       setErrorMessage("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {

@@ -71,6 +71,11 @@ function DashboardPageContent() {
   const [authMode, setAuthMode] = useState<AuthViewMode>("register");
   const [pendingCampaign, setPendingCampaign] =
     useState<CampaignFormData | null>(null);
+  const [walletRefreshToken, setWalletRefreshToken] = useState(0);
+
+  const handleWalletRefresh = useCallback(() => {
+    setWalletRefreshToken((value) => value + 1);
+  }, []);
 
   const handleRequireAuth = useCallback((data?: CampaignFormData) => {
     if (data) {
@@ -98,8 +103,9 @@ function DashboardPageContent() {
     }) => {
       login(payload);
       setShowAuthModal(false);
+      handleWalletRefresh();
     },
-    [login],
+    [handleWalletRefresh, login],
   );
 
   const handleAuthModalClose = useCallback(() => {
@@ -118,6 +124,8 @@ function DashboardPageContent() {
           pendingCampaign={pendingCampaign}
           onPendingCampaignHandled={handlePendingCampaignHandled}
           onRequireAuth={handleRequireAuth}
+          walletRefreshToken={walletRefreshToken}
+          onWalletRefresh={handleWalletRefresh}
         />
       </main>
       <CorporateFooter />
@@ -125,6 +133,7 @@ function DashboardPageContent() {
         isOpen={showAuthModal}
         onClose={handleAuthModalClose}
         onSuccess={handleAuthSuccess}
+        onAuthComplete={handleWalletRefresh}
         authMode={authMode}
         onAuthModeChange={setAuthMode}
       />

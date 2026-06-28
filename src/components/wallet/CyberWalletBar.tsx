@@ -101,6 +101,9 @@ export default function CyberWalletBar({
         onWalletSuccess={() => {
           void fetchBalance();
         }}
+        onRegisterSuccess={() => {
+          void fetchBalance();
+        }}
       />
     </>
   );

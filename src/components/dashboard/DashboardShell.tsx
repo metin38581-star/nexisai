@@ -8,18 +8,29 @@ interface DashboardShellProps {
   pendingCampaign?: CampaignFormData | null;
   onPendingCampaignHandled?: () => void;
   onRequireAuth?: (data?: CampaignFormData) => void;
+  walletRefreshToken?: number;
+  onWalletRefresh?: () => void;
 }
 
 export default function DashboardShell({
   pendingCampaign = null,
   onPendingCampaignHandled,
   onRequireAuth,
+  walletRefreshToken: walletRefreshTokenProp,
+  onWalletRefresh: onWalletRefreshProp,
 }: DashboardShellProps) {
-  const [walletRefreshToken, setWalletRefreshToken] = useState(0);
+  const [internalWalletRefreshToken, setInternalWalletRefreshToken] = useState(0);
+  const walletRefreshToken =
+    walletRefreshTokenProp ?? internalWalletRefreshToken;
 
   const handleWalletRefresh = useCallback(() => {
-    setWalletRefreshToken((value) => value + 1);
-  }, []);
+    if (onWalletRefreshProp) {
+      onWalletRefreshProp();
+      return;
+    }
+
+    setInternalWalletRefreshToken((value) => value + 1);
+  }, [onWalletRefreshProp]);
 
   return (
     <AnalysisDashboard

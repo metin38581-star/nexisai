@@ -8,6 +8,7 @@ interface RegisterWalletModal3DProps {
   onClose: () => void;
   mode: "register" | "wallet";
   onWalletSuccess?: () => void;
+  onRegisterSuccess?: () => void;
 }
 
 export default function RegisterWalletModal3D({
@@ -15,6 +16,7 @@ export default function RegisterWalletModal3D({
   onClose,
   mode,
   onWalletSuccess,
+  onRegisterSuccess,
 }: RegisterWalletModal3DProps) {
   if (!isOpen) return null;
 
@@ -31,6 +33,7 @@ export default function RegisterWalletModal3D({
           mode={mode}
           onClose={onClose}
           onWalletSuccess={onWalletSuccess}
+          onRegisterSuccess={onRegisterSuccess}
         />
       </div>
     </div>

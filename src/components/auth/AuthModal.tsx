@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
+import { navigateAfterAuthSuccess } from "@/lib/auth-client-flow";
 import { formatWelcomeBalanceMessage } from "@/lib/wallet-constants";
 import {
   isSupabaseConfigured,
@@ -25,6 +26,7 @@ interface AuthModalProps {
   }) => void;
   authMode: AuthViewMode;
   onAuthModeChange: (mode: AuthViewMode) => void;
+  onAuthComplete?: () => void;
 }
 
 const AUTH_TIMEOUT_MS = 30_000;
@@ -87,8 +89,10 @@ export default function AuthModal({
   onSuccess,
   authMode,
   onAuthModeChange,
+  onAuthComplete,
 }: AuthModalProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const isRegister = authMode === "register";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -228,16 +232,22 @@ export default function AuthModal({
         } else {
           toast.success("Hesabınız oluşturuldu! Hoş geldiniz. 🎁");
         }
-        router.push("/dashboard");
+      } else {
+        toast.success("Giriş başarılı! Operasyon merkezine hoş geldiniz.");
       }
 
-      onSuccess({
+      const sessionPayload = {
         userName: user.userName,
         userEmail: user.email?.trim() || email.trim() || null,
         userId: user.id,
         accessToken,
         refreshToken: authResult.refreshToken,
-      });
+      };
+
+      onSuccess(sessionPayload);
+      onClose();
+      onAuthComplete?.();
+      navigateAfterAuthSuccess(router, pathname);
       setFullName("");
       setEmail("");
       setPassword("");
