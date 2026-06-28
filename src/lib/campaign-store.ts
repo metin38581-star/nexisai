@@ -727,6 +727,60 @@ export async function getCampaignBaitCount(
   return count ?? 0;
 }
 
+export interface CampaignBaitRecord {
+  id: string;
+  baslik: string;
+  icerik: string;
+  slug: string;
+  platform: string;
+}
+
+export async function listCampaignBaitsByCampaignId(
+  campaignId: string,
+): Promise<CampaignBaitRecord[]> {
+  if (hasDatabaseUrl()) {
+    try {
+      const rows = await prisma.bait.findMany({
+        where: { campaignId },
+        select: {
+          id: true,
+          baslik: true,
+          icerik: true,
+          slug: true,
+          platform: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (rows.length > 0) {
+        return rows;
+      }
+    } catch (error) {
+      console.error("[CAMPAIGN_BAITS]: Prisma bait listesi hatası:", error);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("Bait")
+    .select("id, baslik, icerik, slug, platform")
+    .eq("campaignId", campaignId)
+    .order("createdAt", { ascending: true });
+
+  if (error) {
+    console.error("[CAMPAIGN_BAITS]: Supabase bait listesi hatası:", error);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    baslik: row.baslik as string,
+    icerik: row.icerik as string,
+    slug: row.slug as string,
+    platform: (row.platform as string | null) ?? "WORDPRESS",
+  }));
+}
+
 /** Arka plan işi kilidi serbest bıraktıysa (llmFeedback güncellendiyse) true döner. */
 export async function isCampaignBackgroundJobFinished(
   campaignId: string,

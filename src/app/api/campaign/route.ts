@@ -41,6 +41,8 @@ function buildAlreadyProcessedResponse(
   return {
     success: true,
     campaignId,
+    status: baitCount > 0 ? "complete" : "processing",
+    inProgress: baitCount === 0,
     baitsGenerated: baitCount,
     terminalLogs: [
       {

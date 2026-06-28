@@ -13,6 +13,10 @@ import {
   interruptCampaignProcessingState,
   isCampaignProcessingStale,
 } from "@/lib/campaign-terminal-log-store";
+import {
+  buildRecoveredCampaignResult,
+  recoverCampaignProcessingIfBaitsExist,
+} from "@/lib/campaign-completion-recovery";
 import { DISTRIBUTION_INTERRUPTED_MESSAGE } from "@/lib/campaign-distribution-timeout";
 
 interface RouteContext {
@@ -75,16 +79,13 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (processingState && isCampaignProcessingStale(processingState)) {
       if (baitCount > 0) {
-        const recoveryResult = {
-          success: true,
+        const recoveryResult = buildRecoveredCampaignResult({
           campaignId,
-          status: "complete" as const,
-          baitsGenerated: baitCount,
+          baitCount,
+          terminalLogs: processingState.terminalLogs,
           message:
             "Kampanya içerikleri üretildi; dağıtım paneli güncellendi.",
-          terminalLogs: processingState.terminalLogs,
-          ...(processingState.result ?? {}),
-        };
+        });
 
         await completeCampaignProcessingState(
           campaignId,
@@ -109,6 +110,29 @@ export async function GET(request: Request, context: RouteContext) {
         DISTRIBUTION_INTERRUPTED_MESSAGE,
       );
       processingState = await getCampaignProcessingState(campaignId);
+    }
+
+    if (
+      processingState &&
+      (processingState.status === "failed" ||
+        processingState.status === "interrupted")
+    ) {
+      const recovery = await recoverCampaignProcessingIfBaitsExist({
+        campaignId,
+        terminalLogs: processingState.terminalLogs,
+      });
+
+      if (recovery.recovered && recovery.result) {
+        return NextResponse.json(
+          buildCompleteStatusPayload({
+            campaignId,
+            baitCount: recovery.baitCount,
+            terminalLogs: processingState.terminalLogs,
+            result: recovery.result,
+            message: recovery.result.message,
+          }),
+        );
+      }
     }
 
     if (

@@ -60,11 +60,25 @@ interface CampaignFlowHandlers {
 }
 
 function normalizeOperationError(message: string): string {
-  return message
+  const cleaned = message
     .replace(/^⚠️\s*\[SİBER HATA\]:\s*/i, "")
     .replace(/^⚠️\s*\[OTURUM HATASI\]:\s*/i, "")
     .replace(/^⚠️\s*\[SİBER KRİZ\]:\s*/i, "")
     .trim();
+
+  if (cleaned.includes("CAMPAIGN_BILLING_INCOMPLETE")) {
+    return "Kampanya kaydı tamamlanamadı. Lütfen birkaç dakika bekleyip yenileyin.";
+  }
+
+  if (cleaned.includes("CAMPAIGN_BAIT_PERSIST_FAILED")) {
+    return "İçerik üretimi tamamlanamadı. Lütfen tekrar deneyin.";
+  }
+
+  if (cleaned.includes("user_id") || cleaned.includes("userId")) {
+    return "Veritabanı senkronizasyonu gerekli — destek ekibi migration uygulamalı.";
+  }
+
+  return cleaned || "Operasyon tamamlanamadı.";
 }
 
 function resolveAuthorityScore(
@@ -157,6 +171,8 @@ function applyCampaignSuccess(
   result: CampaignResponse,
   handlers: CampaignFlowHandlers,
 ): void {
+  handlers.setOperationError(null);
+
   if (result.campaignId) {
     handlers.setActiveCampaignId(result.campaignId);
     saveActiveCampaignId(result.campaignId);
@@ -374,23 +390,37 @@ async function tryRecoverCompletedCampaignFromBaits(
       `/api/campaign/${campaignId}/status`,
       buildAuthFetchInit(token),
     );
-    if (!response.ok) {
-      return 0;
+    if (response.ok) {
+      const state = (await response.json()) as {
+        baitsGenerated?: number;
+        status?: string;
+      };
+
+      if (state.status === "complete") {
+        return state.baitsGenerated ?? 0;
+      }
+
+      if ((state.baitsGenerated ?? 0) > 0) {
+        return state.baitsGenerated ?? 0;
+      }
     }
 
-    const state = (await response.json()) as {
-      baitsGenerated?: number;
-      status?: string;
-    };
-
-    if (state.status === "complete") {
-      return state.baitsGenerated ?? 0;
+    const campaignsResponse = await fetch(
+      "/api/campaigns",
+      buildAuthFetchInit(token),
+    );
+    if (campaignsResponse.ok) {
+      const campaigns = (await campaignsResponse.json()) as StoredCampaign[];
+      const match = campaigns.find((campaign) => campaign.id === campaignId);
+      if (match) {
+        return match.makaleSayisi || match.baits?.length || 0;
+      }
     }
-
-    return state.baitsGenerated ?? 0;
   } catch {
     return 0;
   }
+
+  return 0;
 }
 
 /** @deprecated Eski kampanya listesi polling — yedek */
@@ -862,18 +892,21 @@ function AnalysisDashboardContent({
 
             applyCampaignSuccess(payload, result, successHandlers);
 
-            if (
-              result.campaignId &&
-              (result.inProgress ||
+            if (result.campaignId) {
+              const needsBackgroundPoll =
+                result.inProgress ||
                 result.status === "started" ||
-                result.status === "processing")
-            ) {
-              void pollCampaignProcessingStatus(
-                token,
-                payload,
-                result.campaignId,
-                successHandlers,
-              );
+                result.status === "processing" ||
+                (result.baitsGenerated ?? 0) === 0;
+
+              if (needsBackgroundPoll) {
+                void pollCampaignProcessingStatus(
+                  token,
+                  payload,
+                  result.campaignId,
+                  successHandlers,
+                );
+              }
             }
             return;
           }

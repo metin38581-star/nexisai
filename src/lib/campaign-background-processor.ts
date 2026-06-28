@@ -14,7 +14,7 @@ import {
   finalizeCampaignCreationWithBilling,
   updateCampaignLogPublicationUrls,
 } from "@/lib/campaign-billing";
-import { releaseCampaignProcessingLock } from "@/lib/campaign-store";
+import { getCampaignBaitCount, listCampaignBaitsByCampaignId, releaseCampaignProcessingLock } from "@/lib/campaign-store";
 import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import {
   buildBaitRecordsFromSelectedQuestions,
@@ -331,9 +331,22 @@ export async function processCampaignInBackground(
       },
     });
 
-    const yeniKampanya = billingResult.campaign;
+    let yeniKampanya = billingResult.campaign;
     if (!yeniKampanya) {
-      throw new Error("CAMPAIGN_BILLING_INCOMPLETE");
+      const existingBaits = await listCampaignBaitsByCampaignId(campaignId);
+      if (existingBaits.length > 0) {
+        yeniKampanya = {
+          id: campaignId,
+          baits: existingBaits.map((bait) => ({
+            id: bait.id,
+            baslik: bait.baslik,
+            icerik: bait.icerik,
+            slug: bait.slug,
+          })),
+        };
+      } else {
+        throw new Error("CAMPAIGN_BILLING_INCOMPLETE");
+      }
     }
 
     persistedBaits = yeniKampanya.baits.map((bait) => {
@@ -520,7 +533,7 @@ export async function processCampaignInBackground(
     const result: Partial<CampaignResponse> = {
       success: outcome.success,
       campaignId,
-      status: outcome.status === "failed" ? "failed" : "complete",
+      status: "complete",
       metrics,
       terminalLogs: mergedLogs,
       llmResult,
@@ -547,7 +560,12 @@ export async function processCampaignInBackground(
     console.error("[CAMPAIGN_BG]: Arka plan işlem hatası:", error);
     const processingState = await getCampaignProcessingState(campaignId);
 
-    if (persistedBaits.length > 0) {
+    let effectiveBaitCount = persistedBaits.length;
+    if (effectiveBaitCount === 0) {
+      effectiveBaitCount = await getCampaignBaitCount(campaignId);
+    }
+
+    if (effectiveBaitCount > 0) {
       const partialOutcome = summarizeCampaignOutcome({
         distributionResults: [],
         hubPublished: true,
@@ -559,13 +577,16 @@ export async function processCampaignInBackground(
         success: true,
         campaignId,
         status: "complete",
-        baitsGenerated: persistedBaits.length,
+        baitsGenerated: effectiveBaitCount,
         message: partialOutcome.message,
         terminalLogs: processingState?.terminalLogs ?? [],
-        hubArticles: persistedBaits.map((bait) => ({
-          slug: bait.slug,
-          hubPath: buildHubArticlePath(bait.slug),
-        })),
+        hubArticles:
+          persistedBaits.length > 0
+            ? persistedBaits.map((bait) => ({
+                slug: bait.slug,
+                hubPath: buildHubArticlePath(bait.slug),
+              }))
+            : undefined,
       };
 
       await completeCampaignProcessingState(
