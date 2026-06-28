@@ -596,70 +596,80 @@ function buildOverviewStats(
 }
 
 export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload> {
-  const operationalLogs = await listCampaignOperationalLogs();
-
-  if (operationalLogs.length > 0) {
-    const campaignIds = operationalLogs.map((row) => row.campaignId);
-    const [authUsers, walletBalances, userIdByCampaignId, forumUrlByCampaignId, creditDeposits] =
-      await Promise.all([
-        listAuthUsers(),
-        listWalletBalances(),
-        loadCampaignLogUserIds(),
-        resolveForumUrlsByCampaignIds(campaignIds),
-        sumUserPaidTopUpsAllUsers(),
-      ]);
-
-    const rows = enrichOverviewRows(
-      operationalLogs,
-      walletBalances,
-      userIdByCampaignId,
-      forumUrlByCampaignId,
-      creditDeposits,
-    );
-
-    return {
-      rows,
-      stats: buildOverviewStats(authUsers.length, walletBalances, rows),
-    };
-  }
-
-  const [authUsers, campaigns, walletBalances, creditDeposits] =
+  const [authUsers, operationalLogs, campaigns, walletBalances, creditDeposits] =
     await Promise.all([
       listAuthUsers(),
+      listCampaignOperationalLogs(),
       listAllCampaignsOverview(),
       listWalletBalances(),
       sumUserPaidTopUpsAllUsers(),
     ]);
 
-  const campaignIds = campaigns.map((c) => c.id);
-  const spendByCampaign = await loadCampaignSpendByIds(campaignIds);
-
   const emailByUserId = new Map(authUsers.map((user) => [user.id, user.email]));
+  const logByCampaignId = new Map(
+    operationalLogs.map((log) => [log.campaignId, log]),
+  );
 
-  const rows: AdminCampaignOverviewRow[] = campaigns
-    .filter((campaign): campaign is CampaignOverviewSource & { userId: string } =>
-      Boolean(campaign.userId),
-    )
-    .map((campaign) => {
-      const userId = campaign.userId;
+  const allCampaignIds = Array.from(
+    new Set([
+      ...campaigns.map((campaign) => campaign.id),
+      ...operationalLogs.map((log) => log.campaignId),
+    ]),
+  );
 
-      const liveWalletBalance = walletBalances.get(userId) ?? 0;
+  const [spendByCampaign, forumUrlByCampaignId, userIdByCampaignId] =
+    await Promise.all([
+      loadCampaignSpendByIds(allCampaignIds),
+      resolveForumUrlsByCampaignIds(allCampaignIds),
+      loadCampaignLogUserIds(),
+    ]);
 
-      return {
-        campaignId: campaign.id,
-        userEmail: emailByUserId.get(userId) ?? "—",
-        businessName: campaign.markaAdi,
-        sector: campaign.sektor,
-        sectorLabel: resolveSectorLabel(campaign.sektor),
-        city: campaign.sehir,
-        walletBalance: liveWalletBalance,
-        totalDeposited: creditDeposits.get(userId) ?? 0,
-        amountSpent: spendByCampaign.get(campaign.id) ?? 0,
-        wordpressUrl: resolveCampaignWordpressUrl(campaign),
-        forumUrl: resolveCampaignForumUrl(campaign),
-        createdAt: campaign.createdAt.toISOString(),
-      };
+  const rowsByCampaignId = new Map<string, AdminCampaignOverviewRow>();
+
+  for (const campaign of campaigns) {
+    if (!campaign.userId) {
+      continue;
+    }
+
+    const log = logByCampaignId.get(campaign.id);
+    const userId = campaign.userId;
+
+    rowsByCampaignId.set(campaign.id, {
+      campaignId: campaign.id,
+      userEmail: log?.userEmail ?? emailByUserId.get(userId) ?? "—",
+      businessName: log?.businessName ?? campaign.markaAdi,
+      sector: log?.sector ?? campaign.sektor,
+      sectorLabel: log?.sectorLabel ?? resolveSectorLabel(campaign.sektor),
+      city: log?.city ?? campaign.sehir,
+      walletBalance: walletBalances.get(userId) ?? log?.walletBalance ?? 0,
+      totalDeposited: creditDeposits.get(userId) ?? log?.totalDeposited ?? 0,
+      amountSpent: log?.amountSpent ?? spendByCampaign.get(campaign.id) ?? 0,
+      wordpressUrl: log?.wordpressUrl ?? resolveCampaignWordpressUrl(campaign),
+      forumUrl: normalizeForumHubUrl(
+        log?.forumUrl ??
+          forumUrlByCampaignId.get(campaign.id) ??
+          resolveCampaignForumUrl(campaign),
+      ),
+      createdAt: log?.createdAt ?? campaign.createdAt.toISOString(),
     });
+  }
+
+  for (const log of operationalLogs) {
+    if (!rowsByCampaignId.has(log.campaignId)) {
+      rowsByCampaignId.set(log.campaignId, log);
+    }
+  }
+
+  const rows = enrichOverviewRows(
+    Array.from(rowsByCampaignId.values()).sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    ),
+    walletBalances,
+    userIdByCampaignId,
+    forumUrlByCampaignId,
+    creditDeposits,
+  );
 
   return {
     rows,

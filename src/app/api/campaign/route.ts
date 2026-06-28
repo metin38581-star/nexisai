@@ -25,7 +25,9 @@ import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import {
   validateCoreQuestionSelection,
 } from "@/lib/core-questions";
+import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
+import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
 
 function buildAlreadyProcessedResponse(
@@ -329,13 +331,15 @@ export async function POST(request: Request) {
       );
     }
 
+    let walletBalanceAfterDebit = userWallet.balance;
     try {
-      await debitWalletForCampaign(
+      const debitResult = await debitWalletForCampaign(
         activeUserId,
         toplamMaliyet,
         reservedCampaignId,
         `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
       );
+      walletBalanceAfterDebit = debitResult.balance;
     } catch (debitError) {
       if (
         debitError instanceof Error &&
@@ -351,6 +355,21 @@ export async function POST(request: Request) {
       }
       throw debitError;
     }
+
+    const amountDeposited = await sumUserPaidTopUpsByUserId(activeUserId);
+
+    void recordCampaignOperationalLog({
+      campaignId: reservedCampaignId,
+      userId: activeUserId,
+      userEmail: sessionUser?.email ?? "—",
+      businessName: trimmedMarka,
+      sector: sectorSlug || trimmedSektor,
+      city: trimmedSehir,
+      walletBalance: walletBalanceAfterDebit,
+      amountSpent: toplamMaliyet,
+      amountDeposited,
+      businessDomain: businessDomain ?? null,
+    });
 
     const startupLogs = buildStartupTerminalLogs(trimmedMarka, trimmedSehir);
     await initCampaignProcessingState(reservedCampaignId, startupLogs);

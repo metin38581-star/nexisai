@@ -2,29 +2,14 @@ import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
 import { getActiveSessionUser } from "@/lib/auth-session";
-import { getCampaignBaitCount } from "@/lib/campaign-store";
+import {
+  getCampaignBaitCount,
+  userHasCampaignAccess,
+} from "@/lib/campaign-store";
 import { getCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
-import { prisma } from "@/lib/db";
-import { hasDatabaseUrl } from "@/lib/server-env";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
-}
-
-async function assertCampaignAccess(
-  campaignId: string,
-  userId: string,
-): Promise<boolean> {
-  if (!hasDatabaseUrl()) {
-    return true;
-  }
-
-  const campaign = await prisma.campaign.findUnique({
-    where: { id: campaignId },
-    select: { userId: true },
-  });
-
-  return campaign?.userId === userId;
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -39,7 +24,7 @@ export async function GET(request: Request, context: RouteContext) {
       );
     }
 
-    const allowed = await assertCampaignAccess(campaignId, sessionUser.id);
+    const allowed = await userHasCampaignAccess(campaignId, sessionUser.id);
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: "Kampanya bulunamadı." },

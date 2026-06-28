@@ -618,6 +618,75 @@ export async function claimAutonomousCampaignSlot(
   return finalizeCampaignSlotClaim(input, campaignId);
 }
 
+export async function getCampaignOwnerUserId(
+  campaignId: string,
+): Promise<string | null> {
+  if (hasDatabaseUrl()) {
+    try {
+      const row = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { userId: true },
+      });
+
+      if (row?.userId) {
+        return row.userId;
+      }
+    } catch (error) {
+      console.error("[CAMPAIGN_OWNER]: Prisma sahip sorgusu başarısız:", error);
+    }
+  }
+
+  if (hasSupabaseAdminEnv()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from("Campaign")
+        .select("userId")
+        .eq("id", campaignId)
+        .maybeSingle();
+
+      if (!error && data?.userId) {
+        return data.userId as string;
+      }
+    } catch (error) {
+      console.error("[CAMPAIGN_OWNER]: Supabase sahip sorgusu başarısız:", error);
+    }
+  }
+
+  return null;
+}
+
+export async function userHasCampaignAccess(
+  campaignId: string,
+  userId: string,
+): Promise<boolean> {
+  const ownerId = await getCampaignOwnerUserId(campaignId);
+  if (ownerId && ownerId === userId) {
+    return true;
+  }
+
+  if (!hasDatabaseUrl()) {
+    return false;
+  }
+
+  try {
+    const payment = await prisma.payment.findFirst({
+      where: {
+        campaignId,
+        userId,
+        providerStatusCode: "WALLET_DEBIT",
+        status: { in: ["success", "succeeded", "paid"] },
+      },
+      select: { id: true },
+    });
+
+    return Boolean(payment);
+  } catch (error) {
+    console.error("[CAMPAIGN_ACCESS]: Ödeme tabanlı erişim sorgusu başarısız:", error);
+    return false;
+  }
+}
+
 export async function getCampaignBaitCount(campaignId: string): Promise<number> {
   if (hasDatabaseUrl()) {
     try {
