@@ -13,6 +13,8 @@ import type { GeoWebhookPayload } from "@/lib/distribution-core";
 import {
   MAKE_WEBHOOK_CONTENT_TYPE,
   buildMakeWebhookPayload,
+  resolveWebhookArticleFields,
+  type WebhookArticleSource,
 } from "@/lib/make-webhook-payload";
 
 const WEBHOOK_TIMEOUT_MS = 15_000;
@@ -206,16 +208,15 @@ export async function dispatchToCentralWebhook(
   }
 }
 
+export async function triggerWebhook(
+  input: GeoWebhookPayload,
+): Promise<GeoDistributionResult> {
+  return dispatchToCentralWebhook(input);
+}
+
 /** Tüm makaleler için Make.com webhook'unu paralel ve anında tetikler. */
 export async function dispatchMakeWebhooksForArticles(
-  articles: Array<{
-    id?: string;
-    baslik?: string;
-    title?: string;
-    icerik?: string;
-    content?: string;
-    slug?: string;
-  }>,
+  articles: WebhookArticleSource[],
   context: {
     campaignId: string;
     markaAdi: string;
@@ -245,9 +246,45 @@ export async function dispatchMakeWebhooksForArticles(
 
   await Promise.all(
     articles.map(async (article) => {
-      const payload = buildMakeWebhookPayload(article, context);
+      const resolved = resolveWebhookArticleFields(article, {
+        defaultBaslik: context.markaAdi
+          ? `${context.markaAdi} SEO Optimizasyonu`
+          : undefined,
+      });
+
+      const key = article.id ?? resolved.slug;
+
+      if (!resolved.hasContent) {
+        console.error(
+          "[WEBHOOK_ABORT]: Makale içeriği boş olduğu için webhook tetiklenmedi!",
+          {
+            id: article.id,
+            slug: article.slug,
+            baslik: resolved.baslik,
+            keys: Object.keys(article),
+            baslikSources: {
+              baslik: article.baslik,
+              title: article.title,
+              subject: article.subject,
+            },
+            icerikSources: {
+              icerik: article.icerik,
+              content: article.content,
+              body: article.body,
+              html: article.html,
+            },
+          },
+        );
+        results.set(key, {
+          ok: false,
+          status: 0,
+          error: "icerik eksik — webhook atlandı",
+        });
+        return;
+      }
+
+      const payload = buildMakeWebhookPayload(resolved, context);
       const result = await dispatchToCentralWebhook(payload);
-      const key = article.id ?? article.slug ?? payload.slug;
       results.set(key, result);
     }),
   );

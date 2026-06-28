@@ -300,13 +300,27 @@ export async function processCampaignInBackground(
       throw new Error("CAMPAIGN_BILLING_INCOMPLETE");
     }
 
-    persistedBaits = yeniKampanya.baits.map((bait, index) => ({
-      id: bait.id,
-      baslik: bait.baslik,
-      icerik: baitRecords[index]?.icerik ?? bait.icerik,
-      slug: bait.slug,
-      platform: baitRecords[index]?.platform ?? "WORDPRESS",
-    }));
+    persistedBaits = yeniKampanya.baits.map((bait) => {
+      const record = baitRecords.find((entry) => entry.slug === bait.slug);
+
+      return {
+        id: bait.id,
+        baslik: record?.baslik ?? bait.baslik,
+        icerik: record?.icerik ?? bait.icerik,
+        slug: bait.slug,
+        platform: record?.platform ?? "WORDPRESS",
+      };
+    });
+
+    for (const bait of persistedBaits) {
+      if (!bait.icerik?.trim()) {
+        console.error("[WEBHOOK_PREP]: Dağıtım öncesi boş icerik tespit edildi", {
+          baitId: bait.id,
+          slug: bait.slug,
+          baslik: bait.baslik,
+        });
+      }
+    }
 
     await attachCampaignIntents(
       yeniKampanya.id,

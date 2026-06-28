@@ -1,5 +1,6 @@
 import { buildGeoPostTitle } from "@/lib/geo-prompt";
 import { buildMakeWebhookPayload } from "@/lib/make-webhook-payload";
+import type { WebhookArticleSource } from "@/lib/make-webhook-payload";
 
 export type DistributionPhase = "idle" | "started" | "publishing" | "completed";
 
@@ -28,11 +29,7 @@ export interface GeoWebhookPayload {
   agresiflik: string;
 }
 
-export interface GeoDistributionArticle {
-  baslik: string;
-  icerik: string;
-  slug: string;
-}
+export interface GeoDistributionArticle extends WebhookArticleSource {}
 
 export interface GeoDistributionContext {
   campaignId: string;
@@ -66,7 +63,7 @@ export function buildPostTitle(sehir: string, sektor: string): string {
 }
 
 export function buildGeoWebhookPayload(
-  article: GeoDistributionArticle,
+  article: WebhookArticleSource,
   context: GeoDistributionContext,
 ): GeoWebhookPayload {
   return buildMakeWebhookPayload(article, context);

@@ -15,6 +15,8 @@ import {
   dispatchToCentralWebhook,
   type GeoDistributionResult,
 } from "@/lib/geo-distribution-client";
+import type { WebhookArticleSource } from "@/lib/make-webhook-payload";
+import { resolveWebhookArticleFields } from "@/lib/make-webhook-payload";
 import { publishToMedium } from "@/lib/medium-publish";
 import { publishToWordPress } from "@/lib/wordpress-publish";
 import { updateBaitPublication } from "@/lib/bait-publication-update";
@@ -33,10 +35,29 @@ import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
 export interface DistributionBait {
   id: string;
-  baslik: string;
-  icerik: string;
   slug: string;
   platform?: string;
+  baslik?: string;
+  title?: string;
+  subject?: string;
+  icerik?: string;
+  content?: string;
+  body?: string;
+  html?: string;
+}
+
+function baitToWebhookArticle(bait: DistributionBait): WebhookArticleSource {
+  return {
+    id: bait.id,
+    baslik: bait.baslik,
+    title: bait.title,
+    subject: bait.subject,
+    icerik: bait.icerik,
+    content: bait.content,
+    body: bait.body,
+    html: bait.html,
+    slug: bait.slug,
+  };
 }
 
 export interface DistributionResult {
@@ -157,19 +178,20 @@ export class DistributionEngine {
     wordpressUrl?: string;
   }): Promise<DominanceNetworkResult> {
     const { bait, campaignId, hubUrl, wordpressUrl } = input;
+    const { baslik, icerik } = resolveBaitFields(bait);
     const { username, repo } = resolveGitHubRadarTarget();
     const markdown = buildRadarMarkdownDocument({
-      title: bait.baslik,
-      htmlContent: bait.icerik,
+      title: baslik,
+      htmlContent: icerik,
       slug: bait.slug,
       hubUrl,
       wordpressUrl,
     });
 
     const nostrContent = [
-      `📡 NexisAI Radar — ${bait.baslik}`,
+      `📡 NexisAI Radar — ${baslik}`,
       "",
-      buildNostrSummary(bait.icerik, 220),
+      buildNostrSummary(icerik, 220),
       ...(hubUrl ? ["", `Hub: ${hubUrl}`] : []),
       ...(wordpressUrl ? [`WordPress: ${wordpressUrl}`] : []),
       "",
@@ -179,7 +201,7 @@ export class DistributionEngine {
     const errors: Partial<Record<DominanceChannelId, string>> = {};
 
     const [telegraphUrl, githubPagesUrl, nostrEventId] = await Promise.all([
-      this.distributeToTelegraph(bait.baslik, bait.icerik).catch((error) => {
+      this.distributeToTelegraph(baslik, icerik).catch((error) => {
         errors.telegraph =
           error instanceof Error ? error.message : String(error);
         console.error("[DOMİNASYON AĞI · TELEGRAPH]:", errors.telegraph);
@@ -306,13 +328,19 @@ async function maybeSaveCampaignUrl(
   }
 }
 
+function resolveBaitFields(bait: DistributionBait) {
+  return resolveWebhookArticleFields(baitToWebhookArticle(bait));
+}
+
 async function publishBaitToMedium(
   bait: DistributionBait,
 ): Promise<DistributionResult> {
+  const { baslik, icerik } = resolveBaitFields(bait);
+
   try {
     const result = await publishToMedium({
-      title: bait.baslik,
-      html: bait.icerik,
+      title: baslik,
+      html: icerik,
     });
 
     if (!result.ok || !result.url) {
@@ -329,7 +357,7 @@ async function publishBaitToMedium(
 
     await markBaitPublished(bait.id, result.url, result.url);
 
-    console.log(`[MEDIUM]: ${bait.baslik} → ${result.url} (Bait ${bait.id})`);
+    console.log(`[MEDIUM]: ${baslik} → ${result.url} (Bait ${bait.id})`);
 
     return {
       baitId: bait.id,
@@ -382,10 +410,12 @@ async function publishBaitToWordPress(
   campaignId: string,
   campaignWordPressUrlSaved: { value: boolean },
 ): Promise<DistributionResult> {
+  const { baslik, icerik } = resolveBaitFields(bait);
+
   try {
     const result = await publishToWordPress({
-      title: bait.baslik,
-      content: bait.icerik,
+      title: baslik,
+      content: icerik,
     });
 
     if (!result.ok || !result.url) {
@@ -422,7 +452,7 @@ async function publishBaitToWordPress(
     });
 
     console.log(
-      `[WORDPRESS]: ${bait.baslik} → ${result.url} (Bait ${bait.id})`,
+      `[WORDPRESS]: ${baslik} → ${result.url} (Bait ${bait.id})`,
     );
 
     return {
@@ -438,7 +468,7 @@ async function publishBaitToWordPress(
       {
         baitId: bait.id,
         slug: bait.slug,
-        title: bait.baslik,
+        title: baslik,
         error:
           error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
@@ -575,12 +605,7 @@ export async function distributeBaitsToNetwork(
   });
 
   const makeWebhookResults = await dispatchMakeWebhooksForArticles(
-    baits.map((bait) => ({
-      id: bait.id,
-      baslik: bait.baslik,
-      icerik: bait.icerik,
-      slug: bait.slug,
-    })),
+    baits.map((bait) => baitToWebhookArticle(bait)),
     context,
   );
 
@@ -630,11 +655,9 @@ export async function distributeBaitsToNetwork(
     return results;
   }
 
-  const articles = bloggerBaits.map(({ baslik, icerik, slug }) => ({
-    baslik,
-    icerik,
-    slug,
-  }));
+  const articles: WebhookArticleSource[] = bloggerBaits.map((bait) =>
+    baitToWebhookArticle(bait),
+  );
 
   await runMultiDistributionPipeline(
     articles,
