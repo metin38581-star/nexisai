@@ -33,6 +33,8 @@ import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
 import { buildCampaignPublicationUrls } from "@/lib/publication-urls";
 
+export const maxDuration = 300;
+
 function buildAlreadyProcessedResponse(
   campaignId: string,
   baitCount: number,
@@ -408,7 +410,8 @@ export async function POST(request: Request) {
       }
     }
 
-    dispatchCampaignBackgroundJob({
+    dispatchCampaignBackgroundJob(
+      {
       campaignId: reservedCampaignId,
       userId: activeUserId,
       userEmail: sessionUser?.email ?? "—",
@@ -424,7 +427,9 @@ export async function POST(request: Request) {
       radarSikligi,
       radarSikligiDakika,
       businessDomain,
-    });
+      },
+      request,
+    );
 
     return NextResponse.json(
       buildStartedResponse(reservedCampaignId, trimmedMarka, startupLogs),

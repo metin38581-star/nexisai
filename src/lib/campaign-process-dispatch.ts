@@ -4,14 +4,21 @@ import { after } from "next/server";
 
 import type { CampaignBackgroundJobInput } from "@/lib/campaign-background-processor";
 import { processCampaignInBackground } from "@/lib/campaign-background-processor";
-import { resolveSiteOrigin } from "@/lib/site-origin";
+import { resolveInternalJobSecret } from "@/lib/internal-job-auth";
+import {
+  resolveSiteOrigin,
+  resolveSiteOriginFromRequest,
+} from "@/lib/site-origin";
 
-function resolveInternalProcessUrl(): string {
-  return `${resolveSiteOrigin()}/api/internal/campaign-process`;
+function resolveInternalProcessUrl(request?: Request): string {
+  const origin = request
+    ? resolveSiteOriginFromRequest(request)
+    : resolveSiteOrigin();
+  return `${origin}/api/internal/campaign-process`;
 }
 
 function resolveDispatchAuthHeader(): string | undefined {
-  const secret = process.env.CRON_SECRET?.trim();
+  const secret = resolveInternalJobSecret();
   return secret ? `Bearer ${secret}` : undefined;
 }
 
@@ -26,23 +33,49 @@ function scheduleInlineFallback(input: CampaignBackgroundJobInput): void {
   void processCampaignInBackground(input);
 }
 
+function logDispatchAuthMode(): void {
+  if (process.env.CRON_SECRET?.trim()) {
+    return;
+  }
+
+  if (process.env.INTERNAL_JOB_SECRET?.trim()) {
+    console.warn(
+      "[CAMPAIGN_DISPATCH]: CRON_SECRET yok — INTERNAL_JOB_SECRET ile internal route kullanılıyor.",
+    );
+    return;
+  }
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    console.warn(
+      "[CAMPAIGN_DISPATCH]: CRON_SECRET yok — SUPABASE_SERVICE_ROLE_KEY ile internal route kullanılıyor.",
+    );
+    return;
+  }
+
+  console.error(
+    "[CAMPAIGN_DISPATCH]: Internal job secret yok — kısa süreli inline fallback kullanılıyor.",
+  );
+}
+
 /** Arka plan kampanya motorunu uzun süreli internal route üzerinden tetikler. */
 export function dispatchCampaignBackgroundJob(
   input: CampaignBackgroundJobInput,
+  request?: Request,
 ): void {
   const authHeader = resolveDispatchAuthHeader();
+  const processUrl = resolveInternalProcessUrl(request);
 
   if (!authHeader) {
-    if (process.env.NODE_ENV === "production") {
-      console.error(
-        "[CAMPAIGN_DISPATCH]: CRON_SECRET tanımlı değil — inline fallback kullanılıyor.",
-      );
-    }
+    logDispatchAuthMode();
     scheduleInlineFallback(input);
     return;
   }
 
-  void fetch(resolveInternalProcessUrl(), {
+  if (!process.env.CRON_SECRET?.trim()) {
+    logDispatchAuthMode();
+  }
+
+  void fetch(processUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

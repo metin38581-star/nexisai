@@ -1,16 +1,16 @@
 import "server-only";
 
+import {
+  isInternalJobAuthorized,
+  resolveInternalJobSecret,
+} from "@/lib/internal-job-auth";
+
 export function isCronAuthorized(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET?.trim();
-
-  if (!cronSecret) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  const authHeader = request.headers.get("authorization");
-  return authHeader === `Bearer ${cronSecret}`;
+  return isInternalJobAuthorized(request);
 }
 
 export function cronUnauthorizedResponse() {
   return Response.json({ error: "Unauthorized" }, { status: 401 });
 }
+
+export { resolveInternalJobSecret };
