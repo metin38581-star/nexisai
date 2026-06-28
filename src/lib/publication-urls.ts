@@ -1,37 +1,18 @@
 import "server-only";
 
 import { resolvePrimaryAuthority } from "@/lib/business-domain";
+import {
+  buildBlogPostUrl,
+  normalizeBlogPostUrl,
+} from "@/lib/blog-url";
 import { buildForumHubUrl, normalizeForumHubUrl } from "@/lib/forum-hub-url";
 
-export const CENTRAL_BLOG_ORIGIN = "https://nexisai.blog";
-
-export function buildCentralBlogPostPath(slug: string): string {
-  return `/posts/${encodeURIComponent(slug)}`;
-}
-
-export function buildCentralBlogPostUrl(slug: string): string {
-  return `${CENTRAL_BLOG_ORIGIN}${buildCentralBlogPostPath(slug)}`;
-}
-
-export function normalizeCentralBlogUrl(
-  value: string | null | undefined,
-): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (trimmed.startsWith("/posts/")) {
-    return `${CENTRAL_BLOG_ORIGIN}${trimmed}`;
-  }
-
-  const slug = trimmed.replace(/^\/+/, "");
-  return slug ? buildCentralBlogPostUrl(slug) : null;
-}
+export {
+  buildBlogPostUrl,
+  buildBlogPostUrl as buildCentralBlogPostUrl,
+  normalizeBlogPostUrl,
+  normalizeBlogPostUrl as normalizeCentralBlogUrl,
+} from "@/lib/blog-url";
 
 export interface CampaignPublicationUrls {
   wordpressUrl: string | null;
@@ -53,7 +34,7 @@ export function buildCampaignPublicationUrls(input: {
   return {
     wordpressUrl: input.wordpressUrl?.trim() || null,
     forumUrl: forumSlug ? buildForumHubUrl(forumSlug) : null,
-    blogUrl: primarySlug ? buildCentralBlogPostUrl(primarySlug) : null,
+    blogUrl: primarySlug ? buildBlogPostUrl(primarySlug) : null,
     primaryAuthorityUrl: authority.primaryAuthorityUrl,
   };
 }
@@ -67,7 +48,7 @@ export function normalizePublicationUrls(input: {
   return {
     wordpressUrl: input.wordpressUrl?.trim() || null,
     forumUrl: normalizeForumHubUrl(input.forumUrl),
-    blogUrl: normalizeCentralBlogUrl(input.blogUrl),
+    blogUrl: normalizeBlogPostUrl(input.blogUrl),
     primaryAuthorityUrl: input.primaryAuthorityUrl?.trim() || null,
   };
 }

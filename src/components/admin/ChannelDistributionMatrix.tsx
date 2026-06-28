@@ -51,7 +51,7 @@ export default function ChannelDistributionMatrix({
         title="WordPress"
       />
       <ChannelLinkBadge label="Hub" url={row.forumUrl} title="Form Hub" />
-      <ChannelLinkBadge label="Blog" url={row.blogUrl} title="nexisai.blog" />
+      <ChannelLinkBadge label="Blog" url={row.blogUrl} title="Merkezi Blog" />
       <ChannelLinkBadge
         label="Otorite"
         url={row.primaryAuthorityUrl}

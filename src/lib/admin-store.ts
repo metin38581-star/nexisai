@@ -14,11 +14,8 @@ import { SECTOR_OPTIONS } from "@/lib/constants";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { buildForumHubUrl, normalizeForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
-import {
-  buildCentralBlogPostUrl,
-  normalizeCentralBlogUrl,
-  normalizePublicationUrls,
-} from "@/lib/publication-urls";
+import { buildBlogPostUrl, normalizeBlogPostUrl } from "@/lib/blog-url";
+import { normalizePublicationUrls } from "@/lib/publication-urls";
 import { resolvePrimaryAuthority } from "@/lib/business-domain";
 import { listCampaignOperationalLogs } from "@/lib/campaign-log-store";
 import { prisma } from "@/lib/db";
@@ -430,7 +427,7 @@ function resolveCampaignBlogUrl(
   campaign: CampaignOverviewSource,
 ): string | null {
   const firstBait = campaign.baits[0];
-  return firstBait?.slug ? buildCentralBlogPostUrl(firstBait.slug) : null;
+  return firstBait?.slug ? buildBlogPostUrl(firstBait.slug) : null;
 }
 
 function resolveCampaignPrimaryAuthorityUrl(
@@ -685,7 +682,7 @@ export async function listAdminCampaignOverview(): Promise<AdminOverviewPayload>
           forumUrlByCampaignId.get(campaign.id) ??
           resolveCampaignForumUrl(campaign),
       ),
-      blogUrl: normalizeCentralBlogUrl(
+      blogUrl: normalizeBlogPostUrl(
         log?.blogUrl ?? resolveCampaignBlogUrl(campaign),
       ),
       primaryAuthorityUrl:

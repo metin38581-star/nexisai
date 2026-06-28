@@ -1,33 +1,38 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
+import BlogPostPendingFallback from "@/components/hub/BlogPostPendingFallback";
 import HubArticlePageContent from "@/components/hub/HubArticlePageContent";
+import { buildBlogPostUrl } from "@/lib/blog-url";
 import { fetchHubArticleBySlug } from "@/lib/hub-article";
 import {
   buildHubArticleDescription,
   buildTechArticleJsonLd,
 } from "@/lib/hub-json-ld";
-import { buildHubArticleUrl } from "@/lib/hub-url";
 
-interface NexisBlogPageProps {
+interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
 }
 
+export const revalidate = 3600;
+
 export async function generateMetadata({
   params,
-}: NexisBlogPageProps): Promise<Metadata> {
+}: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params;
   const article = await fetchHubArticleBySlug(slug);
 
   if (!article) {
-    return { title: "Makale Bulunamadı | Sağlık Rehberi" };
+    return {
+      title: "İçerik Hazırlanıyor | NexisAI Blog",
+      robots: { index: false, follow: false },
+    };
   }
 
   const description = buildHubArticleDescription(article.content ?? "");
-  const canonical = buildHubArticleUrl(slug);
+  const canonical = buildBlogPostUrl(slug);
 
   return {
-    title: `${article.title} | Sağlık Rehberi`,
+    title: `${article.title} | NexisAI Blog`,
     description,
     alternates: { canonical },
     openGraph: {
@@ -44,12 +49,19 @@ export async function generateMetadata({
   };
 }
 
-export default async function NexisBlogPage({ params }: NexisBlogPageProps) {
-  const { slug } = await params;
+export default async function BlogPostPage({ params }: BlogPostPageProps) {
+  const { slug: rawSlug } = await params;
+  let slug = rawSlug;
+  try {
+    slug = decodeURIComponent(rawSlug);
+  } catch {
+    slug = rawSlug;
+  }
+
   const article = await fetchHubArticleBySlug(slug);
 
   if (!article) {
-    notFound();
+    return <BlogPostPendingFallback slug={slug} />;
   }
 
   const jsonLd = buildTechArticleJsonLd(article);
