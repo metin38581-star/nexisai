@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  ExternalLink,
-  FileText,
   Loader2,
   Receipt,
   Sparkles,
@@ -12,6 +10,7 @@ import {
 
 import type { AdminBusinessDetail } from "@/types/admin";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
+import CampaignContentInventory from "@/components/admin/CampaignContentInventory";
 
 interface BusinessDetailModalProps {
   userId: string | null;
@@ -186,7 +185,7 @@ export default function BusinessDetailModal({
                 <div className="mb-4 flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-violet-400" />
                   <h3 className="text-lg font-semibold text-white">
-                    GEO & LLM İçerik Geçmişi
+                    Kampanya İçerik Envanteri
                   </h3>
                 </div>
 
@@ -219,75 +218,10 @@ export default function BusinessDetailModal({
                           </div>
                         </div>
 
-                        <div className="divide-y divide-white/5">
-                          {campaign.intentContentPairs.map((pair, index) => (
-                            <div
-                              key={`${campaign.id}-${pair.intentId ?? index}`}
-                              className="grid gap-4 px-4 py-4 sm:grid-cols-[1fr_1fr] sm:px-5"
-                            >
-                              <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/5 p-3">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-400">
-                                  LLM Anahtar Soru #{index + 1}
-                                </p>
-                                <p className="mt-2 text-sm leading-relaxed text-zinc-200">
-                                  {pair.question}
-                                </p>
-                                {pair.simulatedAnswer ? (
-                                  <p className="mt-2 text-xs leading-relaxed text-zinc-500">
-                                    {pair.simulatedAnswer}
-                                  </p>
-                                ) : null}
-                              </div>
-
-                              <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-3">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
-                                  Canlı GEO İçeriği
-                                </p>
-                                {pair.bait ? (
-                                  <>
-                                    <div className="mt-2 flex items-start gap-2">
-                                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-medium text-white">
-                                          {pair.bait.baslik}
-                                        </p>
-                                        <p className="mt-1 text-xs text-zinc-500">
-                                          {formatDate(pair.bait.createdAt)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                      <a
-                                        href={pair.bait.hubUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-200 transition hover:bg-indigo-500/20"
-                                      >
-                                        Hub
-                                        <ExternalLink className="h-3 w-3" />
-                                      </a>
-                                      {pair.bait.externalLiveUrl ? (
-                                        <a
-                                          href={pair.bait.externalLiveUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 rounded-md border border-zinc-600/40 bg-zinc-800/50 px-2.5 py-1 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-800"
-                                        >
-                                          Dış Yayın
-                                          <ExternalLink className="h-3 w-3" />
-                                        </a>
-                                      ) : null}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <p className="mt-2 text-sm text-zinc-500">
-                                    Bu soru için içerik üretilmedi.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        <CampaignContentInventory
+                          rows={campaign.contentInventory}
+                          publicationSummary={campaign.publicationSummary}
+                        />
                       </article>
                     ))}
                   </div>

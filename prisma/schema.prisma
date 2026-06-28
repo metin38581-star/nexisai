@@ -163,6 +163,9 @@ model Bait {
   status           String   @default("PENDING")
   liveUrl          String?  @map("live_url")
   externalLiveUrl  String?  @map("external_live_url")
+  wpUrl            String?  @map("wp_url")
+  blogUrl          String?  @map("blog_url")
+  forumUrl         String?  @map("forum_url")
   createdAt        DateTime @default(now())
   campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   intent           CampaignIntent?

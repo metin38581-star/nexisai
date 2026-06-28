@@ -3,14 +3,18 @@ import "server-only";
 import type {
   AdminBusinessDetail,
   AdminBusinessRow,
+  AdminCampaignContentRow,
   AdminCampaignHistory,
   AdminCampaignOverviewRow,
+  AdminCampaignPublicationSummary,
+  AdminContentLinkSet,
   AdminIntentContentPair,
   AdminOverviewPayload,
   AdminOverviewStats,
   AdminPaymentRecord,
 } from "@/types/admin";
 import { SECTOR_OPTIONS } from "@/lib/constants";
+import { resolveBaitPublicationUrls } from "@/lib/bait-publication-urls";
 import { buildHubArticleUrl } from "@/lib/hub-url";
 import { buildForumHubUrl, normalizeForumHubUrl } from "@/lib/forum-hub-url";
 import { buildQuestionHubSlug } from "@/lib/question-hub-slug";
@@ -726,13 +730,20 @@ type CampaignWithRelations = {
   agresiflik: string;
   makaleSayisi: number;
   createdAt: Date;
+  wordpressUrl?: string | null;
+  businessDomain?: string | null;
   baits: Array<{
     id: string;
     baslik: string;
+    icerik: string;
     slug: string;
+    platform?: string | null;
     createdAt: Date;
     liveUrl: string | null;
     externalLiveUrl: string | null;
+    wpUrl?: string | null;
+    blogUrl?: string | null;
+    forumUrl?: string | null;
   }>;
   intents: Array<{
     id: string;
@@ -740,21 +751,43 @@ type CampaignWithRelations = {
     simulatedAnswer: string;
     sortOrder: number;
     baitId: string | null;
+    createdAt: Date;
     bait: {
       id: string;
       baslik: string;
+      icerik: string;
       slug: string;
       createdAt: Date;
       liveUrl: string | null;
       externalLiveUrl: string | null;
+      wpUrl?: string | null;
+      blogUrl?: string | null;
+      forumUrl?: string | null;
+      platform?: string | null;
     } | null;
   }>;
+  hubAnswers: Array<{
+    id: string;
+    username: string;
+    content: string;
+    createdAt: Date;
+    questionHub: {
+      slug: string;
+      question: string;
+    };
+  }>;
+  campaignLog: {
+    wordpressUrl: string | null;
+    forumUrl: string | null;
+    blogUrl: string | null;
+    primaryAuthorityUrl: string | null;
+  } | null;
 };
 
 async function getCampaignsForUserViaPrisma(
   userId: string,
 ): Promise<CampaignWithRelations[]> {
-  return prisma.campaign.findMany({
+  const campaigns = await prisma.campaign.findMany({
     where: { userId },
     include: {
       baits: {
@@ -764,9 +797,36 @@ async function getCampaignsForUserViaPrisma(
         orderBy: { sortOrder: "asc" },
         include: { bait: true },
       },
+      hubAnswers: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          questionHub: {
+            select: { slug: true, question: true },
+          },
+        },
+      },
+      campaignLog: {
+        select: {
+          wordpressUrl: true,
+          forumUrl: true,
+          blogUrl: true,
+          primaryAuthorityUrl: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
+
+  return campaigns.map((campaign) => ({
+    ...campaign,
+    hubAnswers: campaign.hubAnswers.map((answer) => ({
+      id: answer.id,
+      username: answer.username,
+      content: answer.content,
+      createdAt: answer.createdAt,
+      questionHub: answer.questionHub,
+    })),
+  }));
 }
 
 async function getCampaignsForUserViaSupabase(
@@ -788,7 +848,8 @@ async function getCampaignsForUserViaSupabase(
   for (const campaign of campaigns ?? []) {
     const campaignId = campaign.id as string;
 
-    const [{ data: baits }, { data: intents }] = await Promise.all([
+    const [{ data: baits }, { data: intents }, { data: hubAnswers }, { data: campaignLog }] =
+      await Promise.all([
       supabase
         .from("Bait")
         .select("*")
@@ -799,6 +860,16 @@ async function getCampaignsForUserViaSupabase(
         .select("*")
         .eq("campaignId", campaignId)
         .order("sortOrder", { ascending: true }),
+      supabase
+        .from("HubAnswer")
+        .select("id, username, content, createdAt, question_id, QuestionHub(slug, question)")
+        .eq("campaign_id", campaignId)
+        .order("createdAt", { ascending: true }),
+      supabase
+        .from("CampaignLog")
+        .select("wordpress_url, forum_url, blog_url, primary_authority_url")
+        .eq("campaign_id", campaignId)
+        .maybeSingle(),
     ]);
 
     const baitMap = new Map(
@@ -816,13 +887,20 @@ async function getCampaignsForUserViaSupabase(
       agresiflik: campaign.agresiflik as string,
       makaleSayisi: Number(campaign.makaleSayisi),
       createdAt: new Date(campaign.createdAt as string),
+      wordpressUrl: (campaign.wordpress_url as string | null) ?? null,
+      businessDomain: (campaign.business_domain as string | null) ?? null,
       baits: (baits ?? []).map((bait) => ({
         id: bait.id as string,
         baslik: bait.baslik as string,
+        icerik: bait.icerik as string,
         slug: bait.slug as string,
+        platform: (bait.platform as string | null) ?? null,
         createdAt: new Date(bait.createdAt as string),
         liveUrl: (bait.live_url as string | null) ?? null,
         externalLiveUrl: (bait.external_live_url as string | null) ?? null,
+        wpUrl: (bait.wp_url as string | null) ?? null,
+        blogUrl: (bait.blog_url as string | null) ?? null,
+        forumUrl: (bait.forum_url as string | null) ?? null,
       })),
       intents: (intents ?? []).map((intent) => {
         const baitId = intent.baitId as string | null;
@@ -834,28 +912,210 @@ async function getCampaignsForUserViaSupabase(
           simulatedAnswer: intent.simulatedAnswer as string,
           sortOrder: Number(intent.sortOrder),
           baitId,
+          createdAt: new Date(intent.createdAt as string),
           bait: baitRow
             ? {
                 id: baitRow.id as string,
                 baslik: baitRow.baslik as string,
+                icerik: baitRow.icerik as string,
                 slug: baitRow.slug as string,
                 createdAt: new Date(baitRow.createdAt as string),
                 liveUrl: (baitRow.live_url as string | null) ?? null,
                 externalLiveUrl:
                   (baitRow.external_live_url as string | null) ?? null,
+                wpUrl: (baitRow.wp_url as string | null) ?? null,
+                blogUrl: (baitRow.blog_url as string | null) ?? null,
+                forumUrl: (baitRow.forum_url as string | null) ?? null,
+                platform: (baitRow.platform as string | null) ?? null,
               }
             : null,
         };
       }),
+      hubAnswers: (hubAnswers ?? []).flatMap((answer) => {
+        const hub = answer.QuestionHub as
+          | { slug: string; question: string }
+          | { slug: string; question: string }[]
+          | null;
+
+        const questionHub = Array.isArray(hub) ? hub[0] : hub;
+        if (!questionHub?.slug) {
+          return [];
+        }
+
+        return [
+          {
+            id: answer.id as string,
+            username: answer.username as string,
+            content: answer.content as string,
+            createdAt: new Date(answer.createdAt as string),
+            questionHub: {
+              slug: questionHub.slug,
+              question: questionHub.question,
+            },
+          },
+        ];
+      }),
+      campaignLog: campaignLog
+        ? {
+            wordpressUrl: (campaignLog.wordpress_url as string | null) ?? null,
+            forumUrl: (campaignLog.forum_url as string | null) ?? null,
+            blogUrl: (campaignLog.blog_url as string | null) ?? null,
+            primaryAuthorityUrl:
+              (campaignLog.primary_authority_url as string | null) ?? null,
+          }
+        : null,
     });
   }
 
   return results;
 }
 
+function truncateExcerpt(value: string, maxLength = 180): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function mapBaitLinkSet(
+  bait: CampaignWithRelations["baits"][number],
+  campaignForumUrl?: string | null,
+): AdminContentLinkSet {
+  const resolved = resolveBaitPublicationUrls(
+    {
+      slug: bait.slug,
+      platform: bait.platform,
+      liveUrl: bait.liveUrl,
+      externalLiveUrl: bait.externalLiveUrl,
+      wpUrl: bait.wpUrl,
+      blogUrl: bait.blogUrl,
+      forumUrl: bait.forumUrl,
+    },
+    campaignForumUrl,
+  );
+
+  return {
+    hubUrl: resolved.hubUrl,
+    blogUrl: resolved.blogUrl,
+    wpUrl: resolved.wpUrl,
+    forumUrl: resolved.forumUrl,
+    externalUrl: resolved.externalUrl,
+  };
+}
+
+function buildCampaignPublicationSummary(
+  campaign: CampaignWithRelations,
+): AdminCampaignPublicationSummary {
+  const overviewSource: CampaignOverviewSource = {
+    id: campaign.id,
+    userId: null,
+    markaAdi: campaign.markaAdi,
+    sehir: campaign.sehir,
+    sektor: campaign.sektor,
+    createdAt: campaign.createdAt,
+    businessDomain: campaign.businessDomain ?? null,
+    wordpressUrl: campaign.wordpressUrl ?? null,
+    externalLiveUrl: campaign.baits[0]?.externalLiveUrl ?? null,
+    baits: campaign.baits.map((bait) => ({
+      slug: bait.slug,
+      externalLiveUrl: bait.externalLiveUrl,
+    })),
+    intents: campaign.intents.map((intent) => ({ question: intent.question })),
+  };
+
+  const fallbackForumUrl = resolveCampaignForumUrl(overviewSource);
+
+  return {
+    wordpressUrl:
+      campaign.campaignLog?.wordpressUrl ??
+      resolveCampaignWordpressUrl(overviewSource),
+    forumUrl: normalizeForumHubUrl(
+      campaign.campaignLog?.forumUrl ?? fallbackForumUrl,
+    ),
+    blogUrl: normalizeBlogPostUrl(
+      campaign.campaignLog?.blogUrl ?? resolveCampaignBlogUrl(overviewSource),
+    ),
+    primaryAuthorityUrl:
+      campaign.campaignLog?.primaryAuthorityUrl ??
+      resolveCampaignPrimaryAuthorityUrl(overviewSource),
+  };
+}
+
+function buildCampaignContentInventory(
+  campaign: CampaignWithRelations,
+): AdminCampaignContentRow[] {
+  const publicationSummary = buildCampaignPublicationSummary(campaign);
+  const rows: AdminCampaignContentRow[] = [];
+
+  for (const bait of campaign.baits) {
+    rows.push({
+      id: bait.id,
+      kind: "article",
+      title: bait.baslik,
+      excerpt: truncateExcerpt(bait.icerik),
+      createdAt: bait.createdAt.toISOString(),
+      links: mapBaitLinkSet(bait, publicationSummary.forumUrl),
+      relatedBaitId: bait.id,
+      relatedIntentId: null,
+    });
+  }
+
+  for (const intent of campaign.intents) {
+    const forumSlug = buildQuestionHubSlug(intent.question);
+    const forumUrl = forumSlug ? buildForumHubUrl(forumSlug) : null;
+
+    rows.push({
+      id: intent.id,
+      kind: "qa",
+      title: intent.question,
+      excerpt: truncateExcerpt(intent.simulatedAnswer),
+      createdAt: intent.createdAt.toISOString(),
+      links: {
+        hubUrl: intent.bait ? buildHubArticleUrl(intent.bait.slug) : null,
+        blogUrl: intent.bait ? buildBlogPostUrl(intent.bait.slug) : null,
+        wpUrl: intent.bait?.wpUrl ?? null,
+        forumUrl,
+        externalUrl:
+          intent.bait?.externalLiveUrl ?? intent.bait?.liveUrl ?? null,
+      },
+      relatedBaitId: intent.baitId,
+      relatedIntentId: intent.id,
+    });
+  }
+
+  for (const answer of campaign.hubAnswers) {
+    rows.push({
+      id: answer.id,
+      kind: "forum",
+      title: answer.questionHub.question,
+      excerpt: truncateExcerpt(`${answer.username}: ${answer.content}`),
+      createdAt: answer.createdAt.toISOString(),
+      links: {
+        hubUrl: null,
+        blogUrl: null,
+        wpUrl: null,
+        forumUrl: buildForumHubUrl(answer.questionHub.slug),
+        externalUrl: null,
+      },
+      relatedBaitId: null,
+      relatedIntentId: null,
+    });
+  }
+
+  return rows.sort(
+    (left, right) =>
+      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+}
+
 function mapBaitPublication(
   bait: CampaignWithRelations["baits"][number],
+  campaignForumUrl?: string | null,
 ): AdminIntentContentPair["bait"] {
+  const links = mapBaitLinkSet(bait, campaignForumUrl);
+
   return {
     id: bait.id,
     baslik: bait.baslik,
@@ -863,20 +1123,28 @@ function mapBaitPublication(
     createdAt: bait.createdAt.toISOString(),
     liveUrl: bait.liveUrl,
     externalLiveUrl: bait.externalLiveUrl,
-    hubUrl: buildHubArticleUrl(bait.slug),
+    hubUrl: links.hubUrl ?? buildHubArticleUrl(bait.slug),
+    wpUrl: links.wpUrl,
+    blogUrl: links.blogUrl,
+    forumUrl: links.forumUrl,
+    links,
   };
 }
 
 function buildIntentContentPairs(
   campaign: CampaignWithRelations,
 ): AdminIntentContentPair[] {
+  const publicationSummary = buildCampaignPublicationSummary(campaign);
+
   if (campaign.intents.length > 0) {
     return campaign.intents.map((intent) => ({
       intentId: intent.id,
       question: intent.question,
       simulatedAnswer: intent.simulatedAnswer,
       sortOrder: intent.sortOrder,
-      bait: intent.bait ? mapBaitPublication(intent.bait) : null,
+      bait: intent.bait
+        ? mapBaitPublication(intent.bait, publicationSummary.forumUrl)
+        : null,
     }));
   }
 
@@ -885,11 +1153,13 @@ function buildIntentContentPairs(
     question: "Arşivlenmemiş hedef (eski kampanya)",
     simulatedAnswer: "",
     sortOrder: index,
-    bait: mapBaitPublication(bait),
+    bait: mapBaitPublication(bait, publicationSummary.forumUrl),
   }));
 }
 
 function mapCampaignHistory(campaign: CampaignWithRelations): AdminCampaignHistory {
+  const publicationSummary = buildCampaignPublicationSummary(campaign);
+
   return {
     id: campaign.id,
     markaAdi: campaign.markaAdi,
@@ -904,6 +1174,8 @@ function mapCampaignHistory(campaign: CampaignWithRelations): AdminCampaignHisto
     makaleSayisi: campaign.makaleSayisi,
     createdAt: campaign.createdAt.toISOString(),
     intentContentPairs: buildIntentContentPairs(campaign),
+    contentInventory: buildCampaignContentInventory(campaign),
+    publicationSummary,
   };
 }
 

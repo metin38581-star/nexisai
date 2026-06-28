@@ -30,6 +30,7 @@ import {
 } from "@/lib/html-content-utils";
 import { recordChannelPublication } from "@/lib/distribution-status";
 import { buildHubArticleUrl } from "@/lib/hub-url";
+import { buildBlogPostUrl } from "@/lib/blog-url";
 import { prisma } from "@/lib/db";
 import { updateCampaignExternalLiveUrl } from "@/lib/supabase-campaign";
 
@@ -283,16 +284,24 @@ function normalizePlatform(platform?: string): string {
 }
 
 async function markBaitPublished(
-  baitId: string,
+  bait: Pick<DistributionBait, "id" | "slug" | "platform">,
   liveUrl?: string,
   externalLiveUrl?: string,
-  platform?: string,
+  forumUrl?: string,
 ): Promise<void> {
+  const platform = normalizePlatform(bait.platform);
+  const resolvedExternal = externalLiveUrl ?? liveUrl;
+  const hubUrl = buildHubArticleUrl(bait.slug);
+  const blogUrl = buildBlogPostUrl(bait.slug);
+
   await updateBaitPublication({
-    baitId,
-    liveUrl,
-    externalLiveUrl: externalLiveUrl ?? liveUrl,
-    platform,
+    baitId: bait.id,
+    liveUrl: liveUrl ?? hubUrl,
+    externalLiveUrl: resolvedExternal ?? hubUrl,
+    platform: bait.platform,
+    blogUrl,
+    wpUrl: platform === "WORDPRESS" ? resolvedExternal : undefined,
+    forumUrl,
   });
 }
 
@@ -355,7 +364,7 @@ async function publishBaitToMedium(
       };
     }
 
-    await markBaitPublished(bait.id, result.url, result.url);
+    await markBaitPublished(bait, result.url, result.url);
 
     console.log(`[MEDIUM]: ${baslik} → ${result.url} (Bait ${bait.id})`);
 
@@ -435,7 +444,7 @@ async function publishBaitToWordPress(
       };
     }
 
-    await markBaitPublished(bait.id, result.url, result.url, "WORDPRESS");
+    await markBaitPublished(bait, result.url, result.url);
     await maybeSaveCampaignWordPressUrl(
       campaignId,
       result.url,
@@ -555,10 +564,9 @@ async function applyMakeWebhookResultsForBaits(
 
     try {
       await markBaitPublished(
-        bait.id,
+        bait,
         webhookResult.externalLiveUrl,
         webhookResult.externalLiveUrl,
-        bait.platform,
       );
 
       await maybeSaveCampaignUrl(
@@ -686,7 +694,7 @@ export async function distributeBaitsToNetwork(
         if (result.ok) {
           try {
             await markBaitPublished(
-              bait.id,
+              bait,
               result.externalLiveUrl,
               result.externalLiveUrl,
             );

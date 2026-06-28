@@ -9,6 +9,9 @@ export interface BaitPublicationUpdate {
   liveUrl?: string;
   externalLiveUrl?: string;
   platform?: string;
+  wpUrl?: string;
+  blogUrl?: string;
+  forumUrl?: string;
 }
 
 export async function updateBaitPublication(
@@ -22,6 +25,9 @@ export async function updateBaitPublication(
       ? { externalLiveUrl: update.externalLiveUrl }
       : {}),
     ...(update.platform ? { platform: update.platform } : {}),
+    ...(update.wpUrl ? { wpUrl: update.wpUrl } : {}),
+    ...(update.blogUrl ? { blogUrl: update.blogUrl } : {}),
+    ...(update.forumUrl ? { forumUrl: update.forumUrl } : {}),
   };
 
   if (hasDatabaseUrl()) {
@@ -47,6 +53,9 @@ export async function updateBaitPublication(
         ? { external_live_url: update.externalLiveUrl }
         : {}),
       ...(update.platform ? { platform: update.platform } : {}),
+      ...(update.wpUrl ? { wp_url: update.wpUrl } : {}),
+      ...(update.blogUrl ? { blog_url: update.blogUrl } : {}),
+      ...(update.forumUrl ? { forum_url: update.forumUrl } : {}),
     })
     .eq("id", update.baitId);
 

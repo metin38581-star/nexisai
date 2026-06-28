@@ -10,6 +10,34 @@ export interface AdminBusinessRow {
   campaignCount: number;
 }
 
+export interface AdminContentLinkSet {
+  hubUrl: string | null;
+  blogUrl: string | null;
+  wpUrl: string | null;
+  forumUrl: string | null;
+  externalUrl: string | null;
+}
+
+export type AdminContentKind = "article" | "qa" | "forum";
+
+export interface AdminCampaignContentRow {
+  id: string;
+  kind: AdminContentKind;
+  title: string;
+  excerpt: string;
+  createdAt: string;
+  links: AdminContentLinkSet;
+  relatedBaitId: string | null;
+  relatedIntentId: string | null;
+}
+
+export interface AdminCampaignPublicationSummary {
+  wordpressUrl: string | null;
+  forumUrl: string | null;
+  blogUrl: string | null;
+  primaryAuthorityUrl: string | null;
+}
+
 export interface AdminBaitPublication {
   id: string;
   baslik: string;
@@ -18,6 +46,10 @@ export interface AdminBaitPublication {
   liveUrl: string | null;
   externalLiveUrl: string | null;
   hubUrl: string;
+  wpUrl: string | null;
+  blogUrl: string | null;
+  forumUrl: string | null;
+  links: AdminContentLinkSet;
 }
 
 export interface AdminIntentContentPair {
@@ -42,6 +74,8 @@ export interface AdminCampaignHistory {
   makaleSayisi: number;
   createdAt: string;
   intentContentPairs: AdminIntentContentPair[];
+  contentInventory: AdminCampaignContentRow[];
+  publicationSummary: AdminCampaignPublicationSummary;
 }
 
 export interface AdminPaymentRecord {
