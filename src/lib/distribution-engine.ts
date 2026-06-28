@@ -609,6 +609,12 @@ export async function distributeBaitsToNetwork(
         )
       : new Map<string, { ok: boolean; url?: string }>();
 
+  if (isDevToDirectConfigured() && bloggerBaits.length === 0) {
+    console.warn(
+      `[DEVTO_DIRECT_API]: DEVTO_API_KEY tanımlı ancak BLOGGER slotu yok (${baits.length} makale — MEDIUM/WORDPRESS only). Dev.to atlanıyor.`,
+    );
+  }
+
   const bloggerMakeFallbackBaits = bloggerBaits.filter((bait) => {
     const devToResult = devToDirectResults.get(bait.id);
     return !devToResult?.ok || !devToResult.url;

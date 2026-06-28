@@ -11,6 +11,8 @@ import "server-only";
  */
 
 import type { GeoWebhookPayload } from "@/lib/distribution-core";
+import { htmlToMarkdown } from "@/lib/html-content-utils";
+import { buildHubArticleUrl } from "@/lib/hub-url";
 import {
   MAKE_WEBHOOK_CONTENT_TYPE,
   buildMakeWebhookPayload,
@@ -22,6 +24,78 @@ import {
 const WEBHOOK_TIMEOUT_MS = 15_000;
 const DEVTO_API_TIMEOUT_MS = 15_000;
 const DEVTO_API_URL = "https://dev.to/api/articles";
+const DEVTO_MAX_TITLE_LENGTH = 128;
+const DEVTO_MAX_BODY_LENGTH = 100_000;
+const DEVTO_DEFAULT_TITLE = "NexisAI Sektörel Analiz";
+const DEVTO_DEFAULT_BODY = "İçerik hazırlanıyor...";
+const DEVTO_TAGS = ["ai", "seo"] as const;
+
+export interface DevToArticlePayload {
+  article: {
+    title: string;
+    body_markdown: string;
+    published: boolean;
+    tags: string[];
+    canonical_url?: string;
+  };
+}
+
+function sanitizeDevToTitle(value: string): string {
+  const title = String(value || "").trim() || DEVTO_DEFAULT_TITLE;
+  if (title.length <= DEVTO_MAX_TITLE_LENGTH) {
+    return title;
+  }
+  return `${title.slice(0, DEVTO_MAX_TITLE_LENGTH - 1).trim()}…`;
+}
+
+function prepareDevToBodyMarkdown(rawContent: string, title: string): string {
+  const trimmed = String(rawContent || "").trim();
+  if (!trimmed) {
+    return DEVTO_DEFAULT_BODY;
+  }
+
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    const markdown = htmlToMarkdown(trimmed, title);
+    const withoutDuplicateHeading = markdown
+      .replace(/^#\s+.+\n\n?/m, "")
+      .trim();
+    return withoutDuplicateHeading || DEVTO_DEFAULT_BODY;
+  }
+
+  return trimmed;
+}
+
+function sanitizeDevToBody(rawContent: string, title: string): string {
+  const body = prepareDevToBodyMarkdown(rawContent, title);
+  if (body.length <= DEVTO_MAX_BODY_LENGTH) {
+    return body;
+  }
+  return `${body.slice(0, DEVTO_MAX_BODY_LENGTH - 1).trim()}…`;
+}
+
+/** Dev.to Forem API gövdesi — minimum alan seti, 422 riskini azaltır. */
+export function buildDevToArticlePayload(
+  articleData: DevToDirectArticleData,
+): DevToArticlePayload {
+  const title = sanitizeDevToTitle(articleData.baslik);
+  const body_markdown = sanitizeDevToBody(articleData.icerik, title);
+  const slug = String(articleData.slug || "").trim();
+
+  const payload: DevToArticlePayload = {
+    article: {
+      title,
+      body_markdown,
+      published: true,
+      tags: [...DEVTO_TAGS],
+    },
+  };
+
+  if (slug) {
+    payload.article.canonical_url = buildHubArticleUrl(slug);
+  }
+
+  return payload;
+}
 
 export interface DevToDirectArticleData {
   baslik: string;
@@ -48,24 +122,23 @@ export function isDevToDirectConfigured(): boolean {
 export async function publishToDevToDirect(
   articleData: DevToDirectArticleData,
 ): Promise<string | null> {
-  const secureTitle = String(articleData.baslik || "").trim();
-  const secureBody = String(articleData.icerik || "").trim();
   const secureSlug = String(articleData.slug || "").trim();
   const secureCampaignId = String(articleData.campaignId || "").trim();
-
-  if (!secureTitle || !secureBody) {
-    console.warn("[DEVTO_DIRECT_API]: baslik veya icerik boş — yayın atlandı.", {
-      slug: secureSlug || undefined,
-      campaignId: secureCampaignId || undefined,
-      sehir: articleData.sehir,
-      sektor: articleData.sektor,
-      markaAdi: articleData.markaAdi,
-    });
-    return null;
-  }
+  const payload = buildDevToArticlePayload(articleData);
+  const { title, body_markdown } = payload.article;
 
   if (!process.env.DEVTO_API_KEY?.trim()) {
     console.warn("[DEVTO_DIRECT_API]: DEVTO_API_KEY eksik, bu kanal atlanıyor.");
+    return null;
+  }
+
+  if (!title.trim() || !body_markdown.trim()) {
+    console.error("[DEVTO_DIRECT_ERROR]: title veya body_markdown boş — yayın iptal.", {
+      slug: secureSlug || undefined,
+      campaignId: secureCampaignId || undefined,
+      titleLength: title.length,
+      bodyLength: body_markdown.length,
+    });
     return null;
   }
 
@@ -74,8 +147,14 @@ export async function publishToDevToDirect(
 
   try {
     console.log(
-      `[DEVTO_DIRECT_API]: Yayınlanıyor → "${secureTitle}"${secureSlug ? ` [${secureSlug}]` : ""}${secureCampaignId ? ` (campaign: ${secureCampaignId})` : ""}`,
+      `[DEVTO_DIRECT_API]: Yayınlanıyor → "${title}" (${body_markdown.length} char)${secureSlug ? ` [${secureSlug}]` : ""}${secureCampaignId ? ` (campaign: ${secureCampaignId})` : ""}`,
     );
+    console.log("[DEVTO_DIRECT_API]: Payload özeti", {
+      titleLength: title.length,
+      bodyLength: body_markdown.length,
+      tags: payload.article.tags,
+      hasCanonicalUrl: Boolean(payload.article.canonical_url),
+    });
 
     const response = await fetch(DEVTO_API_URL, {
       method: "POST",
@@ -84,25 +163,40 @@ export async function publishToDevToDirect(
         "api-key": process.env.DEVTO_API_KEY.trim(),
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        article: {
-          title: secureTitle,
-          body_markdown: secureBody,
-          published: true,
-          tags: ["ai", "seo", "nexisai"],
-        },
-      }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      const errLog = await response.json().catch(() => null);
+      const errorText = await response.text().catch(() => "");
+      let parsedError: unknown = null;
+      try {
+        parsedError = errorText ? JSON.parse(errorText) : null;
+      } catch {
+        parsedError = errorText.slice(0, 500) || null;
+      }
+
       console.error("[DEVTO_DIRECT_ERROR]:", {
         status: response.status,
         slug: secureSlug || undefined,
         campaignId: secureCampaignId || undefined,
-        error: errLog,
+        titleLength: title.length,
+        bodyLength: body_markdown.length,
+        titlePreview: title.slice(0, 80),
+        bodyPreview: body_markdown.slice(0, 120),
+        error: parsedError,
       });
+
+      if (response.status === 422) {
+        console.error(
+          "[DEVTO_DIRECT_ERROR]: 422 Unprocessable Entity — title/body_markdown/tags doğrulaması başarısız.",
+          {
+            tags: payload.article.tags,
+            published: payload.article.published,
+          },
+        );
+      }
+
       return null;
     }
 
