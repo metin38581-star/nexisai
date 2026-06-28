@@ -101,7 +101,10 @@ export default function UserProfileDropdown({
 
   return (
     <>
-      <div ref={containerRef} className="relative flex items-center gap-2 sm:gap-3">
+      <div
+        ref={containerRef}
+        className={`relative flex items-center gap-2 sm:gap-3 ${isOpen ? "z-[110]" : "z-[100]"}`}
+      >
         {showAdminLink ? (
           <Link
             href="/admin"
@@ -137,7 +140,7 @@ export default function UserProfileDropdown({
 
         {isOpen ? (
           <div
-            className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-violet-500/25 bg-zinc-950/90 p-2 shadow-[0_0_32px_rgba(139,92,246,0.28)] backdrop-blur-xl"
+            className="absolute right-0 top-full z-[110] mt-2 w-64 overflow-hidden rounded-2xl border border-violet-500/25 bg-zinc-950/95 p-2 shadow-[0_0_32px_rgba(139,92,246,0.28)] backdrop-blur-xl"
             role="menu"
           >
             <div className="border-b border-white/5 px-3 py-2.5 md:hidden">

@@ -39,7 +39,7 @@ export default function Navbar({ compactLogo = false }: NavbarProps) {
 
   return (
     <>
-      <header className="relative z-10 border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl">
+      <header className="relative z-[100] border-b border-white/5 bg-zinc-950/60 backdrop-blur-xl">
         <div className="relative mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 pt-1 pb-0.5 sm:px-6 lg:px-8 lg:pt-1.5 lg:pb-1">
           <div aria-hidden />
 
@@ -47,7 +47,7 @@ export default function Navbar({ compactLogo = false }: NavbarProps) {
             <NexisLogo size={compactLogo ? "compact" : "default"} />
           </div>
 
-          <div className="relative flex min-h-10 items-center justify-end gap-3">
+          <div className="relative z-[100] flex min-h-10 items-center justify-end gap-3">
             {hasActiveSession ? (
               <UserProfileDropdown
                 userName={userName ?? "İşletme Hesabı"}
