@@ -13,6 +13,7 @@ import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { resolvePrimaryAuthority } from "@/lib/business-domain";
 import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { debitWalletForCampaign } from "@/lib/user-wallet-service";
+import { hasCampaignDirectPayment } from "@/lib/campaign-payment-service";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasSupabaseAdminEnv } from "@/lib/server-env";
 
@@ -84,6 +85,19 @@ async function debitWalletInTransaction(
     description: string;
   },
 ): Promise<{ balance: number; alreadyDebited: boolean }> {
+  const hasDirectPayment = await tx.payment.findFirst({
+    where: {
+      campaignId: input.campaignId,
+      providerStatusCode: "IYZICO_CAMPAIGN_PAYMENT",
+      status: { in: [...SUCCESS_STATUSES] },
+    },
+    select: { id: true },
+  });
+
+  if (hasDirectPayment) {
+    return { balance: 0, alreadyDebited: true };
+  }
+
   const existingDebit = await tx.payment.findFirst({
     where: {
       campaignId: input.campaignId,
@@ -222,19 +236,29 @@ async function runFallbackCampaignBilling(input: {
     input.billing.userId,
   );
 
-  const walletResult = await debitWalletForCampaign(
-    input.billing.userId,
-    input.billing.amountSpent,
-    input.campaignId,
-    input.billing.description,
-  );
+  const directPaid = await hasCampaignDirectPayment(input.campaignId);
+  let balance = 0;
+  let alreadyDebited = directPaid;
 
-  const amountDeposited = await sumUserPaidTopUpsByUserId(input.billing.userId);
+  if (!directPaid) {
+    const walletResult = await debitWalletForCampaign(
+      input.billing.userId,
+      input.billing.amountSpent,
+      input.campaignId,
+      input.billing.description,
+    );
+    balance = walletResult.balance;
+    alreadyDebited = walletResult.alreadyDebited;
+  }
+
+  const amountDeposited = directPaid
+    ? input.billing.amountSpent
+    : await sumUserPaidTopUpsByUserId(input.billing.userId);
 
   return {
     campaign,
-    balance: walletResult.balance,
-    alreadyDebited: walletResult.alreadyDebited,
+    balance,
+    alreadyDebited,
     amountDeposited,
   };
 }
@@ -273,6 +297,16 @@ export async function finalizeCampaignCreationWithBilling(input: {
 export async function finalizeExistingCampaignBilling(
   input: CampaignBillingLogInput,
 ): Promise<CampaignBillingResult> {
+  const directPaid = await hasCampaignDirectPayment(input.campaignId);
+  if (directPaid) {
+    await writeCampaignBillingLog(input, 0, input.amountSpent);
+    return {
+      balance: 0,
+      amountDeposited: input.amountSpent,
+      alreadyDebited: true,
+    };
+  }
+
   const walletResult = await debitWalletForCampaign(
     input.userId,
     input.amountSpent,

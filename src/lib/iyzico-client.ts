@@ -31,6 +31,7 @@ export interface InitializeCheckoutInput {
   amount: number;
   buyerEmail: string;
   buyerName: string;
+  campaignId?: string;
   campaignDraft?: Record<string, unknown>;
   callbackUrl: string;
 }
@@ -61,6 +62,7 @@ export async function initializeIyzicoCheckout(
   const checkout = await prisma.iyzicoCheckout.create({
     data: {
       userId: input.userId,
+      campaignId: input.campaignId ?? null,
       amount: input.amount,
       currency: "TRY",
       status: "pending",
@@ -128,7 +130,9 @@ export async function initializeIyzicoCheckout(
     basketItems: [
       {
         id: checkout.id,
-        name: "NexisAI Kampanya Bakiyesi",
+        name: input.campaignId
+          ? "NexisAI GEO Kampanya Paketi"
+          : "NexisAI Kampanya Bakiyesi",
         category1: "Digital",
         itemType: "VIRTUAL",
         price: input.amount.toFixed(2),
@@ -179,7 +183,10 @@ export async function completeIyzicoCheckout(
   checkoutId: string;
   userId: string;
   amount: number;
-  alreadyCredited: boolean;
+  campaignId: string | null;
+  campaignDraft: Record<string, unknown> | null;
+  isCampaignPayment: boolean;
+  alreadyProcessed: boolean;
 } | null> {
   const config = getIyzicoConfig();
   if (!config) {
@@ -199,7 +206,15 @@ export async function completeIyzicoCheckout(
       checkoutId: checkout.id,
       userId: checkout.userId,
       amount: checkout.amount,
-      alreadyCredited: true,
+      campaignId: checkout.campaignId,
+      campaignDraft:
+        checkout.campaignDraft &&
+        typeof checkout.campaignDraft === "object" &&
+        !Array.isArray(checkout.campaignDraft)
+          ? (checkout.campaignDraft as Record<string, unknown>)
+          : null,
+      isCampaignPayment: Boolean(checkout.campaignId),
+      alreadyProcessed: true,
     };
   }
 
@@ -247,6 +262,15 @@ export async function completeIyzicoCheckout(
       data: { status: "success" },
     });
 
+    const campaignDraft =
+      checkout.campaignDraft &&
+      typeof checkout.campaignDraft === "object" &&
+      !Array.isArray(checkout.campaignDraft)
+        ? (checkout.campaignDraft as Record<string, unknown>)
+        : null;
+
+    const isCampaignPayment = Boolean(checkout.campaignId);
+
     if (claimed.count === 0) {
       const current = await tx.iyzicoCheckout.findUnique({
         where: { id: checkout.id },
@@ -256,45 +280,45 @@ export async function completeIyzicoCheckout(
         return null;
       }
 
-      const credited = await tx.payment.findFirst({
-        where: {
-          userId: checkout.userId,
-          providerStatusCode: "CHECKOUT_SUCCESS",
-          description: { contains: checkout.id },
-        },
-      });
-
       return {
         checkoutId: checkout.id,
         userId: checkout.userId,
         amount: checkout.amount,
-        alreadyCredited: Boolean(credited),
+        campaignId: checkout.campaignId,
+        campaignDraft,
+        isCampaignPayment,
+        alreadyProcessed: true,
       };
     }
 
-    await tx.wallet.upsert({
-      where: { id: checkout.userId },
-      create: { id: checkout.userId, balance: checkout.amount },
-      update: { balance: { increment: checkout.amount } },
-    });
+    if (!isCampaignPayment) {
+      await tx.wallet.upsert({
+        where: { id: checkout.userId },
+        create: { id: checkout.userId, balance: checkout.amount },
+        update: { balance: { increment: checkout.amount } },
+      });
 
-    await tx.payment.create({
-      data: {
-        userId: checkout.userId,
-        amount: checkout.amount,
-        currency: "TRY",
-        status: "success",
-        provider: "iyzico",
-        providerStatusCode: "CHECKOUT_SUCCESS",
-        description: `iyzico cüzdan yüklemesi (checkout:${checkout.id})`,
-      },
-    });
+      await tx.payment.create({
+        data: {
+          userId: checkout.userId,
+          amount: checkout.amount,
+          currency: "TRY",
+          status: "success",
+          provider: "iyzico",
+          providerStatusCode: "CHECKOUT_SUCCESS",
+          description: `iyzico cüzdan yüklemesi (checkout:${checkout.id})`,
+        },
+      });
+    }
 
     return {
       checkoutId: checkout.id,
       userId: checkout.userId,
       amount: checkout.amount,
-      alreadyCredited: false,
+      campaignId: checkout.campaignId,
+      campaignDraft,
+      isCampaignPayment,
+      alreadyProcessed: false,
     };
   });
 }

@@ -11,21 +11,35 @@ import AuthModal, { type AuthViewMode } from "@/components/auth/AuthModal";
 import { useAuth } from "@/context/AuthContext";
 import type { CampaignFormData, CampaignFormCity, CampaignFormSector } from "@/types/campaign";
 import { MIN_CAMPAIGN_DAILY_BUDGET, MIN_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
+import { saveActiveCampaignId } from "@/lib/campaign-session";
 import "@/components/dashboard/dashboard-cyber.css";
 
 function PaymentResumeHandler({
   onResume,
+  onCampaignStarted,
 }: {
   onResume: (data: CampaignFormData) => void;
+  onCampaignStarted: (campaignId: string) => void;
 }) {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (searchParams.get("resumeCampaign") !== "1") {
+    if (searchParams.get("payment") !== "success") {
       return;
     }
 
-    if (searchParams.get("payment") !== "success") {
+    if (searchParams.get("campaignStarted") === "1") {
+      const campaignId = searchParams.get("campaignId")?.trim();
+      if (campaignId) {
+        saveActiveCampaignId(campaignId);
+        onCampaignStarted(campaignId);
+        toast.success("Ödeme başarılı! Kampanya operasyonu başlatıldı.");
+        window.history.replaceState(null, "", "/dashboard");
+      }
+      return;
+    }
+
+    if (searchParams.get("resumeCampaign") !== "1") {
       return;
     }
 
@@ -57,12 +71,10 @@ function PaymentResumeHandler({
       businessWebsite: businessWebsiteParam || businessDomainParam || undefined,
     });
 
-    toast.success(
-      "Ödeme başarılı! Kampanya formu dolduruldu — Kampanyayı Başlat'a tıklayın.",
-    );
+    toast.success("Ödeme başarılı! Kampanya formu dolduruldu.");
 
     window.history.replaceState(null, "", "/dashboard");
-  }, [onResume, searchParams]);
+  }, [onCampaignStarted, onResume, searchParams]);
 
   return null;
 }
@@ -74,6 +86,7 @@ function DashboardPageContent() {
   const [pendingCampaign, setPendingCampaign] =
     useState<CampaignFormData | null>(null);
   const [walletRefreshToken, setWalletRefreshToken] = useState(0);
+  const [startedCampaignId, setStartedCampaignId] = useState<string | null>(null);
 
   const handleWalletRefresh = useCallback(() => {
     setWalletRefreshToken((value) => value + 1);
@@ -110,6 +123,11 @@ function DashboardPageContent() {
     setPendingCampaign(data);
   }, []);
 
+  const handleCampaignStarted = useCallback((campaignId: string) => {
+    setStartedCampaignId(campaignId);
+    setWalletRefreshToken((value) => value + 1);
+  }, []);
+
   const handleAuthSuccess = useCallback(
     (payload: {
       userName: string;
@@ -134,7 +152,10 @@ function DashboardPageContent() {
     <div className="dashboard-cyber relative flex min-h-screen flex-col overflow-x-hidden bg-[#050505] text-white">
       <DashboardCyberScene3D />
       <div className="dc-grid-overlay" aria-hidden />
-      <PaymentResumeHandler onResume={handlePaymentResume} />
+      <PaymentResumeHandler
+        onResume={handlePaymentResume}
+        onCampaignStarted={handleCampaignStarted}
+      />
       <Navbar compactLogo />
       <main className="relative z-10 flex-1">
         <DashboardShell
@@ -143,6 +164,7 @@ function DashboardPageContent() {
           onRequireAuth={handleRequireAuth}
           walletRefreshToken={walletRefreshToken}
           onWalletRefresh={handleWalletRefresh}
+          startedCampaignId={startedCampaignId}
         />
       </main>
       <CorporateFooter />

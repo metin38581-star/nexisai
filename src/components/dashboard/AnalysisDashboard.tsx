@@ -26,7 +26,6 @@ import CampaignOperationStatusPanel, {
 } from "@/components/dashboard/CampaignOperationStatusPanel";
 import DistributionStatusPanel from "@/components/dashboard/DistributionStatusPanel";
 import CampaignHistoryPanel from "@/components/dashboard/CampaignHistoryPanel";
-import CyberWalletBar from "@/components/wallet/CyberWalletBar";
 import TargetedQuestionsGrowthPanel from "@/components/campaign/TargetedQuestionsGrowthPanel";
 import { useAuth } from "@/context/AuthContext";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
@@ -499,12 +498,14 @@ export default function AnalysisDashboard({
   pendingCampaign = null,
   onPendingCampaignHandled,
   onRequireAuth,
+  startedCampaignId = null,
 }: {
   walletRefreshToken?: number;
   onWalletRefresh?: () => void;
   pendingCampaign?: CampaignFormData | null;
   onPendingCampaignHandled?: () => void;
   onRequireAuth?: (data?: CampaignFormData) => void;
+  startedCampaignId?: string | null;
 } = {}) {
   return (
     <DistributionProvider>
@@ -514,23 +515,25 @@ export default function AnalysisDashboard({
         pendingCampaign={pendingCampaign}
         onPendingCampaignHandled={onPendingCampaignHandled}
         onRequireAuth={onRequireAuth}
+        startedCampaignId={startedCampaignId}
       />
     </DistributionProvider>
   );
 }
 
 function AnalysisDashboardContent({
-  walletRefreshToken,
   onWalletRefresh,
   pendingCampaign,
   onPendingCampaignHandled,
   onRequireAuth,
+  startedCampaignId,
 }: {
   walletRefreshToken: number;
   onWalletRefresh?: () => void;
   pendingCampaign?: CampaignFormData | null;
   onPendingCampaignHandled?: () => void;
   onRequireAuth?: (data?: CampaignFormData) => void;
+  startedCampaignId?: string | null;
 }) {
   const {
     startDistribution,
@@ -821,11 +824,27 @@ function AnalysisDashboardContent({
             ) {
               toast.error(
                 result.message ??
-                  "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+                  "Bu işletme adı daha önce deneme hakkını kullanmıştır. Yeni kampanya satın almanız gerekir.",
               );
             }
 
             if (response.status === 402 && result.requiresPayment) {
+              const paymentUrl =
+                typeof result.paymentPageUrl === "string"
+                  ? result.paymentPageUrl
+                  : null;
+
+              if (paymentUrl) {
+                if (result.campaignId) {
+                  saveActiveCampaignId(result.campaignId);
+                }
+                toast.info(
+                  `Kampanya paketi: ${(result.totalCost ?? 0).toLocaleString("tr-TR")} ₺ — iyzico ödeme sayfasına yönlendiriliyorsunuz...`,
+                );
+                window.location.href = paymentUrl;
+                return;
+              }
+
               toast.info(
                 "Ödeme gerekiyor — iyzico sayfasına yönlendiriliyorsunuz...",
               );
@@ -834,7 +853,8 @@ function AnalysisDashboardContent({
                 buildAuthFetchInit(token, {
                   method: "POST",
                   body: JSON.stringify({
-                    amount: result.amountDue,
+                    amount: result.totalCost ?? result.amountDue,
+                    campaignId: result.campaignId,
                     campaignDraft: result.campaignDraft,
                     buyerEmail: email,
                     buyerName: payload.markaAdi,
@@ -846,6 +866,9 @@ function AnalysisDashboardContent({
                 error?: string;
               };
               if (payResponse.ok && payResult.paymentPageUrl) {
+                if (result.campaignId) {
+                  saveActiveCampaignId(result.campaignId);
+                }
                 window.location.href = payResult.paymentPageUrl;
                 return;
               }
@@ -855,8 +878,7 @@ function AnalysisDashboardContent({
             const isInsufficientBalance =
               response.status === 400 &&
               typeof result.error === "string" &&
-              (result.error.toLowerCase().includes("yetersiz") ||
-                result.error.toLowerCase().includes("siber bakiye"));
+              result.error.toLowerCase().includes("yetersiz");
             const isUnauthorized = response.status === 401;
 
             if (isDuplicate) {
@@ -866,7 +888,7 @@ function AnalysisDashboardContent({
             }
 
             const errorMessage = isInsufficientBalance
-              ? "Yetersiz bakiye nedeniyle operasyon başlatılamadı. Lütfen bakiye yükleyin."
+              ? "Ödeme tamamlanmadan operasyon başlatılamadı."
               : isDuplicate
                 ? "Operasyon zaten başlatıldı. Durum paneli birkaç saniye içinde güncellenir."
                 : isUnauthorized
@@ -1026,6 +1048,31 @@ function AnalysisDashboardContent({
     })();
   }, [accessToken, buildCampaignFlowHandlers, isAuthReady]);
 
+  useEffect(() => {
+    if (!startedCampaignId || !accessToken || !isAuthReady) {
+      return;
+    }
+
+    const savedSession = getCampaignSession();
+    if (!savedSession) {
+      return;
+    }
+
+    setSession(savedSession);
+    setOperationPhase("processing");
+    void pollCampaignProcessingStatus(
+      accessToken,
+      savedSession,
+      startedCampaignId,
+      buildCampaignFlowHandlers(),
+    );
+  }, [
+    accessToken,
+    buildCampaignFlowHandlers,
+    isAuthReady,
+    startedCampaignId,
+  ]);
+
   const startCampaignAnalysis = useCallback((data: CampaignFormData) => {
     if (analysisInFlightRef.current) {
       return;
@@ -1134,18 +1181,12 @@ function AnalysisDashboardContent({
               <span className="text-gradient">Komuta Merkezi</span>
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
-              Günlük bütçenizi ve operasyon sürenizi belirleyin; agresiflik
-              seviyeniz otomatik ölçeklensin — 3.000 ₺/gün ile Kritik Domination
-              moduna geçin.
+              Günlük bütçe × kampanya süresi toplam paket tutarını belirler;
+              ödeme iyzico ile tek seferde alınır.
             </p>
           </>
         )}
           </div>
-
-          <CyberWalletBar
-            refreshToken={walletRefreshToken}
-            onRequireAuth={() => onRequireAuth?.()}
-          />
         </div>
       </section>
 

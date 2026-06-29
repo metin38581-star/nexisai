@@ -8,18 +8,14 @@ import { dispatchCampaignBackgroundJob } from "@/lib/campaign-process-dispatch";
 import { getActiveSessionUser } from "@/lib/auth-session";
 import { logServerEnvStatus } from "@/lib/server-env";
 import {
-  finalizeExistingCampaignBilling,
-} from "@/lib/campaign-billing";
-import {
-  debitWalletForCampaign,
-  getOrCreateUserWallet,
-  hasCampaignWalletDebit,
-} from "@/lib/user-wallet-service";
-import {
   assertTrialCampaignAllowed,
   TrialBusinessBlockedError,
 } from "@/lib/registered-business-store";
-import { isIyzicoConfigured } from "@/lib/iyzico-client";
+import {
+  buildPaymentCallbackUrl,
+  initializeIyzicoCheckout,
+  isIyzicoConfigured,
+} from "@/lib/iyzico-client";
 import { MIN_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import {
@@ -29,9 +25,13 @@ import {
 import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
-import { sumUserPaidTopUpsByUserId } from "@/lib/payment-store";
 import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
 import { buildCampaignPublicationUrls } from "@/lib/publication-urls";
+import type { BusinessSector } from "@/types/campaign";
+import {
+  markCampaignPendingPayment,
+  hasCampaignDirectPayment,
+} from "@/lib/campaign-payment-service";
 
 export const maxDuration = 300;
 
@@ -122,6 +122,127 @@ function buildInProgressResponse(
   };
 }
 
+function buildCampaignDraft(
+  normalized: ReturnType<typeof normalizeCampaignApiRequest>,
+  campaignId: string,
+  buyerEmail: string,
+): Record<string, unknown> {
+  return {
+    companyName: normalized.markaAdi,
+    sector: normalized.sektor,
+    sectorSlug: normalized.sectorSlug,
+    city: normalized.sehir,
+    budget: normalized.gunlukButce,
+    campaignDays: normalized.gunSayisi,
+    selectedQuestionIds: normalized.selectedQuestionIds,
+    businessDomain: normalized.businessDomain,
+    campaignId,
+    buyerEmail,
+  };
+}
+
+async function launchPaidCampaign(input: {
+  campaignId: string;
+  userId: string;
+  userEmail: string;
+  markaAdi: string;
+  sektor: string;
+  sehir: string;
+  gunlukButce: number;
+  gunSayisi: number;
+  sectorSlug: string;
+  selectedQuestionIds: string[];
+  toplamMaliyet: number;
+  agresiflikSeviyesi: string;
+  radarSikligi: string;
+  radarSikligiDakika: number;
+  businessDomain?: string | null;
+  request: Request;
+}): Promise<CampaignResponse> {
+  const executionState = await tryAcquireCampaignExecution(input.campaignId);
+
+  if (executionState === "complete") {
+    const existingBaitCount = await getCampaignBaitCount(input.campaignId);
+    return buildAlreadyProcessedResponse(
+      input.campaignId,
+      existingBaitCount,
+      input.markaAdi,
+    );
+  }
+
+  if (executionState === "in_progress") {
+    return buildInProgressResponse(input.campaignId, input.markaAdi);
+  }
+
+  const earlyPublication = buildCampaignPublicationUrls({
+    businessDomain: input.businessDomain,
+  });
+
+  void recordCampaignOperationalLog({
+    campaignId: input.campaignId,
+    userId: input.userId,
+    userEmail: input.userEmail,
+    businessName: input.markaAdi,
+    sector: input.sectorSlug || input.sektor,
+    city: input.sehir,
+    walletBalance: 0,
+    amountSpent: input.toplamMaliyet,
+    amountDeposited: input.toplamMaliyet,
+    businessDomain: input.businessDomain ?? null,
+    primaryAuthorityUrl: earlyPublication.primaryAuthorityUrl,
+  });
+
+  const startupLogs = buildStartupTerminalLogs(input.markaAdi, input.sehir);
+  await initCampaignProcessingState(input.campaignId, startupLogs);
+
+  if (input.sectorSlug && input.selectedQuestionIds.length > 0) {
+    try {
+      const growthQuestions = buildCoreQuestionPairs(
+        input.selectedQuestionIds,
+        input.sectorSlug as BusinessSector,
+        input.sehir,
+        input.markaAdi,
+        input.sektor,
+        input.businessDomain,
+      ).map((pair) => pair.question);
+
+      await ensureCampaignGrowthLoop(
+        input.campaignId,
+        input.userId,
+        growthQuestions,
+      );
+    } catch (growthLoopError) {
+      console.error(
+        "[CAMPAIGN_POST]: Growth loop erken oluşturma başarısız:",
+        growthLoopError,
+      );
+    }
+  }
+
+  dispatchCampaignBackgroundJob(
+    {
+      campaignId: input.campaignId,
+      userId: input.userId,
+      userEmail: input.userEmail,
+      markaAdi: input.markaAdi,
+      sektor: input.sektor,
+      sehir: input.sehir,
+      gunlukButce: input.gunlukButce,
+      gunSayisi: input.gunSayisi,
+      sectorSlug: input.sectorSlug,
+      selectedQuestionIds: input.selectedQuestionIds,
+      toplamMaliyet: input.toplamMaliyet,
+      agresiflikSeviyesi: input.agresiflikSeviyesi,
+      radarSikligi: input.radarSikligi,
+      radarSikligiDakika: input.radarSikligiDakika,
+      businessDomain: input.businessDomain,
+    },
+    input.request,
+  );
+
+  return buildStartedResponse(input.campaignId, input.markaAdi, startupLogs);
+}
+
 export async function POST(request: Request) {
   try {
     logServerEnvStatus("campaign-post");
@@ -202,7 +323,7 @@ export async function POST(request: Request) {
             success: false,
             error: "TRIAL_BUSINESS_BLOCKED",
             message:
-              "Bu işletme adı daha önce ücretsiz deneme hakkını kullanmıştır. Devam etmek için lütfen bakiye yükleyin.",
+              "Bu işletme adı daha önce deneme hakkını kullanmıştır. Devam etmek için yeni bir kampanya satın alın.",
           },
           { status: 403 },
         );
@@ -223,44 +344,6 @@ export async function POST(request: Request) {
           error: selectionValidation.error ?? "Geçersiz soru seçimi.",
         },
         { status: selectionValidation.statusCode ?? 400 },
-      );
-    }
-
-    const userWallet = await getOrCreateUserWallet(activeUserId);
-    const walletBalance = userWallet.balance;
-
-    if (walletBalance < toplamMaliyet) {
-      const amountDue = toplamMaliyet - walletBalance;
-
-      if (isIyzicoConfigured()) {
-        return NextResponse.json(
-          {
-            success: false,
-            requiresPayment: true,
-            amountDue,
-            totalCost: toplamMaliyet,
-            currentBalance: walletBalance,
-            error: `Yetersiz bakiye. Eksik tutar: ${amountDue.toLocaleString("tr-TR")} ₺`,
-            campaignDraft: {
-              companyName: trimmedMarka,
-              sector: trimmedSektor,
-              sectorSlug,
-              city: trimmedSehir,
-              budget: gunlukButce,
-              campaignDays: gunSayisi,
-              selectedQuestionIds,
-            },
-          },
-          { status: 402 },
-        );
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: `SİBER BAKİYE HATASI: Bu operasyonun toplam maliyeti ${toplamMaliyet.toLocaleString("tr-TR")} ₺. Mevcut bakiyeniz (${walletBalance.toLocaleString("tr-TR")} ₺) yetersizdir!`,
-        },
-        { status: 400 },
       );
     }
 
@@ -289,150 +372,71 @@ export async function POST(request: Request) {
       );
     }
 
-    const executionState = await tryAcquireCampaignExecution(reservedCampaignId);
+    const campaignPaid = await hasCampaignDirectPayment(reservedCampaignId);
 
-    if (executionState === "complete") {
-      const debited = await hasCampaignWalletDebit(reservedCampaignId);
-      if (!debited) {
-        try {
-          await finalizeExistingCampaignBilling({
-            campaignId: reservedCampaignId,
-            userId: activeUserId,
-            userEmail: sessionUser?.email ?? "—",
-            businessName: trimmedMarka,
-            sector: sectorSlug || trimmedSektor,
-            city: trimmedSehir,
-            amountSpent: toplamMaliyet,
-            description: `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
-          });
-        } catch (debitError) {
-          if (
-            debitError instanceof Error &&
-            debitError.message === "INSUFFICIENT_BALANCE"
-          ) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: "Yetersiz bakiye. Kampanya tamamlanmış ancak ödeme alınamadı.",
-              },
-              { status: 402 },
-            );
-          }
-          throw debitError;
-        }
-      }
-
-      const existingBaitCount = await getCampaignBaitCount(reservedCampaignId);
-      return NextResponse.json(
-        buildAlreadyProcessedResponse(
-          reservedCampaignId,
-          existingBaitCount,
-          trimmedMarka,
-        ),
-      );
-    }
-
-    if (executionState === "in_progress") {
-      return NextResponse.json(
-        buildInProgressResponse(reservedCampaignId, trimmedMarka),
-      );
-    }
-
-    let walletBalanceAfterDebit = userWallet.balance;
-    try {
-      const debitResult = await debitWalletForCampaign(
-        activeUserId,
+    if (campaignPaid) {
+      const started = await launchPaidCampaign({
+        campaignId: reservedCampaignId,
+        userId: activeUserId,
+        userEmail: sessionUser?.email ?? "—",
+        markaAdi: trimmedMarka,
+        sektor: trimmedSektor,
+        sehir: trimmedSehir,
+        gunlukButce,
+        gunSayisi,
+        sectorSlug,
+        selectedQuestionIds,
         toplamMaliyet,
-        reservedCampaignId,
-        `GEO Kampanya: ${trimmedMarka} (${trimmedSehir})`,
+        agresiflikSeviyesi,
+        radarSikligi,
+        radarSikligiDakika,
+        businessDomain,
+        request,
+      });
+
+      return NextResponse.json(started);
+    }
+
+    if (!isIyzicoConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Ödeme sistemi yapılandırılmamış. Kampanya başlatılamıyor.",
+        },
+        { status: 503 },
       );
-      walletBalanceAfterDebit = debitResult.balance;
-    } catch (debitError) {
-      if (
-        debitError instanceof Error &&
-        debitError.message === "INSUFFICIENT_BALANCE"
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Yetersiz bakiye. Kampanya başlatılamadı.",
-          },
-          { status: 402 },
-        );
-      }
-      throw debitError;
     }
 
-    const amountDeposited = await sumUserPaidTopUpsByUserId(activeUserId);
+    await markCampaignPendingPayment(reservedCampaignId);
 
-    const earlyPublication = buildCampaignPublicationUrls({
-      businessDomain,
-    });
-
-    void recordCampaignOperationalLog({
-      campaignId: reservedCampaignId,
-      userId: activeUserId,
-      userEmail: sessionUser?.email ?? "—",
-      businessName: trimmedMarka,
-      sector: sectorSlug || trimmedSektor,
-      city: trimmedSehir,
-      walletBalance: walletBalanceAfterDebit,
-      amountSpent: toplamMaliyet,
-      amountDeposited,
-      businessDomain: businessDomain ?? null,
-      primaryAuthorityUrl: earlyPublication.primaryAuthorityUrl,
-    });
-
-    const startupLogs = buildStartupTerminalLogs(trimmedMarka, trimmedSehir);
-    await initCampaignProcessingState(reservedCampaignId, startupLogs);
-
-    if (sectorSlug && selectedQuestionIds.length > 0) {
-      try {
-        const growthQuestions = buildCoreQuestionPairs(
-          selectedQuestionIds,
-          sectorSlug,
-          trimmedSehir,
-          trimmedMarka,
-          trimmedSektor,
-          businessDomain,
-        ).map((pair) => pair.question);
-
-        await ensureCampaignGrowthLoop(
-          reservedCampaignId,
-          activeUserId,
-          growthQuestions,
-        );
-      } catch (growthLoopError) {
-        console.error(
-          "[CAMPAIGN_POST]: Growth loop erken oluşturma başarısız:",
-          growthLoopError,
-        );
-      }
-    }
-
-    dispatchCampaignBackgroundJob(
-      {
-      campaignId: reservedCampaignId,
-      userId: activeUserId,
-      userEmail: sessionUser?.email ?? "—",
-      markaAdi: trimmedMarka,
-      sektor: trimmedSektor,
-      sehir: trimmedSehir,
-      gunlukButce,
-      gunSayisi,
-      sectorSlug,
-      selectedQuestionIds,
-      toplamMaliyet,
-      agresiflikSeviyesi,
-      radarSikligi,
-      radarSikligiDakika,
-      businessDomain,
-      },
-      request,
+    const campaignDraft = buildCampaignDraft(
+      normalized,
+      reservedCampaignId,
+      sessionUser?.email ?? "user@nexisai.com",
     );
 
+    const checkout = await initializeIyzicoCheckout({
+      userId: activeUserId,
+      amount: toplamMaliyet,
+      buyerEmail: sessionUser?.email ?? "user@nexisai.com",
+      buyerName: trimmedMarka,
+      campaignId: reservedCampaignId,
+      campaignDraft,
+      callbackUrl: buildPaymentCallbackUrl(),
+    });
+
     return NextResponse.json(
-      buildStartedResponse(reservedCampaignId, trimmedMarka, startupLogs),
+      {
+        success: false,
+        requiresPayment: true,
+        totalCost: toplamMaliyet,
+        campaignId: reservedCampaignId,
+        paymentPageUrl: checkout.paymentPageUrl,
+        campaignDraft,
+        error: `Kampanya paketi: ${toplamMaliyet.toLocaleString("tr-TR")} ₺ — ödeme gerekli.`,
+      },
+      { status: 402 },
     );
   } catch (error) {
     return handleApiRouteError(error, "İşlem sırasında bir hata oluştu.");

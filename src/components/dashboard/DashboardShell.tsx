@@ -10,6 +10,7 @@ interface DashboardShellProps {
   onRequireAuth?: (data?: CampaignFormData) => void;
   walletRefreshToken?: number;
   onWalletRefresh?: () => void;
+  startedCampaignId?: string | null;
 }
 
 export default function DashboardShell({
@@ -18,6 +19,7 @@ export default function DashboardShell({
   onRequireAuth,
   walletRefreshToken: walletRefreshTokenProp,
   onWalletRefresh: onWalletRefreshProp,
+  startedCampaignId = null,
 }: DashboardShellProps) {
   const [internalWalletRefreshToken, setInternalWalletRefreshToken] = useState(0);
   const walletRefreshToken =
@@ -39,6 +41,7 @@ export default function DashboardShell({
       pendingCampaign={pendingCampaign}
       onPendingCampaignHandled={onPendingCampaignHandled}
       onRequireAuth={onRequireAuth}
+      startedCampaignId={startedCampaignId}
     />
   );
 }

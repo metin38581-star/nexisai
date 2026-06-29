@@ -62,6 +62,7 @@ model CampaignGrowthLoop {
 model IyzicoCheckout {
   id             String   @id @default(uuid())
   userId         String   @map("userId")
+  campaignId     String?  @map("campaignId")
   token          String?  @unique
   conversationId String?  @unique @map("conversation_id")
   amount         Float
@@ -71,6 +72,7 @@ model IyzicoCheckout {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now()) @updatedAt
 
+  @@index([campaignId])
   @@map("IyzicoCheckout")
 }
 
@@ -83,6 +85,11 @@ model Campaign {
   skor          Int
   gunlukButce   Float     @default(250)
   gunSayisi     Int       @default(7)
+  /// pending_payment | active | completed | cancelled
+  status        String    @default("pending_payment")
+  totalPaid     Float?    @map("total_paid")
+  startDate     DateTime? @map("start_date")
+  endDate       DateTime? @map("end_date")
   agresiflik         String    @default("Orta")
   makaleSayisi       Int       @default(2)
   radarSikligi       String    @default("24 Saat")

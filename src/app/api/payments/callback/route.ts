@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { completeIyzicoCheckout, getCheckoutById } from "@/lib/iyzico-client";
-import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
+import {
+  completeIyzicoCheckout,
+  getCheckoutById,
+} from "@/lib/iyzico-client";
+import { activateCampaignAfterDirectPayment } from "@/lib/campaign-payment-service";
 import { resolveSitePath } from "@/lib/site-origin";
 
 function redirectToDashboard(status: "success" | "failed", checkoutId?: string) {
@@ -28,30 +31,36 @@ export async function POST(request: Request) {
       return redirectToDashboard("failed");
     }
 
+    if (completed.isCampaignPayment && completed.campaignId) {
+      const userEmail =
+        typeof completed.campaignDraft?.buyerEmail === "string"
+          ? completed.campaignDraft.buyerEmail
+          : "user@nexisai.com";
+
+      await activateCampaignAfterDirectPayment({
+        campaignId: completed.campaignId,
+        userId: completed.userId,
+        userEmail,
+        amount: completed.amount,
+        checkoutId: completed.checkoutId,
+        campaignDraft: completed.campaignDraft,
+        request,
+      });
+
+      const resumeUrl = new URL(resolveSitePath("/dashboard"));
+      resumeUrl.searchParams.set("payment", "success");
+      resumeUrl.searchParams.set("campaignStarted", "1");
+      resumeUrl.searchParams.set("campaignId", completed.campaignId);
+      return NextResponse.redirect(resumeUrl.toString(), 302);
+    }
+
     const checkout = await getCheckoutById(completed.checkoutId);
     const draft = checkout?.campaignDraft as Record<string, unknown> | null;
 
     if (draft && typeof draft === "object") {
-      const normalized = normalizeCampaignApiRequest(draft as never);
       const resumeUrl = new URL(resolveSitePath("/dashboard"));
       resumeUrl.searchParams.set("payment", "success");
-      resumeUrl.searchParams.set("resumeCampaign", "1");
-      resumeUrl.searchParams.set("companyName", normalized.markaAdi);
-      resumeUrl.searchParams.set("sector", normalized.sektor);
-      resumeUrl.searchParams.set("sectorSlug", normalized.sectorSlug);
-      resumeUrl.searchParams.set("city", normalized.sehir);
-      resumeUrl.searchParams.set("budget", String(normalized.gunlukButce));
-      resumeUrl.searchParams.set("campaignDays", String(normalized.gunSayisi));
-      if (normalized.businessDomain) {
-        resumeUrl.searchParams.set("businessDomain", normalized.businessDomain);
-      }
-      if (normalized.selectedQuestionIds.length > 0) {
-        resumeUrl.searchParams.set(
-          "selectedQuestionIds",
-          normalized.selectedQuestionIds.join(","),
-        );
-      }
-
+      resumeUrl.searchParams.set("checkoutId", completed.checkoutId);
       return NextResponse.redirect(resumeUrl.toString(), 302);
     }
 

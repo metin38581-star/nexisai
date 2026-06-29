@@ -8,6 +8,7 @@ import {
   listRadarCampaigns,
   updateRadarCampaignState,
 } from "@/lib/campaign-store";
+import { expireCompletedCampaigns } from "@/lib/campaign-payment-service";
 import { saveCampaignRadarLog } from "@/lib/radar-log-store";
 
 const GOOGLE_GENAI_API_VERSION = "v1";
@@ -68,6 +69,8 @@ function formatLogTimestamp(date: Date): string {
 export async function runBulkRadarScan(
   userId?: string,
 ): Promise<RadarScanReport> {
+  await expireCompletedCampaigns();
+
   const apiKey = resolveApiKey();
   const campaigns = await listRadarCampaigns(userId);
 

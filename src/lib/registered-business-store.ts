@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { normalizeBusinessName } from "@/lib/business-normalize";
-import { userHasPaidTopUp } from "@/lib/user-wallet-service";
+import { userHasCampaignPayment } from "@/lib/campaign-payment-service";
 
 export class TrialBusinessBlockedError extends Error {
   constructor() {
@@ -47,8 +47,8 @@ export async function assertTrialCampaignAllowed(
   businessName: string,
   userId: string,
 ): Promise<void> {
-  const paidTopUp = await userHasPaidTopUp(userId);
-  if (paidTopUp) {
+  const paidCampaign = await userHasCampaignPayment(userId);
+  if (paidCampaign) {
     return;
   }
 
@@ -89,9 +89,9 @@ export async function isTrialBlockedForBusiness(
     return false;
   }
 
-  const paidTopUp = await userHasPaidTopUp(userId);
+  const paidCampaign = await userHasCampaignPayment(userId);
 
-  if (paidTopUp) {
+  if (paidCampaign) {
     return false;
   }
 

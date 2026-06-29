@@ -5,6 +5,10 @@ import { prisma } from "@/lib/db";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hasDatabaseUrl, hasSupabaseAdminEnv } from "@/lib/server-env";
 import { buildHubArticleUrl } from "@/lib/hub-url";
+import {
+  CAMPAIGN_STATUS,
+  isCampaignWithinActiveWindow,
+} from "@/lib/campaign-lifecycle";
 
 type SupabaseBaitRow = {
   id: string;
@@ -127,6 +131,8 @@ async function listCampaignsByUserViaPrisma(
       ...campaign,
       createdAt: campaign.createdAt.toISOString(),
       lastCheckedAt: campaign.lastCheckedAt?.toISOString() ?? null,
+      startDate: campaign.startDate?.toISOString() ?? null,
+      endDate: campaign.endDate?.toISOString() ?? null,
       liveUrl: campaign.liveUrl,
       externalLiveUrl: campaign.externalLiveUrl,
       wordpressUrl: campaign.wordpressUrl,
@@ -199,6 +205,7 @@ function buildCampaignShellRecord(input: CampaignShellInput, campaignId: string)
     makaleSayisi: 0,
     radarSikligi: input.radarSikligi,
     radarSikligiDakika: input.radarSikligiDakika,
+    status: CAMPAIGN_STATUS.PENDING_PAYMENT,
   };
 }
 
@@ -1002,6 +1009,9 @@ export interface RadarCampaignRecord {
   markaAdi: string;
   sehir: string;
   sektor: string;
+  status: string;
+  startDate: Date | null;
+  endDate: Date | null;
   radarSikligiDakika: number | null;
   lastCheckedAt: Date | null;
   createdAt: Date;
@@ -1009,25 +1019,63 @@ export interface RadarCampaignRecord {
   llmFeedback: string | null;
 }
 
-async function listRadarCampaignsViaPrisma(
-  userId?: string,
-): Promise<RadarCampaignRecord[]> {
-  const campaigns = await prisma.campaign.findMany({
-    where: userId ? { userId } : undefined,
-    orderBy: { createdAt: "desc" },
-  });
-
-  return campaigns.map((campaign) => ({
+function mapRadarCampaignRecord(campaign: {
+  id: string;
+  markaAdi: string;
+  sehir: string;
+  sektor: string;
+  status: string;
+  startDate: Date | null;
+  endDate: Date | null;
+  radarSikligiDakika: number | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+  isOptimized: boolean;
+  llmFeedback: string | null;
+}): RadarCampaignRecord {
+  return {
     id: campaign.id,
     markaAdi: campaign.markaAdi,
     sehir: campaign.sehir,
     sektor: campaign.sektor,
+    status: campaign.status,
+    startDate: campaign.startDate,
+    endDate: campaign.endDate,
     radarSikligiDakika: campaign.radarSikligiDakika,
     lastCheckedAt: campaign.lastCheckedAt,
     createdAt: campaign.createdAt,
     isOptimized: campaign.isOptimized,
     llmFeedback: campaign.llmFeedback,
-  }));
+  };
+}
+
+function filterActiveRadarCampaigns(
+  campaigns: RadarCampaignRecord[],
+  now = new Date(),
+): RadarCampaignRecord[] {
+  return campaigns.filter((campaign) =>
+    isCampaignWithinActiveWindow(campaign, now),
+  );
+}
+
+async function listRadarCampaignsViaPrisma(
+  userId?: string,
+): Promise<RadarCampaignRecord[]> {
+  const now = new Date();
+  const campaigns = await prisma.campaign.findMany({
+    where: {
+      ...(userId ? { userId } : {}),
+      status: CAMPAIGN_STATUS.ACTIVE,
+      startDate: { lte: now },
+      OR: [{ endDate: null }, { endDate: { gte: now } }],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return filterActiveRadarCampaigns(
+    campaigns.map((campaign) => mapRadarCampaignRecord(campaign)),
+    now,
+  );
 }
 
 async function listRadarCampaignsViaSupabase(
@@ -1037,8 +1085,9 @@ async function listRadarCampaignsViaSupabase(
   let query = supabase
     .from("Campaign")
     .select(
-      "id, markaAdi, sehir, sektor, radarSikligiDakika, lastCheckedAt, createdAt, isOptimized, llmFeedback",
+      "id, markaAdi, sehir, sektor, status, start_date, end_date, radarSikligiDakika, lastCheckedAt, createdAt, isOptimized, llmFeedback",
     )
+    .eq("status", CAMPAIGN_STATUS.ACTIVE)
     .order("createdAt", { ascending: false });
 
   if (userId) {
@@ -1051,19 +1100,30 @@ async function listRadarCampaignsViaSupabase(
     throw error;
   }
 
-  return (data ?? []).map((campaign) => ({
-    id: campaign.id,
-    markaAdi: campaign.markaAdi,
-    sehir: campaign.sehir,
-    sektor: campaign.sektor,
-    radarSikligiDakika: campaign.radarSikligiDakika,
-    lastCheckedAt: campaign.lastCheckedAt
-      ? new Date(campaign.lastCheckedAt)
-      : null,
-    createdAt: new Date(campaign.createdAt),
-    isOptimized: campaign.isOptimized,
-    llmFeedback: campaign.llmFeedback,
-  }));
+  return filterActiveRadarCampaigns(
+    (data ?? []).map((campaign) =>
+      mapRadarCampaignRecord({
+        id: campaign.id as string,
+        markaAdi: campaign.markaAdi as string,
+        sehir: campaign.sehir as string,
+        sektor: campaign.sektor as string,
+        status: (campaign.status as string) ?? CAMPAIGN_STATUS.ACTIVE,
+        startDate: campaign.start_date
+          ? new Date(campaign.start_date as string)
+          : null,
+        endDate: campaign.end_date
+          ? new Date(campaign.end_date as string)
+          : null,
+        radarSikligiDakika: campaign.radarSikligiDakika as number | null,
+        lastCheckedAt: campaign.lastCheckedAt
+          ? new Date(campaign.lastCheckedAt as string)
+          : null,
+        createdAt: new Date(campaign.createdAt as string),
+        isOptimized: campaign.isOptimized as boolean,
+        llmFeedback: campaign.llmFeedback as string | null,
+      }),
+    ),
+  );
 }
 
 export async function listRadarCampaigns(

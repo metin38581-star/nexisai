@@ -80,6 +80,7 @@ export interface CampaignResponse {
   status?: "started" | "processing" | "complete" | "failed" | "interrupted";
   campaignId?: string;
   requiresPayment?: boolean;
+  paymentPageUrl?: string;
   amountDue?: number;
   totalCost?: number;
   currentBalance?: number;
@@ -145,6 +146,10 @@ export interface StoredCampaign {
   skor: number;
   gunlukButce: number;
   gunSayisi: number;
+  status?: string;
+  totalPaid?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
   agresiflik: string;
   makaleSayisi: number;
   radarSikligi: string;

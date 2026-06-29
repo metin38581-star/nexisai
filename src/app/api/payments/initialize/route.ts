@@ -7,10 +7,10 @@ import {
   initializeIyzicoCheckout,
   isIyzicoConfigured,
 } from "@/lib/iyzico-client";
-import { getUserWalletBalance } from "@/lib/user-wallet-service";
 
 interface PaymentInitializeRequest {
   amount?: number;
+  campaignId?: string;
   campaignDraft?: Record<string, unknown>;
   buyerEmail?: string;
   buyerName?: string;
@@ -46,7 +46,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const currentBalance = await getUserWalletBalance(userId);
     const buyerEmail = body.buyerEmail?.trim() || "user@nexisai.com";
     const buyerName = body.buyerName?.trim() || "NexisAI Kullanıcı";
 
@@ -55,6 +54,7 @@ export async function POST(request: Request) {
       amount,
       buyerEmail,
       buyerName,
+      campaignId: body.campaignId,
       campaignDraft: body.campaignDraft,
       callbackUrl: buildPaymentCallbackUrl(),
     });
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       checkoutId: checkout.checkoutId,
       token: checkout.token,
       paymentPageUrl: checkout.paymentPageUrl,
-      currentBalance,
+      campaignId: body.campaignId ?? null,
     });
   } catch (error) {
     return handleApiRouteError(error, "Ödeme başlatılamadı.");
