@@ -32,6 +32,20 @@ export function clampCampaignDays(value: number): number {
   return value < MIN_CAMPAIGN_DAYS ? MIN_CAMPAIGN_DAYS : value;
 }
 
+/** Günlük bütçe × gün sayısı — iyzico paket tutarı. */
+export function calculateCampaignPackageTotal(
+  dailyBudget: number,
+  campaignDays: number,
+): number {
+  const budget = clampCampaignDailyBudget(dailyBudget);
+  const days = clampCampaignDays(campaignDays);
+  return budget * days;
+}
+
+export function formatCampaignCurrency(amount: number): string {
+  return `${amount.toLocaleString("tr-TR")} ₺`;
+}
+
 export function isCampaignFormReadyForScan(
   form: Pick<
     CampaignFormData,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Cpu, Loader2, Rocket, Sparkles } from "lucide-react";
+import { CreditCard, Cpu, Loader2, Sparkles } from "lucide-react";
 
 import type { CampaignFormData, BusinessSector } from "@/types/campaign";
 import { SECTOR_OPTIONS, TURKEY_CITY_OPTIONS } from "@/lib/constants";
@@ -16,6 +16,8 @@ import {
   DEFAULT_CAMPAIGN_DAYS,
   clampCampaignDailyBudget,
   clampCampaignDays,
+  calculateCampaignPackageTotal,
+  formatCampaignCurrency,
 } from "@/lib/campaign-form-utils";
 import {
   resolveCampaignLaunchButtonLabel,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/intent-soft-cap";
 import { resolveContentVolumePlan } from "@/lib/content-volume";
 import CyberBudgetField from "@/components/campaign/CyberBudgetField";
+import CampaignPaymentSummaryCard from "@/components/campaign/CampaignPaymentSummaryCard";
 import CyberScanField from "@/components/campaign/CyberScanField";
 import CoreQuestionsPanel from "@/components/campaign/CoreQuestionsPanel";
 import OrbitRingIcon from "@/components/campaign/OrbitRingIcon";
@@ -123,15 +126,39 @@ export default function CampaignCreationStudio({
     [budgetPreview],
   );
 
-  const submitButtonLabel = useMemo(
-    () =>
-      resolveCampaignLaunchButtonLabel(
+  const packageTotal = useMemo(
+    () => calculateCampaignPackageTotal(budgetPreview, daysPreview),
+    [budgetPreview, daysPreview],
+  );
+
+  const isFormReadyToSubmit =
+    form.businessName.trim().length > 0 &&
+    form.sector.length > 0 &&
+    form.city.length > 0 &&
+    form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
+    form.dailyBudget <= MAX_CAMPAIGN_DAILY_BUDGET &&
+    form.campaignDays >= MIN_CAMPAIGN_DAYS &&
+    isCoreQuestionSectorSupported(form.sector) &&
+    form.selectedQuestionIds.length > 0 &&
+    form.selectedQuestionIds.length <= maxSelection;
+
+  const submitButtonLabel = useMemo(() => {
+    if (!isFormReadyToSubmit) {
+      return resolveCampaignLaunchButtonLabel(
         budgetPreview,
         form.selectedQuestionIds.length,
         maxSelection,
-      ),
-    [budgetPreview, form.selectedQuestionIds.length, maxSelection],
-  );
+      );
+    }
+
+    return `Ödemeye Geç — ${formatCampaignCurrency(packageTotal)}`;
+  }, [
+    budgetPreview,
+    form.selectedQuestionIds.length,
+    isFormReadyToSubmit,
+    maxSelection,
+    packageTotal,
+  ]);
 
   const updateField = <K extends keyof CampaignFormData>(
     key: K,
@@ -171,17 +198,6 @@ export default function CampaignCreationStudio({
         : { ...prev, selectedQuestionIds: defaults };
     });
   }, [form.sector, form.dailyBudget]);
-
-  const isFormReadyToSubmit =
-    form.businessName.trim().length > 0 &&
-    form.sector.length > 0 &&
-    form.city.length > 0 &&
-    form.dailyBudget >= MIN_CAMPAIGN_DAILY_BUDGET &&
-    form.dailyBudget <= MAX_CAMPAIGN_DAILY_BUDGET &&
-    form.campaignDays >= MIN_CAMPAIGN_DAYS &&
-    isCoreQuestionSectorSupported(form.sector) &&
-    form.selectedQuestionIds.length > 0 &&
-    form.selectedQuestionIds.length <= maxSelection;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -344,23 +360,33 @@ export default function CampaignCreationStudio({
           />
         </div>
 
-        <CoreQuestionsPanel
-          sector={form.sector}
-          city={form.city}
-          dailyBudget={budgetPreview}
-          selectedIds={form.selectedQuestionIds}
-          onSelectionChange={handleSelectionChange}
-        />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:items-start">
+          <CampaignPaymentSummaryCard
+            className="order-1 xl:order-2 xl:sticky xl:top-6"
+            dailyBudget={budgetPreview}
+            campaignDays={daysPreview}
+          />
 
-        <CampaignBudgetInfoCard
-          tier={budgetTier}
-          tierLabel={softCapResult.tierLabel}
-          targetCount={softCapResult.maxQuestions}
-          selectedCount={form.selectedQuestionIds.length}
-          analysisDescription={softCapResult.analysisDescription}
-          contentDescription={contentVolumePlan.description}
-          previewDays={daysPreview}
-        />
+          <div className="order-2 min-w-0 space-y-6 xl:order-1">
+            <CoreQuestionsPanel
+              sector={form.sector}
+              city={form.city}
+              dailyBudget={budgetPreview}
+              selectedIds={form.selectedQuestionIds}
+              onSelectionChange={handleSelectionChange}
+            />
+
+            <CampaignBudgetInfoCard
+              tier={budgetTier}
+              tierLabel={softCapResult.tierLabel}
+              targetCount={softCapResult.maxQuestions}
+              selectedCount={form.selectedQuestionIds.length}
+              analysisDescription={softCapResult.analysisDescription}
+              contentDescription={contentVolumePlan.description}
+              previewDays={daysPreview}
+            />
+          </div>
+        </div>
 
         {formError ? (
           <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -380,11 +406,11 @@ export default function CampaignCreationStudio({
             {isSubmitLocked ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Kampanya Başlatılıyor...
+                Ödeme Sayfasına Yönlendiriliyor...
               </>
             ) : (
               <>
-                <Rocket className="h-5 w-5" />
+                <CreditCard className="h-5 w-5" />
                 {submitButtonLabel}
               </>
             )}

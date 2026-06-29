@@ -291,3 +291,18 @@
 .gold-question-unlock {
   animation: gold-question-unlock-glow 0.85s ease-out forwards;
 }
+
+.campaign-payment-summary {
+  animation: campaign-payment-summary-in 0.35s ease-out;
+}
+
+@keyframes campaign-payment-summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
