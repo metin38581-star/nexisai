@@ -163,3 +163,140 @@ export interface StoredCampaign {
   createdAt: string;
   baits: StoredBait[];
 }
+
+/** Soru başına operasyonel maliyet (TL) — bütçe anayasası taban değeri. */
+export const AUTOPILOT_OPERATION_COST_PER_QUESTION_TL = 500;
+
+/** Bir üst soru hakkı için NexisAI tolerans jesti üst sınırı (TL). */
+export const AUTOPILOT_TOLERANCE_GRANT_THRESHOLD_TL = 100;
+
+/** Sektör başına gizli kemik soru havuzu kapasitesi. */
+export const AUTOPILOT_BONE_QUESTION_POOL_SIZE = 50;
+
+export type AutopilotInfrastructureChannel =
+  | "nexis_qa"
+  | "wordpress_pbn"
+  | "devto"
+  | "forum_external";
+
+export type AutopilotDistributionPhase =
+  | "immediate_index"
+  | "sneaky_forum_cooldown";
+
+export interface AutopilotBudgetInput {
+  dailyBudget: number;
+  totalDays: number;
+}
+
+export interface AutopilotBudgetResult {
+  dailyBudget: number;
+  totalDays: number;
+  totalBudget: number;
+  operationCostPerQuestion: number;
+  basePublishCount: number;
+  publishCount: number;
+  toleranceApplied: boolean;
+  toleranceGrantAmount: number;
+  nextTierBudget: number;
+  budgetShortfallToNextTier: number;
+}
+
+export interface AutopilotRecommendationMetrics {
+  /** Kampanya başlangıcındaki yapay zeka öneri oranı (%) */
+  baselineRecommendationRate: number;
+  /** Kampanya sonunda hedeflenen öneri oranı (%) */
+  targetRecommendationRate: number;
+  /** Müşteriye gösterilecek kurumsal özet metin */
+  corporateSummary: string;
+}
+
+export interface AutopilotSelectedQuestion {
+  questionId: string;
+  sectorSlug: BusinessSector;
+  renderedQuestion: string;
+  selectionIndex: number;
+}
+
+export interface AutopilotDailyPublishPlan {
+  campaignDayIndex: number;
+  calendarDate: string;
+  questionCount: number;
+  questionIds: string[];
+}
+
+export interface AutopilotInfrastructurePayload {
+  payloadId: string;
+  questionId: string;
+  channel: AutopilotInfrastructureChannel;
+  phase: AutopilotDistributionPhase;
+  scheduledAt: string;
+  /** Dahili dağıtım motoru için — müşteriye asla gösterilmez */
+  internalDispatch: {
+    campaignId: string;
+    brandName: string;
+    city: string;
+    sectorSlug: BusinessSector;
+    contentTitle: string;
+    contentBody: string;
+  };
+}
+
+export interface AutopilotForumScheduleSlot {
+  slotId: string;
+  campaignDayIndex: number;
+  scheduledAt: string;
+  questionId: string;
+  /** Harici forum anti-spam rotasyonu — dahili */
+  accountProxyId: string;
+  cooldownMinutesSincePrevious: number;
+  queuePayload: {
+    type: "forum_sneaky_publish";
+    campaignId: string;
+    questionId: string;
+    proxyLane: string;
+    jitterAppliedMinutes: number;
+  };
+}
+
+export interface AutopilotSchedulerLogEntry {
+  step: string;
+  level: "info" | "warn" | "debug";
+  message: string;
+  at: string;
+  meta?: Record<string, string | number | boolean>;
+}
+
+export interface AutopilotCampaignPlanInput {
+  campaignId: string;
+  brandName: string;
+  city: string;
+  sectorSlug: BusinessSector;
+  dailyBudget: number;
+  totalDays: number;
+  startDate?: Date;
+  businessDomain?: string | null;
+}
+
+/** Dahili tam plan — link/log/payload detayları yalnızca sunucu tarafında kalır. */
+export interface AutopilotCampaignPlanInternal {
+  campaignId: string;
+  budget: AutopilotBudgetResult;
+  metrics: AutopilotRecommendationMetrics;
+  selectedQuestions: AutopilotSelectedQuestion[];
+  dailyPlans: AutopilotDailyPublishPlan[];
+  infrastructurePayloads: AutopilotInfrastructurePayload[];
+  forumSchedule: AutopilotForumScheduleSlot[];
+  logs: AutopilotSchedulerLogEntry[];
+}
+
+/** Müşteri / dashboard API yanıtı — yalnızca kurumsal skor metrikleri. */
+export interface AutopilotCampaignPlanClientView {
+  success: true;
+  campaignId: string;
+  metrics: AutopilotRecommendationMetrics;
+  operationalSummary: {
+    campaignDurationDays: number;
+    totalInvestmentTL: number;
+    optimizedQuestionVolume: number;
+  };
+}
