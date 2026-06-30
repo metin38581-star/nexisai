@@ -1,6 +1,10 @@
 import {
   AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
+  AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING,
+  AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR,
   AUTOPILOT_MAX_VISIBILITY_DELTA,
+  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE,
+  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX,
   AUTOPILOT_OPERATION_COST_PER_QUESTION_TL,
   AUTOPILOT_TOLERANCE_GRANT_THRESHOLD_TL,
   AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX,
@@ -10,6 +14,10 @@ import {
   type AutopilotRecommendationMetrics,
   type AutopilotVisibilityForecastInternal,
 } from "@/types/campaign";
+import {
+  MAX_CAMPAIGN_DAILY_BUDGET,
+  MAX_CAMPAIGN_DAYS,
+} from "@/lib/campaign-form-utils";
 
 export {
   AUTOPILOT_OPERATION_COST_PER_QUESTION_TL,
@@ -17,6 +25,8 @@ export {
   AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN,
   AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX,
   AUTOPILOT_MAX_VISIBILITY_DELTA,
+  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE,
+  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX,
   AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
 };
 
@@ -35,6 +45,15 @@ export interface VisibilityForecastInput {
 export interface VisibilityForecastResult {
   metrics: AutopilotRecommendationMetrics;
   internal: AutopilotVisibilityForecastInternal;
+}
+
+/** Tepe paket referansı: max günlük bütçe × max gün / soru maliyeti (+ jest toleransı). */
+export function resolveReferenceMaxPublishCount(
+  operationCostPerQuestion = AUTOPILOT_OPERATION_COST_PER_QUESTION_TL,
+): number {
+  const maxTotalBudget = MAX_CAMPAIGN_DAILY_BUDGET * MAX_CAMPAIGN_DAYS;
+  const baseCount = Math.floor(maxTotalBudget / operationCostPerQuestion);
+  return baseCount + 1;
 }
 
 function normalizePositiveInteger(value: number, fallback: number): number {
@@ -72,33 +91,83 @@ export function simulateCurrentRecommendationRate(campaignSeed: string): number 
   return 3 + (hash % 6);
 }
 
+function resolveMinimumTargetRate(campaignSeed: string): number {
+  const span =
+    AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX -
+    AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE;
+  const hash = hashSeed(`${campaignSeed}:min-target`);
+  return AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE + (hash % (span + 1));
+}
+
+function resolveMaximumTargetRate(campaignSeed: string): number {
+  const span =
+    AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING -
+    AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR;
+  const hash = hashSeed(`${campaignSeed}:max-target`);
+  return AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR + (hash % (span + 1));
+}
+
 /**
- * Her içerik/soru +%1.0 ile +%1.2 arası katkı sağlar (deterministik, seed'li).
- * Toplam artış 85 puan ile sınırlıdır.
+ * publishCount → hedef önerilme oranı eğrisi.
+ * - En düşük bütçede bile %12–%15 bandı garanti edilir (başlangıçtan bağımsız).
+ * - Tepe pakette %96–%98 bandına logaritmik tırmanış.
+ */
+export function calculateTargetRecommendationRateFromPublishCount(input: {
+  publishCount: number;
+  startRate: number;
+  campaignSeed?: string;
+  referenceMaxPublishCount?: number;
+}): number {
+  const campaignSeed = input.campaignSeed ?? "nexisai-default";
+  const startRate = roundRate(input.startRate);
+  const safeCount = Math.max(0, Math.floor(input.publishCount));
+  const referenceMax =
+    input.referenceMaxPublishCount ?? resolveReferenceMaxPublishCount();
+
+  const minTarget = resolveMinimumTargetRate(campaignSeed);
+  const maxTarget = resolveMaximumTargetRate(campaignSeed);
+
+  const normalizedProgress =
+    referenceMax > 0 ? Math.min(1, safeCount / referenceMax) : 0;
+
+  // Erken bütçede değer hissi, tepeye doğru yumuşak doygunluk (log eğrisi).
+  const curveProgress =
+    normalizedProgress <= 0
+      ? 0
+      : Math.log1p(normalizedProgress * 9) / Math.log1p(9);
+
+  const tabanArtis = Math.max(0, minTarget - startRate);
+  const curveLift = curveProgress * Math.max(0, maxTarget - minTarget);
+
+  let targetRate = roundRate(startRate + tabanArtis + curveLift);
+
+  targetRate = Math.max(targetRate, minTarget, roundRate(startRate + 1));
+  targetRate = Math.min(
+    targetRate,
+    maxTarget,
+    AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
+  );
+
+  return roundRate(targetRate);
+}
+
+/**
+ * Başlangıç ile hedef arasındaki görünürlük artış puanı (dahili metrik).
  */
 export function calculateVisibilityDeltaFromPublishCount(
   publishCount: number,
   campaignSeed = "nexisai-default",
+  startRate?: number,
 ): number {
-  const safeCount = Math.max(0, Math.floor(publishCount));
-  if (safeCount === 0) {
-    return 0;
-  }
+  const baseline =
+    startRate ?? simulateCurrentRecommendationRate(campaignSeed);
+  const targetRate = calculateTargetRecommendationRateFromPublishCount({
+    publishCount,
+    startRate: baseline,
+    campaignSeed,
+  });
 
-  const span =
-    AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX -
-    AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN;
-  let total = 0;
-
-  for (let index = 0; index < safeCount; index += 1) {
-    const hash = hashSeed(`${campaignSeed}:visibility:${index}`);
-    const gain =
-      AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN +
-      (hash % Math.round(span * 100 + 1)) / 100;
-    total += gain;
-  }
-
-  return Math.min(AUTOPILOT_MAX_VISIBILITY_DELTA, roundRate(total));
+  return roundRate(Math.max(0, targetRate - baseline));
 }
 
 /**
@@ -201,20 +270,19 @@ export function calculateAutopilotVisibilityForecast(
       simulateCurrentRecommendationRate(campaignSeed),
   );
 
-  const visibilityDelta = calculateVisibilityDeltaFromPublishCount(
-    publishCount,
-    campaignSeed,
+  const projectedRecommendationRate =
+    calculateTargetRecommendationRateFromPublishCount({
+      publishCount,
+      startRate: currentRecommendationRate,
+      campaignSeed,
+    });
+
+  const visibilityDelta = roundRate(
+    Math.max(0, projectedRecommendationRate - currentRecommendationRate),
   );
 
   const averageGainPerQuestion =
-    publishCount > 0 ? roundRate(visibilityDelta / publishCount) : 0;
-
-  const projectedRecommendationRate = roundRate(
-    Math.min(
-      AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
-      currentRecommendationRate + visibilityDelta,
-    ),
-  );
+    publishCount > 0 ? roundRate(visibilityDelta / publishCount) : visibilityDelta;
 
   const baselineRecommendationRate = currentRecommendationRate;
   const targetRecommendationRate = projectedRecommendationRate;

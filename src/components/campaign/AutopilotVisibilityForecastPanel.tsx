@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 import {
   calculateAutopilotBudgetWithForecast,
@@ -9,6 +9,7 @@ import {
 } from "@/utils/budget-engine";
 import { isCoreQuestionSectorSupported } from "@/lib/core-questions";
 import type { BusinessSector } from "@/types/campaign";
+import "@/components/campaign/autopilot-visibility-hero.css";
 
 interface AutopilotVisibilityForecastPanelProps {
   dailyBudget: number;
@@ -16,6 +17,51 @@ interface AutopilotVisibilityForecastPanelProps {
   sector: BusinessSector | "";
   city: string;
   businessName: string;
+}
+
+const COUNTER_DURATION_MS = 500;
+const HERO_RATE_CEILING = 98;
+
+function roundDisplayRate(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function useAnimatedRate(target: number, durationMs = COUNTER_DURATION_MS): number {
+  const [displayValue, setDisplayValue] = useState(target);
+  const fromRef = useRef(target);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = target;
+
+    if (Math.abs(from - to) < 0.05) {
+      fromRef.current = to;
+      setDisplayValue(to);
+      return;
+    }
+
+    const start = performance.now();
+    let frameId = 0;
+
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - (1 - progress) ** 3;
+      setDisplayValue(from + (to - from) * eased);
+
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = to;
+        setDisplayValue(to);
+      }
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [target, durationMs]);
+
+  return displayValue;
 }
 
 export default function AutopilotVisibilityForecastPanel({
@@ -44,6 +90,20 @@ export default function AutopilotVisibilityForecastPanel({
   const { baselineRecommendationRate, targetRecommendationRate } =
     forecast.forecast.metrics;
 
+  const animatedTargetRate = useAnimatedRate(targetRecommendationRate);
+
+  const climbBeamWidth = useMemo(() => {
+    const span = HERO_RATE_CEILING - baselineRecommendationRate;
+    if (span <= 0) {
+      return 100;
+    }
+
+    const progress =
+      (animatedTargetRate - baselineRecommendationRate) / span;
+
+    return Math.min(100, Math.max(12, progress * 100));
+  }, [animatedTargetRate, baselineRecommendationRate]);
+
   const narrative = formatAutopilotCorporatePanelNarrative(
     baselineRecommendationRate,
     targetRecommendationRate,
@@ -52,55 +112,73 @@ export default function AutopilotVisibilityForecastPanel({
   const sectorReady = isCoreQuestionSectorSupported(sector);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-violet-500/25 bg-gradient-to-br from-zinc-950/95 via-violet-950/20 to-cyan-950/10 p-5 shadow-[0_0_40px_rgba(139,92,246,0.08)]">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_55%)]"
-        aria-hidden
-      />
+    <article
+      className="visibility-hero-card"
+      aria-label="Yapay zeka görünürlük tahmini"
+    >
+      <div className="visibility-hero-card__glow" aria-hidden />
 
-      <div className="relative flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-500/10">
-          <Sparkles className="h-5 w-5 text-violet-300" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/90">
+      <div className="visibility-hero-card__inner">
+        <header className="visibility-hero-card__header">
+          <div className="visibility-hero-card__icon" aria-hidden>
+            <Sparkles />
+          </div>
+          <h3 className="visibility-hero-card__title">
             Yapay Zeka Görünürlük Tahmini
-          </p>
+          </h3>
+        </header>
 
-          {sectorReady ? (
-            <>
-              <p className="mt-3 text-sm leading-relaxed text-zinc-200">
-                {narrative}
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full border border-zinc-700/80 bg-zinc-900/70 px-3 py-1 text-[11px] font-medium text-zinc-300">
-                  Mevcut önerilme oranı: %{baselineRecommendationRate}
-                </span>
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
-                  Hedef önerilme oranı: %{targetRecommendationRate}
-                </span>
-                <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-200">
-                  {campaignDays} gün otopilot optimizasyon
-                </span>
+        {sectorReady ? (
+          <>
+            <div
+              className="visibility-hero-climb"
+              aria-label={`Önerilme oranı yükselişi: yüzde ${roundDisplayRate(baselineRecommendationRate)}'ten yüzde ${roundDisplayRate(targetRecommendationRate)}'ye`}
+            >
+              <div className="visibility-hero-climb__rate visibility-hero-climb__rate--baseline">
+                %{roundDisplayRate(baselineRecommendationRate)}
               </div>
 
-              <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
-                Soru ve içerik dağıtımı tamamen otopilot modda yürütülür; markanız
-                için en uygun kemik soru seti arka planda seçilir ve yayın
-                takvimine alınır.
-              </p>
-            </>
-          ) : (
-            <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+              <div className="visibility-hero-climb__track" aria-hidden>
+                <div
+                  className="visibility-hero-climb__beam"
+                  style={{ width: `${climbBeamWidth}%` }}
+                />
+                <div className="visibility-hero-climb__arrow">
+                  <ArrowRight strokeWidth={2.5} />
+                </div>
+              </div>
+
+              <div
+                className="visibility-hero-climb__rate visibility-hero-climb__rate--target"
+                aria-live="polite"
+              >
+                %{roundDisplayRate(animatedTargetRate)}
+              </div>
+            </div>
+
+            <p className="visibility-hero-card__narrative">{narrative}</p>
+
+            <p className="visibility-hero-card__footnote">
+              {campaignDays} günlük otopilot optimizasyon planı — soru ve içerik
+              dağıtımı arka planda otomatik yürütülür; markanız yapay zeka
+              tavsiye motorlarında öncelikli referans konumuna taşınır.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="visibility-hero-card__placeholder-climb" aria-hidden>
+              <span className="visibility-hero-card__placeholder-rate">%—</span>
+              <ArrowRight className="h-8 w-8 text-violet-400/40" />
+              <span className="visibility-hero-card__placeholder-rate">%—</span>
+            </div>
+            <p className="visibility-hero-card__narrative">
               Tahmini görünürlük skorunu hesaplamak için sektör seçimini
               tamamlayın. Bütçe ve gün planınız onaylandığında optimizasyon
               motoru otomatik devreye girecektir.
             </p>
-          )}
-        </div>
+          </>
+        )}
       </div>
-    </div>
+    </article>
   );
 }

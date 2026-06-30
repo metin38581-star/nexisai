@@ -170,17 +170,29 @@ export const AUTOPILOT_OPERATION_COST_PER_QUESTION_TL = 500;
 /** Bir üst soru hakkı için NexisAI tolerans jesti üst sınırı (TL). */
 export const AUTOPILOT_TOLERANCE_GRANT_THRESHOLD_TL = 100;
 
-/** Soru başına tahmini görünürlük artışı alt sınır (puan). */
+/** Soru başına tahmini görünürlük artışı alt sınır (puan) — legacy export. */
 export const AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN = 1.0;
 
-/** Soru başına tahmini görünürlük artışı üst sınır (puan). */
+/** Soru başına tahmini görünürlük artışı üst sınır (puan) — legacy export. */
 export const AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX = 1.2;
 
-/** Tek kampanyada uygulanabilecek maksimum görünürlük artışı (puan). */
+/** @deprecated Eski delta tavanı — yeni eğri modeli min/max hedef oranları kullanır. */
 export const AUTOPILOT_MAX_VISIBILITY_DELTA = 85;
 
-/** Hedef önerilme oranı tavanı (%). */
-export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE = 90;
+/** En düşük bütçede bile garanti edilen minimum hedef önerilme oranı (%). */
+export const AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE = 12;
+
+/** Minimum hedef bandı üst sınırı (%) — seed ile %12–%15 arası. */
+export const AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX = 15;
+
+/** Tepe paketlerde psikolojik hedef tavan alt sınırı (%). */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE = 98;
+
+/** Tepe paketlerde psikolojik hedef tavan üst sınırı (%). */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING = 98;
+
+/** Tepe paketlerde hedef bandı alt sınırı (%) — seed ile %96–%98 arası. */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR = 96;
 
 /** Sektör başına gizli kemik soru havuzu kapasitesi. */
 export const AUTOPILOT_BONE_QUESTION_POOL_SIZE = 50;
