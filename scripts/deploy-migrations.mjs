@@ -134,14 +134,16 @@ async function main() {
   await client.connect();
 
   try {
+    console.log("Idempotent şema hotfix uygulanıyor...");
+    await applySchemaHotfix(client);
+    await reloadPostgrestSchema(client);
+
     const shouldBaseline = await needsBaseline(client);
 
     if (shouldBaseline) {
       console.log(
         "Mevcut Supabase şeması tespit edildi; Prisma migration geçmişi yok (P3005).",
       );
-      await applySchemaHotfix(client);
-      await reloadPostgrestSchema(client);
       await client.end();
       await baselineExistingDatabase();
     } else {

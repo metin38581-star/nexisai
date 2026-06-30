@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "db:kill-stale": "powershell -ExecutionPolicy Bypass -File scripts/kill-stale-db-processes.ps1",
     "db:ensure-question-hub": "node scripts/ensure-question-hub-tables.mjs",
-    "db:migrate:deploy": "node scripts/deploy-migrations.mjs"
+    "db:migrate:deploy": "node scripts/deploy-migrations.mjs",
+    "db:schema:hotfix": "node scripts/apply-schema-hotfix.mjs"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.12.0",

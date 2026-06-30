@@ -37,10 +37,23 @@ ALTER TABLE "Bait" ADD COLUMN IF NOT EXISTS "dev_to_url" TEXT;
 ALTER TABLE "Bait" ADD COLUMN IF NOT EXISTS "live_url" TEXT;
 ALTER TABLE "Bait" ADD COLUMN IF NOT EXISTS "external_live_url" TEXT;
 
-ALTER TABLE "Campaign" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE "Campaign" ADD COLUMN IF NOT EXISTS "status" TEXT;
+UPDATE "Campaign"
+SET "status" = 'active'
+WHERE "status" IS NULL OR TRIM("status") = '';
+ALTER TABLE "Campaign" ALTER COLUMN "status" SET DEFAULT 'pending_payment';
+ALTER TABLE "Campaign" ALTER COLUMN "status" SET NOT NULL;
 ALTER TABLE "Campaign" ADD COLUMN IF NOT EXISTS "total_paid" DOUBLE PRECISION;
 ALTER TABLE "Campaign" ADD COLUMN IF NOT EXISTS "start_date" TIMESTAMP(3);
 ALTER TABLE "Campaign" ADD COLUMN IF NOT EXISTS "end_date" TIMESTAMP(3);
+
+UPDATE "Campaign"
+SET "start_date" = "createdAt"
+WHERE "start_date" IS NULL;
+
+UPDATE "Campaign"
+SET "end_date" = "createdAt" + (GREATEST("gunSayisi", 1) * INTERVAL '1 day')
+WHERE "end_date" IS NULL;
 
 ALTER TABLE "IyzicoCheckout" ADD COLUMN IF NOT EXISTS "campaignId" TEXT;
 CREATE INDEX IF NOT EXISTS "IyzicoCheckout_campaignId_idx" ON "IyzicoCheckout"("campaignId");
