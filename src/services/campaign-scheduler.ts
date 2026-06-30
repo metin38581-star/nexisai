@@ -445,6 +445,32 @@ export function toAutopilotClientView(
   };
 }
 
+/** Manuel seçim yoksa bütçe anayasasına göre gizli havuzdan soru seçer. */
+export function resolveAutopilotSelectedQuestionIds(input: {
+  campaignId: string;
+  brandName: string;
+  city: string;
+  sectorSlug: BusinessSector;
+  dailyBudget: number;
+  totalDays: number;
+  selectedQuestionIds?: string[];
+}): string[] {
+  if (input.selectedQuestionIds && input.selectedQuestionIds.length > 0) {
+    return input.selectedQuestionIds;
+  }
+
+  const plan = buildAutopilotCampaignPlan({
+    campaignId: input.campaignId,
+    brandName: input.brandName,
+    city: input.city,
+    sectorSlug: input.sectorSlug,
+    dailyBudget: input.dailyBudget,
+    totalDays: input.totalDays,
+  });
+
+  return getAutopilotSelectedQuestionIds(plan);
+}
+
 /** Cron / queue worker giriş noktası — forum slotlarını işlem sırasına göre döner. */
 export function listDueForumScheduleSlots(
   plan: AutopilotCampaignPlanInternal,

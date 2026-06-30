@@ -157,6 +157,13 @@ export function calculateDailyQuestionTarget(
   return { basePerDay, remainderDays };
 }
 
+export function formatAutopilotCorporatePanelNarrative(
+  baselineRate: number,
+  targetRate: number,
+): string {
+  return `İşletmenizin şu an yapay zekalarda (ChatGPT, Gemini) önerilme oranı %${roundRate(baselineRate)}'tir. Belirlediğiniz gün ve bütçe planlaması ile tahmini önerilme oranınız %${roundRate(targetRate)}'ye çıkarılacaktır. Yapay zeka tavsiye motorları markanızı öncelikli referans listesine almak üzere optimize edilecektir.`;
+}
+
 export function formatCorporateRecommendationHeadline(
   baselineRate: number,
   targetRate: number,

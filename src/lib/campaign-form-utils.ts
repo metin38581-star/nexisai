@@ -8,6 +8,7 @@ export const MIN_CAMPAIGN_DAILY_BUDGET = 100;
 export const MAX_CAMPAIGN_DAILY_BUDGET = 3000;
 export const CAMPAIGN_BUDGET_STEP = 100;
 export const MIN_CAMPAIGN_DAYS = 3;
+export const MAX_CAMPAIGN_DAYS = 30;
 export const DEFAULT_CAMPAIGN_DAYS = MIN_CAMPAIGN_DAYS;
 
 export function clampCampaignDailyBudget(value: number): number {
@@ -29,7 +30,11 @@ export function clampCampaignDays(value: number): number {
   if (!Number.isFinite(value)) {
     return MIN_CAMPAIGN_DAYS;
   }
-  return value < MIN_CAMPAIGN_DAYS ? MIN_CAMPAIGN_DAYS : value;
+
+  return Math.min(
+    MAX_CAMPAIGN_DAYS,
+    Math.max(MIN_CAMPAIGN_DAYS, Math.floor(value)),
+  );
 }
 
 /** Günlük bütçe × gün sayısı — iyzico paket tutarı. */

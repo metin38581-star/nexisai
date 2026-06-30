@@ -2,7 +2,7 @@ import type { CampaignApiRequest } from "@/types/campaign";
 import { SECTOR_OPTIONS } from "@/lib/constants";
 import type { BusinessSector } from "@/types/campaign";
 import { normalizeBusinessDomain } from "@/lib/business-domain";
-import { DEFAULT_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
+import { DEFAULT_CAMPAIGN_DAYS, clampCampaignDays } from "@/lib/campaign-form-utils";
 
 export interface NormalizedCampaignApiRequest {
   markaAdi: string;
@@ -69,7 +69,9 @@ export function normalizeCampaignApiRequest(
     sektor: resolveSectorLabel(body, sectorSlug),
     sehir: (body.city ?? body.sehir ?? "").trim(),
     gunlukButce: Number(body.budget ?? body.gunlukButce) || 100,
-    gunSayisi: Number(body.campaignDays ?? body.gunSayisi) || DEFAULT_CAMPAIGN_DAYS,
+    gunSayisi: clampCampaignDays(
+      Number(body.campaignDays ?? body.gunSayisi) || DEFAULT_CAMPAIGN_DAYS,
+    ),
     sectorSlug,
     selectedQuestionIds,
     businessDomain: normalizeBusinessDomain(

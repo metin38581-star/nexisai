@@ -13,6 +13,7 @@ import {
   MAX_CAMPAIGN_DAILY_BUDGET,
   CAMPAIGN_BUDGET_STEP,
   MIN_CAMPAIGN_DAYS,
+  MAX_CAMPAIGN_DAYS,
   DEFAULT_CAMPAIGN_DAYS,
   clampCampaignDailyBudget,
   clampCampaignDays,
@@ -188,7 +189,7 @@ export default function CampaignForm({
           label="Operasyon Süresi (Gün)"
           value={form.campaignDays}
           min={MIN_CAMPAIGN_DAYS}
-          max={90}
+          max={MAX_CAMPAIGN_DAYS}
           step={1}
           prefix=""
           suffix="gün"

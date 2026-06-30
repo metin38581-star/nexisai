@@ -19,6 +19,8 @@ import { buildStartupTerminalLogs } from "@/lib/terminal-logs";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { buildCampaignPublicationUrls } from "@/lib/publication-urls";
 import { resolveCampaignBudgetParams } from "@/lib/campaign-budget";
+import { resolveAutopilotSelectedQuestionIds } from "@/services/campaign-scheduler";
+import type { BusinessSector } from "@/types/campaign";
 
 export const IYZICO_CAMPAIGN_PAYMENT_CODE = "IYZICO_CAMPAIGN_PAYMENT";
 const SUCCESS_STATUSES = ["success", "succeeded", "paid"] as const;
@@ -146,7 +148,15 @@ export async function activateCampaignAfterDirectPayment(input: {
   const sektor = draft?.sektor ?? lifecycle?.sektor ?? "";
   const gunlukButce = draft?.gunlukButce ?? lifecycle?.gunlukButce ?? 250;
   const sectorSlug = draft?.sectorSlug ?? "";
-  const selectedQuestionIds = draft?.selectedQuestionIds ?? [];
+  const selectedQuestionIds = resolveAutopilotSelectedQuestionIds({
+    campaignId: input.campaignId,
+    brandName: markaAdi,
+    city: sehir,
+    sectorSlug: sectorSlug as BusinessSector,
+    dailyBudget: gunlukButce,
+    totalDays: gunSayisi,
+    selectedQuestionIds: draft?.selectedQuestionIds ?? [],
+  });
   const businessDomain = draft?.businessDomain ?? null;
   const toplamMaliyet = gunlukButce * gunSayisi;
   const budgetParams = resolveCampaignBudgetParams(gunlukButce);

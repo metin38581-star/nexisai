@@ -16,12 +16,16 @@ import {
   initializeIyzicoCheckout,
   isIyzicoConfigured,
 } from "@/lib/iyzico-client";
-import { MIN_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
+import { MIN_CAMPAIGN_DAYS, MAX_CAMPAIGN_DAYS } from "@/lib/campaign-form-utils";
 import { normalizeCampaignApiRequest } from "@/lib/campaign-api-normalize";
 import {
   validateCoreQuestionSelection,
   buildCoreQuestionPairs,
+  isCoreQuestionSectorSupported,
 } from "@/lib/core-questions";
+import {
+  resolveAutopilotSelectedQuestionIds,
+} from "@/services/campaign-scheduler";
 import { ensureCampaignGrowthLoop } from "@/lib/growth-loop-store";
 import { recordCampaignOperationalLog } from "@/lib/campaign-log-store";
 import { initCampaignProcessingState } from "@/lib/campaign-terminal-log-store";
@@ -298,6 +302,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (gunSayisi > MAX_CAMPAIGN_DAYS) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Kampanya süresi en fazla ${MAX_CAMPAIGN_DAYS} gün olabilir.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const sessionUser = await getActiveSessionUser(request);
     const activeUserId = sessionUser?.id ?? null;
     if (!activeUserId) {
@@ -337,13 +351,29 @@ export async function POST(request: Request) {
       selectedIds: selectedQuestionIds,
     });
 
-    if (!selectionValidation.ok) {
+    if (
+      selectedQuestionIds.length > 0 &&
+      !selectionValidation.ok
+    ) {
       return NextResponse.json(
         {
           success: false,
           error: selectionValidation.error ?? "Geçersiz soru seçimi.",
         },
         { status: selectionValidation.statusCode ?? 400 },
+      );
+    }
+
+    if (
+      selectedQuestionIds.length === 0 &&
+      !isCoreQuestionSectorSupported(sectorSlug)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Seçilen sektör için otopilot optimizasyon henüz aktif değil.",
+        },
+        { status: 400 },
       );
     }
 
@@ -372,6 +402,27 @@ export async function POST(request: Request) {
       );
     }
 
+    const resolvedQuestionIds = resolveAutopilotSelectedQuestionIds({
+      campaignId: reservedCampaignId,
+      brandName: trimmedMarka,
+      city: trimmedSehir,
+      sectorSlug: sectorSlug as BusinessSector,
+      dailyBudget: gunlukButce,
+      totalDays: gunSayisi,
+      selectedQuestionIds,
+    });
+
+    if (resolvedQuestionIds.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Otopilot soru havuzu bu bütçe ve süre için yeterli içerik üretemedi.",
+        },
+        { status: 400 },
+      );
+    }
+
     const campaignPaid = await hasCampaignDirectPayment(reservedCampaignId);
 
     if (campaignPaid) {
@@ -385,7 +436,7 @@ export async function POST(request: Request) {
         gunlukButce,
         gunSayisi,
         sectorSlug,
-        selectedQuestionIds,
+        selectedQuestionIds: resolvedQuestionIds,
         toplamMaliyet,
         agresiflikSeviyesi,
         radarSikligi,
@@ -411,7 +462,10 @@ export async function POST(request: Request) {
     await markCampaignPendingPayment(reservedCampaignId);
 
     const campaignDraft = buildCampaignDraft(
-      normalized,
+      {
+        ...normalized,
+        selectedQuestionIds: resolvedQuestionIds,
+      },
       reservedCampaignId,
       sessionUser?.email ?? "user@nexisai.com",
     );
