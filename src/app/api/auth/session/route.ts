@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
+import { normalizeAuthEmail } from "@/lib/normalize-auth-email";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveSiteOriginFromRequest } from "@/lib/site-origin";
 import { grantWelcomeBalance } from "@/lib/user-wallet-service";
@@ -49,7 +50,7 @@ function validatePayload(body: AuthSessionRequest): {
   companyName?: string;
 } | { error: string } {
   const action = body.action;
-  const email = body.email?.trim() ?? "";
+  const email = normalizeAuthEmail(body.email ?? "");
   const password = body.password?.trim() ?? "";
   const companyName = body.companyName?.trim();
 

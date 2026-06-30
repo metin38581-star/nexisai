@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { navigateAfterAuthSuccess } from "@/lib/auth-client-flow";
+import { normalizeAuthEmail, normalizeAuthEmailInput } from "@/lib/normalize-auth-email";
 import { formatWelcomeBalanceMessage } from "@/lib/wallet-constants";
 import {
   isSupabaseConfigured,
@@ -118,7 +119,7 @@ export default function AuthModal({
 
   const validateForm = (): string | null => {
     const trimmedCompanyName = fullName.trim();
-    const trimmedEmail = email.trim();
+    const trimmedEmail = normalizeAuthEmail(email);
     const trimmedPassword = password.trim();
 
     if (isRegister && !trimmedCompanyName) {
@@ -182,7 +183,7 @@ export default function AuthModal({
         authResult = await requestAuthSession(
           {
             action: isRegister ? "register" : "login",
-            email: email.trim(),
+            email: normalizeAuthEmail(email),
             password: password.trim(),
             ...(isRegister ? { companyName: fullName.trim() } : {}),
           },
@@ -238,7 +239,7 @@ export default function AuthModal({
 
       const sessionPayload = {
         userName: user.userName,
-        userEmail: user.email?.trim() || email.trim() || null,
+        userEmail: user.email?.trim() || normalizeAuthEmail(email) || null,
         userId: user.id,
         accessToken,
         refreshToken: authResult.refreshToken,
@@ -355,7 +356,7 @@ export default function AuthModal({
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(normalizeAuthEmailInput(e.target.value))}
                 disabled={isSubmitting}
                 placeholder="ornek@isletme.com"
                 autoComplete="email"

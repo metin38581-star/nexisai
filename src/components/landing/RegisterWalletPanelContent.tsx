@@ -12,6 +12,7 @@ import {
 } from "@/lib/wallet-constants";
 import { useAuth } from "@/context/AuthContext";
 import { navigateAfterAuthSuccess } from "@/lib/auth-client-flow";
+import { normalizeAuthEmail, normalizeAuthEmailInput } from "@/lib/normalize-auth-email";
 import { buildAuthFetchInit } from "@/lib/auth-headers";
 import {
   isSupabaseConfigured,
@@ -71,7 +72,8 @@ export default function RegisterWalletPanelContent({
 
   const validateRegister = (): string | null => {
     if (!fullName.trim()) return "İşletme adı zorunludur.";
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    const normalizedEmail = normalizeAuthEmail(email);
+    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       return "Geçerli bir e-posta adresi girin.";
     }
     if (password.trim().length < 8) return "Şifre en az 8 karakter olmalıdır.";
@@ -100,7 +102,7 @@ export default function RegisterWalletPanelContent({
         credentials: "include",
         body: JSON.stringify({
           action: "register",
-          email: email.trim(),
+          email: normalizeAuthEmail(email),
           password: password.trim(),
           companyName: fullName.trim(),
         }),
@@ -245,7 +247,7 @@ export default function RegisterWalletPanelContent({
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(normalizeAuthEmailInput(e.target.value))}
                 placeholder="ornek@isletme.com"
                 disabled={isSubmitting}
                 className={inputClassName}
