@@ -170,6 +170,18 @@ export const AUTOPILOT_OPERATION_COST_PER_QUESTION_TL = 500;
 /** Bir üst soru hakkı için NexisAI tolerans jesti üst sınırı (TL). */
 export const AUTOPILOT_TOLERANCE_GRANT_THRESHOLD_TL = 100;
 
+/** Soru başına tahmini görünürlük artışı alt sınır (puan). */
+export const AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN = 1.0;
+
+/** Soru başına tahmini görünürlük artışı üst sınır (puan). */
+export const AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX = 1.2;
+
+/** Tek kampanyada uygulanabilecek maksimum görünürlük artışı (puan). */
+export const AUTOPILOT_MAX_VISIBILITY_DELTA = 85;
+
+/** Hedef önerilme oranı tavanı (%). */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE = 90;
+
 /** Sektör başına gizli kemik soru havuzu kapasitesi. */
 export const AUTOPILOT_BONE_QUESTION_POOL_SIZE = 50;
 
@@ -202,12 +214,23 @@ export interface AutopilotBudgetResult {
 }
 
 export interface AutopilotRecommendationMetrics {
-  /** Kampanya başlangıcındaki yapay zeka öneri oranı (%) */
+  /** Mevcut yapay zeka önerilme oranı (%) — müşteriye gösterilir */
   baselineRecommendationRate: number;
-  /** Kampanya sonunda hedeflenen öneri oranı (%) */
+  /** Tahmini hedef önerilme oranı (%) — müşteriye gösterilir */
   targetRecommendationRate: number;
-  /** Müşteriye gösterilecek kurumsal özet metin */
+  /** Kısa kurumsal başlık — soru/içerik adedi içermez */
   corporateSummary: string;
+  /** Tam kurumsal anlatım cümlesi — soru/içerik adedi içermez */
+  corporateNarrative: string;
+}
+
+/** Dahili görünürlük modeli — yalnızca sunucu tarafında tutulur. */
+export interface AutopilotVisibilityForecastInternal {
+  publishCount: number;
+  visibilityDelta: number;
+  averageGainPerQuestion: number;
+  currentRecommendationRate: number;
+  projectedRecommendationRate: number;
 }
 
 export interface AutopilotSelectedQuestion {
@@ -275,6 +298,8 @@ export interface AutopilotCampaignPlanInput {
   totalDays: number;
   startDate?: Date;
   businessDomain?: string | null;
+  /** Ölçülmüş/simüle başlangıç oranı — yoksa kampanya seed ile simüle edilir */
+  currentRecommendationRate?: number;
 }
 
 /** Dahili tam plan — link/log/payload detayları yalnızca sunucu tarafında kalır. */
@@ -282,6 +307,7 @@ export interface AutopilotCampaignPlanInternal {
   campaignId: string;
   budget: AutopilotBudgetResult;
   metrics: AutopilotRecommendationMetrics;
+  visibilityForecast: AutopilotVisibilityForecastInternal;
   selectedQuestions: AutopilotSelectedQuestion[];
   dailyPlans: AutopilotDailyPublishPlan[];
   infrastructurePayloads: AutopilotInfrastructurePayload[];
@@ -289,7 +315,7 @@ export interface AutopilotCampaignPlanInternal {
   logs: AutopilotSchedulerLogEntry[];
 }
 
-/** Müşteri / dashboard API yanıtı — yalnızca kurumsal skor metrikleri. */
+/** Müşteri / dashboard API yanıtı — yalnızca kurumsal skor metrikleri, teknik detay yok. */
 export interface AutopilotCampaignPlanClientView {
   success: true;
   campaignId: string;
@@ -297,6 +323,5 @@ export interface AutopilotCampaignPlanClientView {
   operationalSummary: {
     campaignDurationDays: number;
     totalInvestmentTL: number;
-    optimizedQuestionVolume: number;
   };
 }

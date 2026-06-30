@@ -16,13 +16,14 @@ import type {
   AutopilotRecommendationMetrics,
   AutopilotSchedulerLogEntry,
   AutopilotSelectedQuestion,
+  AutopilotVisibilityForecastInternal,
   BusinessSector,
 } from "@/types/campaign";
 import { AUTOPILOT_BONE_QUESTION_POOL_SIZE } from "@/types/campaign";
 import {
   calculateAutopilotBudget,
+  calculateAutopilotVisibilityForecast,
   calculateDailyQuestionTarget,
-  formatCorporateRecommendationMessage,
 } from "@/utils/budget-engine";
 
 const FORUM_SNEAKY_HOURS = [9, 11, 14, 16, 19, 21] as const;
@@ -138,32 +139,23 @@ function selectAutopilotQuestions(input: {
   }));
 }
 
-function buildRecommendationMetrics(
-  budget: ReturnType<typeof calculateAutopilotBudget>,
-  publishCount: number,
-): AutopilotRecommendationMetrics {
-  const baselineRecommendationRate = Math.min(
-    8,
-    Math.max(2, Math.round(2 + publishCount * 0.04)),
-  );
-
-  const targetRecommendationRate = Math.min(
-    88,
-    Math.max(
-      baselineRecommendationRate + 12,
-      Math.round(28 + publishCount * 1.35 + budget.totalDays * 0.85),
-    ),
-  );
-
-  const corporateSummary = formatCorporateRecommendationMessage(
-    baselineRecommendationRate,
-    targetRecommendationRate,
-  );
+function buildRecommendationMetrics(input: {
+  campaignId: string;
+  publishCount: number;
+  currentRecommendationRate?: number;
+}): {
+  metrics: AutopilotRecommendationMetrics;
+  visibilityForecast: AutopilotVisibilityForecastInternal;
+} {
+  const forecast = calculateAutopilotVisibilityForecast({
+    publishCount: input.publishCount,
+    campaignSeed: input.campaignId,
+    currentRecommendationRate: input.currentRecommendationRate,
+  });
 
   return {
-    baselineRecommendationRate,
-    targetRecommendationRate,
-    corporateSummary,
+    metrics: forecast.metrics,
+    visibilityForecast: forecast.internal,
   };
 }
 
@@ -382,11 +374,16 @@ export function buildAutopilotCampaignPlan(
     logs,
   });
 
-  const metrics = buildRecommendationMetrics(budget, selectedQuestions.length);
+  const { metrics, visibilityForecast } = buildRecommendationMetrics({
+    campaignId: input.campaignId,
+    publishCount: selectedQuestions.length,
+    currentRecommendationRate: input.currentRecommendationRate,
+  });
 
   appendLog(logs, "metrics.project", "Kurumsal skor metrikleri üretildi.", {
     baselineRecommendationRate: metrics.baselineRecommendationRate,
     targetRecommendationRate: metrics.targetRecommendationRate,
+    visibilityDelta: visibilityForecast.visibilityDelta,
   });
 
   const dailyPlans = buildDailyPlans({
@@ -424,6 +421,7 @@ export function buildAutopilotCampaignPlan(
     campaignId: input.campaignId,
     budget,
     metrics,
+    visibilityForecast,
     selectedQuestions,
     dailyPlans,
     infrastructurePayloads,
@@ -443,7 +441,6 @@ export function toAutopilotClientView(
     operationalSummary: {
       campaignDurationDays: plan.budget.totalDays,
       totalInvestmentTL: plan.budget.totalBudget,
-      optimizedQuestionVolume: plan.selectedQuestions.length,
     },
   };
 }
