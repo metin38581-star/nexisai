@@ -1,5 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import type { LlmInquiryResult } from "@/types/campaign";
+import {
+  isBusinessNameMentionedInLlmResponse,
+  resolveStartRateFromLlmPresence,
+} from "@/lib/business-name-match";
 import { normalizeTerminalMessage } from "@/lib/terminal-message";
 
 const DEFAULT_GOOGLE_GENAI_MODEL = "gemini-2.5-flash";
@@ -509,84 +513,15 @@ export function buildPopularBusinessesListPrompt(
   return `${city} şehrindeki en popüler ve en iyi ${category} seçeneklerini, insanların sıkça tavsiye ettiği işletme isimleriyle birlikte kısa bir liste halinde ver.`;
 }
 
-function normalizeMatchText(value: string): string {
-  return value
-    .replace(/\u0131/g, "i")
-    .replace(/\u0130/g, "i")
-    .replace(/I/g, "i")
-    .toLocaleLowerCase("en-US")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** LLM yanıtında işletme adı geçiyor mu — esnek, case-insensitive eşleşme. */
-export function isBusinessNameMentionedInLlmResponse(
-  response: string,
-  businessName: string,
-): boolean {
-  const normalizedResponse = normalizeMatchText(response);
-  const normalizedBrand = normalizeMatchText(businessName);
-
-  if (normalizedBrand.length < 2 || !normalizedResponse) {
-    return false;
-  }
-
-  if (normalizedResponse.includes(normalizedBrand)) {
-    return true;
-  }
-
-  const tokens = normalizedBrand
-    .split(" ")
-    .filter((token) => token.length >= 3);
-
-  if (tokens.length === 0) {
-    return normalizedBrand.length >= 3 && normalizedResponse.includes(normalizedBrand);
-  }
-
-  const matchedTokens = tokens.filter((token) =>
-    normalizedResponse.includes(token),
-  );
-
-  if (matchedTokens.length >= Math.ceil(tokens.length * 0.6)) {
-    return true;
-  }
-
-  const leadToken = tokens[0];
-  return Boolean(leadToken && leadToken.length >= 4 && normalizedResponse.includes(leadToken));
-}
-
-export const LIVE_LLM_ORGANIC_START_RATE_MIN = 25;
-export const LIVE_LLM_ORGANIC_START_RATE_MAX = 45;
-export const LIVE_LLM_BASELINE_START_RATE_MIN = 3;
-export const LIVE_LLM_BASELINE_START_RATE_MAX = 6;
-
-function hashBusinessSeed(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-/** LLM eşleşmesine göre başlangıç önerilme oranı (%). */
-export function resolveStartRateFromLlmPresence(
-  mentioned: boolean,
-  businessName: string,
-): number {
-  const hash = hashBusinessSeed(normalizeMatchText(businessName));
-
-  if (mentioned) {
-    const span = LIVE_LLM_ORGANIC_START_RATE_MAX - LIVE_LLM_ORGANIC_START_RATE_MIN;
-    return LIVE_LLM_ORGANIC_START_RATE_MIN + (hash % (span + 1));
-  }
-
-  const span = LIVE_LLM_BASELINE_START_RATE_MAX - LIVE_LLM_BASELINE_START_RATE_MIN;
-  return LIVE_LLM_BASELINE_START_RATE_MIN + (hash % (span + 1));
-}
+export {
+  isBusinessNameMentionedInLlmResponse,
+  resolveStartRateFromLlmPresence,
+  slugifyBusinessMatchKey,
+  LIVE_LLM_ORGANIC_START_RATE_MIN,
+  LIVE_LLM_ORGANIC_START_RATE_MAX,
+  LIVE_LLM_BASELINE_START_RATE_MIN,
+  LIVE_LLM_BASELINE_START_RATE_MAX,
+} from "@/lib/business-name-match";
 
 /** Herhangi bir prompt ile canlı LLM çağrısı — ham metin döner. */
 export async function executeLiveLlmPrompt(prompt: string): Promise<string> {
