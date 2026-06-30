@@ -346,6 +346,8 @@ export interface LiveVisibilityForecastRequest {
   dailyBudget?: number;
   campaignDays?: number;
   totalDays?: number;
+  /** Debug: önbelleği atla ve canlı LLM'i zorla */
+  skipCache?: boolean;
 }
 
 /** Canlı LLM startRate + bütçe eğrisi — teknik/LLM detayı içermez. */

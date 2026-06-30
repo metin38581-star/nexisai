@@ -52,8 +52,38 @@ export function isBusinessNameMentionedInLlmResponse(
 
 export const LIVE_LLM_ORGANIC_START_RATE_MIN = 28;
 export const LIVE_LLM_ORGANIC_START_RATE_MAX = 38;
+export const LIVE_LLM_CORPORATE_FALLBACK_MIN = 22;
+export const LIVE_LLM_CORPORATE_FALLBACK_MAX = 28;
 export const LIVE_LLM_BASELINE_START_RATE_MIN = 3;
 export const LIVE_LLM_BASELINE_START_RATE_MAX = 6;
+
+const CORPORATE_PRESTIGE_PATTERN =
+  /otel|hotel|resort|hastane|hospital|klinik|clinic|radisson|hilton|marriott|hyatt|sheraton|crowne|intercontinental|ibis|novotel|mandarin|four\s*seasons|conrad|doubletree|holiday\s*inn|best\s*western|ramada|dedeman|rixos|swissotel|fairmont|sofitel|wyndham|accor/i;
+
+export function hasCorporatePrestigeSignal(
+  businessName: string,
+  category?: string,
+): boolean {
+  const combined = `${businessName} ${category ?? ""}`.trim();
+  if (!combined) {
+    return false;
+  }
+
+  if (CORPORATE_PRESTIGE_PATTERN.test(combined)) {
+    return true;
+  }
+
+  const slug = slugifyBusinessMatchKey(combined);
+  return (
+    slug.includes("otel") ||
+    slug.includes("hotel") ||
+    slug.includes("hastane") ||
+    slug.includes("hospital") ||
+    slug.includes("klinik") ||
+    slug.includes("clinic") ||
+    slug.includes("resort")
+  );
+}
 
 function hashBusinessSeed(value: string): number {
   let hash = 2166136261;
@@ -65,16 +95,29 @@ function hashBusinessSeed(value: string): number {
   return hash >>> 0;
 }
 
+export interface StartRateResolutionOptions {
+  category?: string;
+  llmFailed?: boolean;
+}
+
 /** LLM eşleşmesine göre başlangıç önerilme oranı (%). */
 export function resolveStartRateFromLlmPresence(
   mentioned: boolean,
   businessName: string,
+  options: StartRateResolutionOptions = {},
 ): number {
   const hash = hashBusinessSeed(businessName);
+  const category = options.category;
 
   if (mentioned) {
     const span = LIVE_LLM_ORGANIC_START_RATE_MAX - LIVE_LLM_ORGANIC_START_RATE_MIN;
     return LIVE_LLM_ORGANIC_START_RATE_MIN + (hash % (span + 1));
+  }
+
+  if (hasCorporatePrestigeSignal(businessName, category)) {
+    const span =
+      LIVE_LLM_CORPORATE_FALLBACK_MAX - LIVE_LLM_CORPORATE_FALLBACK_MIN;
+    return LIVE_LLM_CORPORATE_FALLBACK_MIN + (hash % (span + 1));
   }
 
   const span = LIVE_LLM_BASELINE_START_RATE_MAX - LIVE_LLM_BASELINE_START_RATE_MIN;

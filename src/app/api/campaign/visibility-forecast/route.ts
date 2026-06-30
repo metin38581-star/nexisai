@@ -12,7 +12,11 @@ import { isCoreQuestionSectorSupported } from "@/lib/core-questions";
 import { buildLiveVisibilityForecast } from "@/services/live-visibility-forecast-service";
 import type { BusinessSector, LiveVisibilityForecastRequest } from "@/types/campaign";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+
   try {
     const activeUserId = await getActiveUserId(request);
     if (!activeUserId) {
@@ -56,16 +60,45 @@ export async function POST(request: Request) {
       );
     }
 
-    const forecast = await buildLiveVisibilityForecast({
+    console.log("[VISIBILITY_FORECAST]: istek alındı", {
       businessName,
       city,
       sectorSlug,
       dailyBudget,
       campaignDays,
+      userId: activeUserId,
     });
 
-    return NextResponse.json(forecast);
+    const { view, trace } = await buildLiveVisibilityForecast({
+      businessName,
+      city,
+      sectorSlug,
+      dailyBudget,
+      campaignDays,
+      skipCache: body.skipCache === true,
+    });
+
+    console.log("LLM Sorgusu Ateşleniyor:", trace.cityLabel, trace.categoryLabel);
+    console.log("LLM Prompt:", trace.prompt);
+
+    if (trace.responseText) {
+      console.log("LLM'den Gelen Ham Metin:", trace.responseText);
+    } else if (!trace.cacheHit) {
+      console.log("LLM'den Gelen Ham Metin: (boş veya hata fallback)");
+    }
+
+    console.log("[VISIBILITY_FORECAST]: sonuç", {
+      cacheHit: trace.cacheHit,
+      isLiveData: trace.isLiveData,
+      mentioned: trace.mentioned,
+      startRate: trace.startRate,
+      targetRate: view.metrics.targetRecommendationRate,
+      elapsedMs: Date.now() - startedAt,
+    });
+
+    return NextResponse.json(view);
   } catch (error) {
+    console.error("LLM Çağrısı Sırasında Patlayan Hata:", error);
     return handleApiRouteError(error, "Görünürlük tahmini oluşturulamadı.");
   }
 }

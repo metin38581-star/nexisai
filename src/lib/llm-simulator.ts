@@ -3,6 +3,7 @@ import type { LlmInquiryResult } from "@/types/campaign";
 import {
   isBusinessNameMentionedInLlmResponse,
   resolveStartRateFromLlmPresence,
+  slugifyBusinessMatchKey,
 } from "@/lib/business-name-match";
 import { normalizeTerminalMessage } from "@/lib/terminal-message";
 
@@ -517,8 +518,11 @@ export {
   isBusinessNameMentionedInLlmResponse,
   resolveStartRateFromLlmPresence,
   slugifyBusinessMatchKey,
+  hasCorporatePrestigeSignal,
   LIVE_LLM_ORGANIC_START_RATE_MIN,
   LIVE_LLM_ORGANIC_START_RATE_MAX,
+  LIVE_LLM_CORPORATE_FALLBACK_MIN,
+  LIVE_LLM_CORPORATE_FALLBACK_MAX,
   LIVE_LLM_BASELINE_START_RATE_MIN,
   LIVE_LLM_BASELINE_START_RATE_MAX,
 } from "@/lib/business-name-match";
@@ -537,31 +541,57 @@ export async function queryLiveBusinessRecommendationPresence(input: {
   mentioned: boolean;
   startRate: number;
   isLiveData: boolean;
+  responseText?: string;
+  prompt?: string;
 }> {
   const prompt = buildPopularBusinessesListPrompt(input.city, input.category);
 
+  console.log("LLM Sorgusu Ateşleniyor:", input.city, input.category);
+  console.log("LLM İşletme Hedefi:", input.businessName);
+  console.log("LLM Prompt:", prompt);
+
   try {
     const content = await executeLiveLlmPrompt(prompt);
+    console.log("LLM'den Gelen Ham Metin:", content);
+
     const mentioned = isBusinessNameMentionedInLlmResponse(
       content,
       input.businessName,
     );
 
+    const startRate = resolveStartRateFromLlmPresence(mentioned, input.businessName, {
+      category: input.category,
+      llmFailed: false,
+    });
+
+    console.log("LLM Eşleşme Sonucu:", {
+      mentioned,
+      startRate,
+      brandSlug: slugifyBusinessMatchKey(input.businessName),
+    });
+
     return {
       mentioned,
-      startRate: resolveStartRateFromLlmPresence(mentioned, input.businessName),
+      startRate,
       isLiveData: true,
+      responseText: content,
+      prompt,
     };
   } catch (error) {
-    console.warn(
-      "[LIVE_LLM_START_RATE]: Canlı sorgu başarısız — taban oran uygulanıyor.",
-      error instanceof Error ? error.message : error,
-    );
+    console.error("LLM Çağrısı Sırasında Patlayan Hata:", error);
+
+    const startRate = resolveStartRateFromLlmPresence(false, input.businessName, {
+      category: input.category,
+      llmFailed: true,
+    });
+
+    console.log("LLM Fallback StartRate:", startRate);
 
     return {
       mentioned: false,
-      startRate: resolveStartRateFromLlmPresence(false, input.businessName),
+      startRate,
       isLiveData: false,
+      prompt,
     };
   }
 }
