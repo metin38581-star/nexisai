@@ -4,6 +4,7 @@ import {
   isBusinessNameMentionedInLlmResponse,
   resolveStartRateFromLlmPresence,
   slugifyBusinessMatchKey,
+  type StartRateFallbackTier,
 } from "@/lib/business-name-match";
 import { normalizeTerminalMessage } from "@/lib/terminal-message";
 
@@ -518,6 +519,7 @@ export {
   isBusinessNameMentionedInLlmResponse,
   resolveStartRateFromLlmPresence,
   slugifyBusinessMatchKey,
+  hasCorporateBrandTitleInBusinessName,
   hasCorporatePrestigeSignal,
   LIVE_LLM_ORGANIC_START_RATE_MIN,
   LIVE_LLM_ORGANIC_START_RATE_MAX,
@@ -541,6 +543,7 @@ export async function queryLiveBusinessRecommendationPresence(input: {
   mentioned: boolean;
   startRate: number;
   isLiveData: boolean;
+  fallbackTier: StartRateFallbackTier;
   responseText?: string;
   prompt?: string;
 }> {
@@ -559,20 +562,22 @@ export async function queryLiveBusinessRecommendationPresence(input: {
       input.businessName,
     );
 
-    const startRate = resolveStartRateFromLlmPresence(mentioned, input.businessName, {
-      category: input.category,
-      llmFailed: false,
-    });
+    const { startRate, fallbackTier } = resolveStartRateFromLlmPresence(
+      mentioned,
+      input.businessName,
+    );
 
     console.log("LLM Eşleşme Sonucu:", {
       mentioned,
       startRate,
+      fallbackTier,
       brandSlug: slugifyBusinessMatchKey(input.businessName),
     });
 
     return {
       mentioned,
       startRate,
+      fallbackTier,
       isLiveData: true,
       responseText: content,
       prompt,
@@ -580,16 +585,18 @@ export async function queryLiveBusinessRecommendationPresence(input: {
   } catch (error) {
     console.error("LLM Çağrısı Sırasında Patlayan Hata:", error);
 
-    const startRate = resolveStartRateFromLlmPresence(false, input.businessName, {
-      category: input.category,
-      llmFailed: true,
-    });
+    const { startRate, fallbackTier } = resolveStartRateFromLlmPresence(
+      false,
+      input.businessName,
+      { llmFailed: true },
+    );
 
-    console.log("LLM Fallback StartRate:", startRate);
+    console.log("LLM Fallback StartRate:", { startRate, fallbackTier });
 
     return {
       mentioned: false,
       startRate,
+      fallbackTier,
       isLiveData: false,
       prompt,
     };

@@ -23,6 +23,63 @@ export function slugifyBusinessMatchKey(value: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeBrandNameForWordCheck(value: string): string {
+  return value
+    .replace(/\u0131/g, "i")
+    .replace(/\u0130/g, "i")
+    .replace(/I/g, "i")
+    .toLocaleLowerCase("en-US");
+}
+
+/** Sadece işletme adı içinde geçen kurumsal unvan kelimeleri — sektör dahil edilmez. */
+const CORPORATE_BRAND_TITLE_WORDS = [
+  "otel",
+  "hotel",
+  "resort",
+  "hastane",
+  "hospital",
+  "avm",
+  "klinik",
+  "clinic",
+  "radisson",
+  "hilton",
+  "marriott",
+  "hyatt",
+  "sheraton",
+  "intercontinental",
+  "ibis",
+  "novotel",
+  "mandarin",
+  "conrad",
+  "dedeman",
+  "rixos",
+  "swissotel",
+  "fairmont",
+  "sofitel",
+  "wyndham",
+] as const;
+
+/**
+ * mentioned=false fallback için: kurumsal zırh puanı yalnızca işletme adında
+ * otel/hotel/hastane/avm vb. fiziksel olarak geçiyorsa verilir.
+ */
+export function hasCorporateBrandTitleInBusinessName(businessName: string): boolean {
+  const lowerName = normalizeBrandNameForWordCheck(businessName.trim());
+  if (!lowerName) {
+    return false;
+  }
+
+  return CORPORATE_BRAND_TITLE_WORDS.some((word) => lowerName.includes(word));
+}
+
+/** @deprecated Sektör bazlı kontrol kaldırıldı — hasCorporateBrandTitleInBusinessName kullanın. */
+export function hasCorporatePrestigeSignal(
+  businessName: string,
+  _category?: string,
+): boolean {
+  return hasCorporateBrandTitleInBusinessName(businessName);
+}
+
 /** LLM yanıtında işletme adı geçiyor mu — slug tabanlı, boşluk/tire körü eşleşme. */
 export function isBusinessNameMentionedInLlmResponse(
   response: string,
@@ -53,37 +110,9 @@ export function isBusinessNameMentionedInLlmResponse(
 export const LIVE_LLM_ORGANIC_START_RATE_MIN = 28;
 export const LIVE_LLM_ORGANIC_START_RATE_MAX = 38;
 export const LIVE_LLM_CORPORATE_FALLBACK_MIN = 22;
-export const LIVE_LLM_CORPORATE_FALLBACK_MAX = 28;
+export const LIVE_LLM_CORPORATE_FALLBACK_MAX = 26;
 export const LIVE_LLM_BASELINE_START_RATE_MIN = 3;
-export const LIVE_LLM_BASELINE_START_RATE_MAX = 6;
-
-const CORPORATE_PRESTIGE_PATTERN =
-  /otel|hotel|resort|hastane|hospital|klinik|clinic|radisson|hilton|marriott|hyatt|sheraton|crowne|intercontinental|ibis|novotel|mandarin|four\s*seasons|conrad|doubletree|holiday\s*inn|best\s*western|ramada|dedeman|rixos|swissotel|fairmont|sofitel|wyndham|accor/i;
-
-export function hasCorporatePrestigeSignal(
-  businessName: string,
-  category?: string,
-): boolean {
-  const combined = `${businessName} ${category ?? ""}`.trim();
-  if (!combined) {
-    return false;
-  }
-
-  if (CORPORATE_PRESTIGE_PATTERN.test(combined)) {
-    return true;
-  }
-
-  const slug = slugifyBusinessMatchKey(combined);
-  return (
-    slug.includes("otel") ||
-    slug.includes("hotel") ||
-    slug.includes("hastane") ||
-    slug.includes("hospital") ||
-    slug.includes("klinik") ||
-    slug.includes("clinic") ||
-    slug.includes("resort")
-  );
-}
+export const LIVE_LLM_BASELINE_START_RATE_MAX = 5;
 
 function hashBusinessSeed(value: string): number {
   let hash = 2166136261;
@@ -100,26 +129,39 @@ export interface StartRateResolutionOptions {
   llmFailed?: boolean;
 }
 
+export type StartRateFallbackTier =
+  | "organic_match"
+  | "corporate_brand_title"
+  | "sallama_floor";
+
 /** LLM eşleşmesine göre başlangıç önerilme oranı (%). */
 export function resolveStartRateFromLlmPresence(
   mentioned: boolean,
   businessName: string,
-  options: StartRateResolutionOptions = {},
-): number {
+  _options: StartRateResolutionOptions = {},
+): { startRate: number; fallbackTier: StartRateFallbackTier } {
   const hash = hashBusinessSeed(businessName);
-  const category = options.category;
 
   if (mentioned) {
     const span = LIVE_LLM_ORGANIC_START_RATE_MAX - LIVE_LLM_ORGANIC_START_RATE_MIN;
-    return LIVE_LLM_ORGANIC_START_RATE_MIN + (hash % (span + 1));
+    return {
+      startRate: LIVE_LLM_ORGANIC_START_RATE_MIN + (hash % (span + 1)),
+      fallbackTier: "organic_match",
+    };
   }
 
-  if (hasCorporatePrestigeSignal(businessName, category)) {
+  if (hasCorporateBrandTitleInBusinessName(businessName)) {
     const span =
       LIVE_LLM_CORPORATE_FALLBACK_MAX - LIVE_LLM_CORPORATE_FALLBACK_MIN;
-    return LIVE_LLM_CORPORATE_FALLBACK_MIN + (hash % (span + 1));
+    return {
+      startRate: LIVE_LLM_CORPORATE_FALLBACK_MIN + (hash % (span + 1)),
+      fallbackTier: "corporate_brand_title",
+    };
   }
 
   const span = LIVE_LLM_BASELINE_START_RATE_MAX - LIVE_LLM_BASELINE_START_RATE_MIN;
-  return LIVE_LLM_BASELINE_START_RATE_MIN + (hash % (span + 1));
+  return {
+    startRate: LIVE_LLM_BASELINE_START_RATE_MIN + (hash % (span + 1)),
+    fallbackTier: "sallama_floor",
+  };
 }

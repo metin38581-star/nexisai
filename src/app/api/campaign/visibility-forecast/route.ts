@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { handleApiRouteError } from "@/lib/api-error";
+import { hasCorporateBrandTitleInBusinessName } from "@/lib/business-name-match";
 import { getActiveUserId } from "@/lib/auth-session";
 import {
   clampCampaignDailyBudget,
@@ -92,6 +93,8 @@ export async function POST(request: Request) {
       isLiveData: trace.isLiveData,
       mentioned: trace.mentioned,
       startRate: trace.startRate,
+      fallbackTier: trace.fallbackTier,
+      brandHasCorporateTitle: hasCorporateBrandTitleInBusinessName(businessName),
       targetRate: view.metrics.targetRecommendationRate,
       elapsedMs: Date.now() - startedAt,
     });

@@ -11,16 +11,18 @@ import type {
   BusinessSector,
   LiveVisibilityForecastClientView,
 } from "@/types/campaign";
+import type { StartRateFallbackTier } from "@/lib/business-name-match";
 import { calculateAutopilotBudgetWithForecast } from "@/utils/budget-engine";
 
 /** Eski düşük startRate cache kayıtlarını geçersiz kılar. */
-const START_RATE_CACHE_VERSION = "v2-slugify-live";
+const START_RATE_CACHE_VERSION = "v3-brand-title-only";
 const START_RATE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 interface StartRateCacheEntry {
   startRate: number;
   isLiveData: boolean;
   mentioned: boolean;
+  fallbackTier: StartRateFallbackTier;
   expiresAt: number;
 }
 
@@ -42,6 +44,7 @@ export interface LiveVisibilityForecastTrace {
   startRate: number;
   mentioned: boolean;
   isLiveData: boolean;
+  fallbackTier: StartRateFallbackTier;
   cacheHit: boolean;
   responseText?: string;
 }
@@ -95,6 +98,7 @@ async function resolveLiveStartRate(
         startRate: cached.startRate,
         mentioned: cached.mentioned,
         isLiveData: cached.isLiveData,
+        fallbackTier: cached.fallbackTier,
         cacheHit: true,
       };
     }
@@ -114,6 +118,7 @@ async function resolveLiveStartRate(
     startRate: liveResult.startRate,
     mentioned: liveResult.mentioned,
     isLiveData: liveResult.isLiveData,
+    fallbackTier: liveResult.fallbackTier,
     expiresAt: now + START_RATE_CACHE_TTL_MS,
   });
 
@@ -124,6 +129,7 @@ async function resolveLiveStartRate(
     startRate: liveResult.startRate,
     mentioned: liveResult.mentioned,
     isLiveData: liveResult.isLiveData,
+    fallbackTier: liveResult.fallbackTier,
     cacheHit: false,
     responseText: liveResult.responseText,
   };
