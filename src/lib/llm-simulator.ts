@@ -278,6 +278,19 @@ async function callGoogleGenAiApi(
   inquiry: GoogleInquiryParams,
 ): Promise<LiveLlmResponse> {
   try {
+    return await callGoogleGenAiWithPrompt(buildGoogleGenAiPrompt(inquiry));
+  } catch (error) {
+    if (isGoogleConnectionError(error)) {
+      throw new GoogleApiConnectionFallbackError(inquiry);
+    }
+    throw error;
+  }
+}
+
+async function callGoogleGenAiWithPrompt(
+  prompt: string,
+): Promise<LiveLlmResponse> {
+  try {
     const apiKey = process.env.LLM_API_KEY?.trim();
 
     if (!apiKey) {
@@ -295,14 +308,12 @@ async function callGoogleGenAiApi(
       model,
       "API Sürümü:",
       GOOGLE_GENAI_API_VERSION,
-      "Marka:",
-      inquiry.markaAdi,
     );
 
     const response = await withTimeout(
       ai.models.generateContent({
         model,
-        contents: buildGoogleGenAiPrompt(inquiry),
+        contents: prompt,
         config: {
           maxOutputTokens: 1000,
           temperature: 0.1,
@@ -332,7 +343,7 @@ async function callGoogleGenAiApi(
       );
     }
 
-    throw new GoogleApiConnectionFallbackError(inquiry);
+    throw error;
   }
 }
 
@@ -441,8 +452,10 @@ async function callLiveLlmApi(
         : "sonar");
 
   if (provider === "google") {
-    if (!googleInquiry) throw new Error("google_missing_inquiry_params");
-    return callGoogleGenAiApi(googleInquiry);
+    if (googleInquiry) {
+      return callGoogleGenAiApi(googleInquiry);
+    }
+    return callGoogleGenAiWithPrompt(prompt);
   }
 
   if (provider === "openai") {
@@ -486,6 +499,136 @@ async function runLocalDataFallbackInquiry(
     isLiveData: false,
     usedLocalDataFallback: true,
   };
+}
+
+/** Canlı LLM tavsiye listesi sorgusu — popüler işletme isimleri. */
+export function buildPopularBusinessesListPrompt(
+  city: string,
+  category: string,
+): string {
+  return `${city} şehrindeki en popüler ve en iyi ${category} seçeneklerini, insanların sıkça tavsiye ettiği işletme isimleriyle birlikte kısa bir liste halinde ver.`;
+}
+
+function normalizeMatchText(value: string): string {
+  return value
+    .replace(/\u0131/g, "i")
+    .replace(/\u0130/g, "i")
+    .replace(/I/g, "i")
+    .toLocaleLowerCase("en-US")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** LLM yanıtında işletme adı geçiyor mu — esnek, case-insensitive eşleşme. */
+export function isBusinessNameMentionedInLlmResponse(
+  response: string,
+  businessName: string,
+): boolean {
+  const normalizedResponse = normalizeMatchText(response);
+  const normalizedBrand = normalizeMatchText(businessName);
+
+  if (normalizedBrand.length < 2 || !normalizedResponse) {
+    return false;
+  }
+
+  if (normalizedResponse.includes(normalizedBrand)) {
+    return true;
+  }
+
+  const tokens = normalizedBrand
+    .split(" ")
+    .filter((token) => token.length >= 3);
+
+  if (tokens.length === 0) {
+    return normalizedBrand.length >= 3 && normalizedResponse.includes(normalizedBrand);
+  }
+
+  const matchedTokens = tokens.filter((token) =>
+    normalizedResponse.includes(token),
+  );
+
+  if (matchedTokens.length >= Math.ceil(tokens.length * 0.6)) {
+    return true;
+  }
+
+  const leadToken = tokens[0];
+  return Boolean(leadToken && leadToken.length >= 4 && normalizedResponse.includes(leadToken));
+}
+
+export const LIVE_LLM_ORGANIC_START_RATE_MIN = 25;
+export const LIVE_LLM_ORGANIC_START_RATE_MAX = 45;
+export const LIVE_LLM_BASELINE_START_RATE_MIN = 3;
+export const LIVE_LLM_BASELINE_START_RATE_MAX = 6;
+
+function hashBusinessSeed(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/** LLM eşleşmesine göre başlangıç önerilme oranı (%). */
+export function resolveStartRateFromLlmPresence(
+  mentioned: boolean,
+  businessName: string,
+): number {
+  const hash = hashBusinessSeed(normalizeMatchText(businessName));
+
+  if (mentioned) {
+    const span = LIVE_LLM_ORGANIC_START_RATE_MAX - LIVE_LLM_ORGANIC_START_RATE_MIN;
+    return LIVE_LLM_ORGANIC_START_RATE_MIN + (hash % (span + 1));
+  }
+
+  const span = LIVE_LLM_BASELINE_START_RATE_MAX - LIVE_LLM_BASELINE_START_RATE_MIN;
+  return LIVE_LLM_BASELINE_START_RATE_MIN + (hash % (span + 1));
+}
+
+/** Herhangi bir prompt ile canlı LLM çağrısı — ham metin döner. */
+export async function executeLiveLlmPrompt(prompt: string): Promise<string> {
+  const response = await callLiveLlmApi(prompt);
+  return response.content;
+}
+
+export async function queryLiveBusinessRecommendationPresence(input: {
+  city: string;
+  category: string;
+  businessName: string;
+}): Promise<{
+  mentioned: boolean;
+  startRate: number;
+  isLiveData: boolean;
+}> {
+  const prompt = buildPopularBusinessesListPrompt(input.city, input.category);
+
+  try {
+    const content = await executeLiveLlmPrompt(prompt);
+    const mentioned = isBusinessNameMentionedInLlmResponse(
+      content,
+      input.businessName,
+    );
+
+    return {
+      mentioned,
+      startRate: resolveStartRateFromLlmPresence(mentioned, input.businessName),
+      isLiveData: true,
+    };
+  } catch (error) {
+    console.warn(
+      "[LIVE_LLM_START_RATE]: Canlı sorgu başarısız — taban oran uygulanıyor.",
+      error instanceof Error ? error.message : error,
+    );
+
+    return {
+      mentioned: false,
+      startRate: resolveStartRateFromLlmPresence(false, input.businessName),
+      isLiveData: false,
+    };
+  }
 }
 
 export async function queryLlmInquiry(

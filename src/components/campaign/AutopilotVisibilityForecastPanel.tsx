@@ -8,7 +8,11 @@ import {
   formatAutopilotCorporatePanelNarrative,
 } from "@/utils/budget-engine";
 import { isCoreQuestionSectorSupported } from "@/lib/core-questions";
-import type { BusinessSector } from "@/types/campaign";
+import type {
+  AutopilotRecommendationMetrics,
+  BusinessSector,
+  LiveVisibilityForecastClientView,
+} from "@/types/campaign";
 import "@/components/campaign/autopilot-visibility-hero.css";
 
 interface AutopilotVisibilityForecastPanelProps {
@@ -21,6 +25,7 @@ interface AutopilotVisibilityForecastPanelProps {
 
 const COUNTER_DURATION_MS = 500;
 const HERO_RATE_CEILING = 98;
+const FORECAST_DEBOUNCE_MS = 650;
 
 function roundDisplayRate(value: number): string {
   const rounded = Math.round(value * 10) / 10;
@@ -64,6 +69,17 @@ function useAnimatedRate(target: number, durationMs = COUNTER_DURATION_MS): numb
   return displayValue;
 }
 
+function buildFallbackMetrics(input: {
+  dailyBudget: number;
+  campaignDays: number;
+  forecastSeed: string;
+}): AutopilotRecommendationMetrics {
+  return calculateAutopilotBudgetWithForecast(
+    { dailyBudget: input.dailyBudget, totalDays: input.campaignDays },
+    { campaignSeed: input.forecastSeed },
+  ).forecast.metrics;
+}
+
 export default function AutopilotVisibilityForecastPanel({
   dailyBudget,
   campaignDays,
@@ -78,17 +94,94 @@ export default function AutopilotVisibilityForecastPanel({
     return `${brand}:${sectorKey}:${location}`;
   }, [businessName, city, sector]);
 
-  const forecast = useMemo(
+  const sectorReady =
+    isCoreQuestionSectorSupported(sector) &&
+    businessName.trim().length > 0 &&
+    city.trim().length > 0;
+
+  const fallbackMetrics = useMemo(
     () =>
-      calculateAutopilotBudgetWithForecast(
-        { dailyBudget, totalDays: campaignDays },
-        { campaignSeed: forecastSeed },
-      ),
+      buildFallbackMetrics({
+        dailyBudget,
+        campaignDays,
+        forecastSeed,
+      }),
     [campaignDays, dailyBudget, forecastSeed],
   );
 
-  const { baselineRecommendationRate, targetRecommendationRate } =
-    forecast.forecast.metrics;
+  const [metrics, setMetrics] =
+    useState<AutopilotRecommendationMetrics>(fallbackMetrics);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const requestVersionRef = useRef(0);
+
+  useEffect(() => {
+    if (!sectorReady) {
+      setMetrics(fallbackMetrics);
+      return;
+    }
+
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+    const controller = new AbortController();
+
+    const timer = window.setTimeout(async () => {
+      setIsRefreshing(true);
+
+      try {
+        const response = await fetch("/api/campaign/visibility-forecast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            businessName: businessName.trim(),
+            city: city.trim(),
+            sector,
+            dailyBudget,
+            campaignDays,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as LiveVisibilityForecastClientView;
+        if (
+          requestVersionRef.current !== requestVersion ||
+          !payload.success ||
+          !payload.metrics
+        ) {
+          return;
+        }
+
+        setMetrics(payload.metrics);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      } finally {
+        if (requestVersionRef.current === requestVersion) {
+          setIsRefreshing(false);
+        }
+      }
+    }, FORECAST_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    businessName,
+    campaignDays,
+    city,
+    dailyBudget,
+    fallbackMetrics,
+    sector,
+    sectorReady,
+  ]);
+
+  const { baselineRecommendationRate, targetRecommendationRate } = metrics;
 
   const animatedTargetRate = useAnimatedRate(targetRecommendationRate);
 
@@ -109,11 +202,9 @@ export default function AutopilotVisibilityForecastPanel({
     targetRecommendationRate,
   );
 
-  const sectorReady = isCoreQuestionSectorSupported(sector);
-
   return (
     <article
-      className="visibility-hero-card"
+      className={`visibility-hero-card${isRefreshing ? " visibility-hero-card--refreshing" : ""}`}
       aria-label="Yapay zeka görünürlük tahmini"
     >
       <div className="visibility-hero-card__glow" aria-hidden />
@@ -172,9 +263,9 @@ export default function AutopilotVisibilityForecastPanel({
               <span className="visibility-hero-card__placeholder-rate">%—</span>
             </div>
             <p className="visibility-hero-card__narrative">
-              Tahmini görünürlük skorunu hesaplamak için sektör seçimini
-              tamamlayın. Bütçe ve gün planınız onaylandığında optimizasyon
-              motoru otomatik devreye girecektir.
+              Tahmini görünürlük skorunu hesaplamak için işletme adı, sektör ve
+              şehir bilgilerini tamamlayın. Optimizasyon motoru otomatik devreye
+              girecektir.
             </p>
           </>
         )}

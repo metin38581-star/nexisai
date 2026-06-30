@@ -337,3 +337,19 @@ export interface AutopilotCampaignPlanClientView {
     totalInvestmentTL: number;
   };
 }
+
+export interface LiveVisibilityForecastRequest {
+  businessName?: string;
+  city?: string;
+  sector?: BusinessSector | "";
+  sectorSlug?: BusinessSector | "";
+  dailyBudget?: number;
+  campaignDays?: number;
+  totalDays?: number;
+}
+
+/** Canlı LLM startRate + bütçe eğrisi — teknik/LLM detayı içermez. */
+export type LiveVisibilityForecastClientView = Omit<
+  AutopilotCampaignPlanClientView,
+  "campaignId"
+>;

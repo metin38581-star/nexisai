@@ -238,6 +238,20 @@
   color: rgb(100 116 139);
 }
 
+.visibility-hero-card--refreshing .visibility-hero-climb__rate--target {
+  animation: visibility-hero-target-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes visibility-hero-target-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 14px rgba(52, 211, 153, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 24px rgba(167, 139, 250, 0.55));
+  }
+}
+
 .visibility-hero-card__placeholder-climb {
   display: flex;
   align-items: center;
