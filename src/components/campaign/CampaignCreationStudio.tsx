@@ -274,9 +274,6 @@ export default function CampaignCreationStudio({
             <AutopilotVisibilityForecastPanel
               dailyBudget={budgetPreview}
               campaignDays={daysPreview}
-              sector={form.sector}
-              city={form.city}
-              businessName={form.businessName}
             />
           </div>
         </div>

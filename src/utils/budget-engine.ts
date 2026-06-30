@@ -1,14 +1,10 @@
 import {
-  AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
-  AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING,
-  AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR,
-  AUTOPILOT_MAX_VISIBILITY_DELTA,
-  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE,
-  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX,
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE,
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR,
+  AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE,
+  AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE_MAX,
   AUTOPILOT_OPERATION_COST_PER_QUESTION_TL,
   AUTOPILOT_TOLERANCE_GRANT_THRESHOLD_TL,
-  AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX,
-  AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN,
   type AutopilotBudgetInput,
   type AutopilotBudgetResult,
   type AutopilotRecommendationMetrics,
@@ -22,12 +18,10 @@ import {
 export {
   AUTOPILOT_OPERATION_COST_PER_QUESTION_TL,
   AUTOPILOT_TOLERANCE_GRANT_THRESHOLD_TL,
-  AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MIN,
-  AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX,
-  AUTOPILOT_MAX_VISIBILITY_DELTA,
-  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE,
-  AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX,
-  AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
+  AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE,
+  AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE_MAX,
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE,
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR,
 };
 
 export interface BudgetEngineOptions {
@@ -37,8 +31,7 @@ export interface BudgetEngineOptions {
 
 export interface VisibilityForecastInput {
   publishCount: number;
-  currentRecommendationRate?: number;
-  /** Başlangıç oranı simülasyonu için deterministik seed (kampanyaId vb.) */
+  /** Deterministik min/max bandı için seed (kampanyaId vb.) */
   campaignSeed?: string;
 }
 
@@ -79,95 +72,57 @@ function hashSeed(input: string): number {
   return hash >>> 0;
 }
 
-function roundRate(value: number): number {
-  return Math.round(value * 10) / 10;
+function resolveMinimumGrowthRate(campaignSeed: string): number {
+  const span =
+    AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE_MAX - AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE;
+  const hash = hashSeed(`${campaignSeed}:min-growth`);
+  return AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE + (hash % (span + 1));
+}
+
+function resolveMaximumGrowthRate(campaignSeed: string): number {
+  const span =
+    AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE - AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR;
+  const hash = hashSeed(`${campaignSeed}:max-growth`);
+  return AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR + (hash % (span + 1));
 }
 
 /**
- * Ölçüm yoksa kampanya seed'inden simüle başlangıç oranı (%3–%8 aralığı).
+ * publishCount → net görünürlük artış oranı (+%X).
+ * - En düşük bütçede +%12–+%15 bandı garanti edilir.
+ * - Tepe pakette +%96–+%98 bandına logaritmik tırmanış.
  */
-export function simulateCurrentRecommendationRate(campaignSeed: string): number {
-  const hash = hashSeed(campaignSeed);
-  return 3 + (hash % 6);
-}
-
-function resolveMinimumTargetRate(campaignSeed: string): number {
-  const span =
-    AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX -
-    AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE;
-  const hash = hashSeed(`${campaignSeed}:min-target`);
-  return AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE + (hash % (span + 1));
-}
-
-function resolveMaximumTargetRate(campaignSeed: string): number {
-  const span =
-    AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING -
-    AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR;
-  const hash = hashSeed(`${campaignSeed}:max-target`);
-  return AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR + (hash % (span + 1));
-}
-
-/**
- * publishCount → hedef önerilme oranı eğrisi.
- * - En düşük bütçede bile %12–%15 bandı garanti edilir (başlangıçtan bağımsız).
- * - Tepe pakette %96–%98 bandına logaritmik tırmanış.
- */
-export function calculateTargetRecommendationRateFromPublishCount(input: {
+export function calculateVisibilityGrowthRateFromPublishCount(input: {
   publishCount: number;
-  startRate: number;
   campaignSeed?: string;
   referenceMaxPublishCount?: number;
 }): number {
   const campaignSeed = input.campaignSeed ?? "nexisai-default";
-  const startRate = roundRate(input.startRate);
   const safeCount = Math.max(0, Math.floor(input.publishCount));
   const referenceMax =
     input.referenceMaxPublishCount ?? resolveReferenceMaxPublishCount();
 
-  const minTarget = resolveMinimumTargetRate(campaignSeed);
-  const maxTarget = resolveMaximumTargetRate(campaignSeed);
+  const minGrowth = resolveMinimumGrowthRate(campaignSeed);
+  const maxGrowth = resolveMaximumGrowthRate(campaignSeed);
 
   const normalizedProgress =
     referenceMax > 0 ? Math.min(1, safeCount / referenceMax) : 0;
 
-  // Erken bütçede değer hissi, tepeye doğru yumuşak doygunluk (log eğrisi).
   const curveProgress =
     normalizedProgress <= 0
       ? 0
       : Math.log1p(normalizedProgress * 9) / Math.log1p(9);
 
-  const tabanArtis = Math.max(0, minTarget - startRate);
-  const curveLift = curveProgress * Math.max(0, maxTarget - minTarget);
+  const growth = minGrowth + curveProgress * (maxGrowth - minGrowth);
 
-  let targetRate = roundRate(startRate + tabanArtis + curveLift);
-
-  targetRate = Math.max(targetRate, minTarget, roundRate(startRate + 1));
-  targetRate = Math.min(
-    targetRate,
-    maxTarget,
-    AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE,
-  );
-
-  return roundRate(targetRate);
+  return Math.round(Math.max(minGrowth, Math.min(maxGrowth, growth)));
 }
 
-/**
- * Başlangıç ile hedef arasındaki görünürlük artış puanı (dahili metrik).
- */
-export function calculateVisibilityDeltaFromPublishCount(
-  publishCount: number,
-  campaignSeed = "nexisai-default",
-  startRate?: number,
-): number {
-  const baseline =
-    startRate ?? simulateCurrentRecommendationRate(campaignSeed);
-  const targetRate = calculateTargetRecommendationRateFromPublishCount({
-    publishCount,
-    startRate: baseline,
-    campaignSeed,
-  });
+export function formatVisibilityGrowthNarrative(growthRate: number): string {
+  return `Seçtiğiniz kampanya bütçesi ve operasyon süresi doğrultusunda, yapay zeka tavsiye motorlarındaki (ChatGPT, Gemini, Perplexity) markanıza ait organik tavsiye hacmi tahmini olarak +%${growthRate} oranında artırılacaktır.`;
+}
 
-  return roundRate(Math.max(0, targetRate - baseline));
+export function formatVisibilityGrowthHeadline(growthRate: number): string {
+  return `Net Görünürlük Artışı: +%${growthRate}`;
 }
 
 /**
@@ -226,38 +181,9 @@ export function calculateDailyQuestionTarget(
   return { basePerDay, remainderDays };
 }
 
-export function formatAutopilotCorporatePanelNarrative(
-  baselineRate: number,
-  targetRate: number,
-): string {
-  return `İşletmenizin şu an yapay zekalarda (ChatGPT, Gemini) önerilme oranı %${roundRate(baselineRate)}'tir. Belirlediğiniz gün ve bütçe planlaması ile tahmini önerilme oranınız %${roundRate(targetRate)}'ye çıkarılacaktır. Yapay zeka tavsiye motorları markanızı öncelikli referans listesine almak üzere optimize edilecektir.`;
-}
-
-export function formatCorporateRecommendationHeadline(
-  baselineRate: number,
-  targetRate: number,
-): string {
-  return `Yapay Zeka Öneri Oranı (%${roundRate(baselineRate)}'ten %${roundRate(targetRate)}'ye yükseltilecektir)`;
-}
-
-export function formatCorporateVisibilityNarrative(
-  baselineRate: number,
-  targetRate: number,
-): string {
-  return `İşletmenizin şu an yapay zekalarda önerilme oranı %${roundRate(baselineRate)}'tir. Bu bütçe ve gün planlaması ile tahmini önerilme oranınız %${roundRate(targetRate)}'e çıkarılacaktır.`;
-}
-
-/** @deprecated formatCorporateRecommendationHeadline kullanın */
-export function formatCorporateRecommendationMessage(
-  baselineRate: number,
-  targetRate: number,
-): string {
-  return formatCorporateRecommendationHeadline(baselineRate, targetRate);
-}
-
 /**
- * Skor odaklı görünürlük tahmin motoru.
- * Kullanıcıya asla içerik/soru adedi veya ham +%X artış ifadesi gösterilmez.
+ * Bütçe/gün çarpanına bağlı net görünürlük artış tahmin motoru.
+ * Müşteriye yalnızca +%X katma değer gösterilir; mevcut oran hesaplanmaz.
  */
 export function calculateAutopilotVisibilityForecast(
   input: VisibilityForecastInput,
@@ -265,51 +191,23 @@ export function calculateAutopilotVisibilityForecast(
   const publishCount = Math.max(0, Math.floor(input.publishCount));
   const campaignSeed = input.campaignSeed ?? "nexisai-default";
 
-  const currentRecommendationRate = roundRate(
-    input.currentRecommendationRate ??
-      simulateCurrentRecommendationRate(campaignSeed),
-  );
+  const visibilityGrowthRate = calculateVisibilityGrowthRateFromPublishCount({
+    publishCount,
+    campaignSeed,
+  });
 
-  const projectedRecommendationRate =
-    calculateTargetRecommendationRateFromPublishCount({
-      publishCount,
-      startRate: currentRecommendationRate,
-      campaignSeed,
-    });
-
-  const visibilityDelta = roundRate(
-    Math.max(0, projectedRecommendationRate - currentRecommendationRate),
-  );
-
-  const averageGainPerQuestion =
-    publishCount > 0 ? roundRate(visibilityDelta / publishCount) : visibilityDelta;
-
-  const baselineRecommendationRate = currentRecommendationRate;
-  const targetRecommendationRate = projectedRecommendationRate;
-
-  const corporateSummary = formatCorporateRecommendationHeadline(
-    baselineRecommendationRate,
-    targetRecommendationRate,
-  );
-
-  const corporateNarrative = formatCorporateVisibilityNarrative(
-    baselineRecommendationRate,
-    targetRecommendationRate,
-  );
+  const corporateSummary = formatVisibilityGrowthHeadline(visibilityGrowthRate);
+  const corporateNarrative = formatVisibilityGrowthNarrative(visibilityGrowthRate);
 
   return {
     metrics: {
-      baselineRecommendationRate,
-      targetRecommendationRate,
+      visibilityGrowthRate,
       corporateSummary,
       corporateNarrative,
     },
     internal: {
       publishCount,
-      visibilityDelta,
-      averageGainPerQuestion,
-      currentRecommendationRate,
-      projectedRecommendationRate,
+      visibilityGrowthRate,
     },
   };
 }

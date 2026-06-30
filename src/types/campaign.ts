@@ -179,20 +179,37 @@ export const AUTOPILOT_VISIBILITY_GAIN_PER_QUESTION_MAX = 1.2;
 /** @deprecated Eski delta tavanı — yeni eğri modeli min/max hedef oranları kullanır. */
 export const AUTOPILOT_MAX_VISIBILITY_DELTA = 85;
 
-/** En düşük bütçede bile garanti edilen minimum hedef önerilme oranı (%). */
-export const AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE = 12;
+/** En düşük bütçede garanti edilen minimum net görünürlük artışı (+%). */
+export const AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE = 12;
 
-/** Minimum hedef bandı üst sınırı (%) — seed ile %12–%15 arası. */
-export const AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX = 15;
+/** Minimum artış bandı üst sınırı (+%) — seed ile +%12–+%15 arası. */
+export const AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE_MAX = 15;
 
-/** Tepe paketlerde psikolojik hedef tavan alt sınırı (%). */
-export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE = 98;
+/** Tepe paketlerde maksimum net görünürlük artışı (+%). */
+export const AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE = 98;
 
-/** Tepe paketlerde psikolojik hedef tavan üst sınırı (%). */
-export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING = 98;
+/** Tepe paket artış bandı alt sınırı (+%) — seed ile +%96–+%98 arası. */
+export const AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR = 96;
 
-/** Tepe paketlerde hedef bandı alt sınırı (%) — seed ile %96–%98 arası. */
-export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR = 96;
+/** @deprecated AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE kullanın */
+export const AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE =
+  AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE;
+
+/** @deprecated AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE_MAX kullanın */
+export const AUTOPILOT_MIN_TARGET_RECOMMENDATION_RATE_MAX =
+  AUTOPILOT_MIN_VISIBILITY_GROWTH_RATE_MAX;
+
+/** @deprecated AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE kullanın */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE =
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE;
+
+/** @deprecated AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE kullanın */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_CEILING =
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE;
+
+/** @deprecated AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR kullanın */
+export const AUTOPILOT_MAX_TARGET_RECOMMENDATION_RATE_FLOOR =
+  AUTOPILOT_MAX_VISIBILITY_GROWTH_RATE_FLOOR;
 
 /** Sektör başına gizli kemik soru havuzu kapasitesi. */
 export const AUTOPILOT_BONE_QUESTION_POOL_SIZE = 50;
@@ -226,10 +243,8 @@ export interface AutopilotBudgetResult {
 }
 
 export interface AutopilotRecommendationMetrics {
-  /** Mevcut yapay zeka önerilme oranı (%) — müşteriye gösterilir */
-  baselineRecommendationRate: number;
-  /** Tahmini hedef önerilme oranı (%) — müşteriye gösterilir */
-  targetRecommendationRate: number;
+  /** Tahmini net görünürlük artış oranı (+%X, tam sayı) */
+  visibilityGrowthRate: number;
   /** Kısa kurumsal başlık — soru/içerik adedi içermez */
   corporateSummary: string;
   /** Tam kurumsal anlatım cümlesi — soru/içerik adedi içermez */
@@ -239,10 +254,7 @@ export interface AutopilotRecommendationMetrics {
 /** Dahili görünürlük modeli — yalnızca sunucu tarafında tutulur. */
 export interface AutopilotVisibilityForecastInternal {
   publishCount: number;
-  visibilityDelta: number;
-  averageGainPerQuestion: number;
-  currentRecommendationRate: number;
-  projectedRecommendationRate: number;
+  visibilityGrowthRate: number;
 }
 
 export interface AutopilotSelectedQuestion {
@@ -310,8 +322,6 @@ export interface AutopilotCampaignPlanInput {
   totalDays: number;
   startDate?: Date;
   businessDomain?: string | null;
-  /** Ölçülmüş/simüle başlangıç oranı — yoksa kampanya seed ile simüle edilir */
-  currentRecommendationRate?: number;
 }
 
 /** Dahili tam plan — link/log/payload detayları yalnızca sunucu tarafında kalır. */
@@ -338,20 +348,14 @@ export interface AutopilotCampaignPlanClientView {
   };
 }
 
-export interface LiveVisibilityForecastRequest {
-  businessName?: string;
-  city?: string;
-  sector?: BusinessSector | "";
-  sectorSlug?: BusinessSector | "";
+export interface VisibilityGrowthForecastRequest {
   dailyBudget?: number;
   campaignDays?: number;
   totalDays?: number;
-  /** Debug: önbelleği atla ve canlı LLM'i zorla */
-  skipCache?: boolean;
 }
 
-/** Canlı LLM startRate + bütçe eğrisi — teknik/LLM detayı içermez. */
-export type LiveVisibilityForecastClientView = Omit<
+/** Bütçe/gün tabanlı görünürlük artış tahmini — teknik detay içermez. */
+export type VisibilityGrowthForecastClientView = Omit<
   AutopilotCampaignPlanClientView,
   "campaignId"
 >;

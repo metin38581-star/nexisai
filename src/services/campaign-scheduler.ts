@@ -142,7 +142,6 @@ function selectAutopilotQuestions(input: {
 function buildRecommendationMetrics(input: {
   campaignId: string;
   publishCount: number;
-  currentRecommendationRate?: number;
 }): {
   metrics: AutopilotRecommendationMetrics;
   visibilityForecast: AutopilotVisibilityForecastInternal;
@@ -150,7 +149,6 @@ function buildRecommendationMetrics(input: {
   const forecast = calculateAutopilotVisibilityForecast({
     publishCount: input.publishCount,
     campaignSeed: input.campaignId,
-    currentRecommendationRate: input.currentRecommendationRate,
   });
 
   return {
@@ -377,13 +375,11 @@ export function buildAutopilotCampaignPlan(
   const { metrics, visibilityForecast } = buildRecommendationMetrics({
     campaignId: input.campaignId,
     publishCount: selectedQuestions.length,
-    currentRecommendationRate: input.currentRecommendationRate,
   });
 
   appendLog(logs, "metrics.project", "Kurumsal skor metrikleri üretildi.", {
-    baselineRecommendationRate: metrics.baselineRecommendationRate,
-    targetRecommendationRate: metrics.targetRecommendationRate,
-    visibilityDelta: visibilityForecast.visibilityDelta,
+    visibilityGrowthRate: metrics.visibilityGrowthRate,
+    publishCount: visibilityForecast.publishCount,
   });
 
   const dailyPlans = buildDailyPlans({
